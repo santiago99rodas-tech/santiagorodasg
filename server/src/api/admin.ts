@@ -14,6 +14,7 @@ import { propose, dispute, reject, finalize, closeExpired } from "../services/re
 import { cancelAllInMarket } from "../services/trading.js";
 import { refreshQuotes, houseStats } from "../services/marketmaker.js";
 import { houseAccount } from "../services/house.js";
+import { listEvents } from "../services/marketdata.js";
 
 const SourceBody = z.object({
   kind: z.enum(["rss", "gdelt", "google_trends", "newsapi", "tiktok_cc", "json_feed"]),
@@ -38,6 +39,45 @@ const Signal = z.object({
 
 export async function adminRoutes(app: FastifyInstance) {
   app.addHook("preHandler", requireAdmin);
+
+  // ---------- Resumen para el panel ----------
+  app.get("/admin/overview", async () => {
+    const house = await houseAccount();
+    const o = await one(pool, `
+      SELECT
+        COALESCE((SELECT SUM(yes_price * qty * 100) FROM trades WHERE created_at > now() - interval '24 hours'),0)::bigint AS volume_24h,
+        COALESCE((SELECT SUM(volume) FROM markets),0)::bigint AS volume_total,
+        COALESCE((SELECT SUM(amount) FROM fees WHERE created_at > now() - interval '24 hours'),0)::bigint AS fees_24h,
+        COALESCE((SELECT SUM(amount) FROM fees),0)::bigint AS fees_total,
+        (SELECT COUNT(*) FROM trades WHERE created_at > now() - interval '24 hours')::int AS trades_24h,
+        (SELECT COUNT(*) FROM events WHERE status='open')::int AS open_events,
+        (SELECT COUNT(*) FROM events WHERE status IN ('closed','resolving'))::int AS awaiting_resolution,
+        (SELECT COUNT(*) FROM players WHERE NOT is_house)::int AS players_total,
+        (SELECT COUNT(*) FROM players WHERE NOT is_house AND last_seen_at > now() - interval '5 minutes')::int AS players_online,
+        (SELECT COUNT(*) FROM drafts WHERE status='pending')::int AS pending_drafts,
+        (SELECT COUNT(*) FROM resolutions WHERE status IN ('proposed','disputed'))::int AS open_resolutions,
+        (SELECT COUNT(*) FROM ledger WHERE direction='credit' AND status='failed')::int AS failed_credits,
+        (SELECT COUNT(*) FROM webhook_outbox WHERE delivered_at IS NULL)::int AS pending_webhooks,
+        (SELECT COUNT(*) FROM trends WHERE status='active')::int AS active_trends,
+        (SELECT COUNT(*) FROM sources WHERE enabled)::int AS sources_enabled,
+        (SELECT COUNT(*) FROM sources WHERE enabled AND last_status LIKE 'error%')::int AS sources_failing,
+        COALESCE((SELECT SUM(cost) FROM positions WHERE player_id=$1),0)::bigint AS house_open_cost,
+        COALESCE((SELECT SUM(realized) FROM positions WHERE player_id=$1),0)::bigint AS house_realized`, [house]);
+    const hourly = await many(pool, `
+      SELECT h AS t, COALESCE(SUM(t.yes_price * t.qty * 100),0)::bigint AS volume, COUNT(t.id)::int AS trades
+      FROM generate_series(date_trunc('hour', now()) - interval '23 hours', date_trunc('hour', now()), interval '1 hour') h
+      LEFT JOIN trades t ON date_trunc('hour', t.created_at) = h GROUP BY h ORDER BY h`);
+    return { ...o, hourly, aiEnabled: (await import("../ai/claude.js")).aiEnabled(), autoApprove: (await import("../config.js")).config.catalog.autoApproveAi };
+  });
+
+  /** Eventos en cualquier estado, para administrar. */
+  app.get("/admin/events", async (req) => {
+    const q = req.query as any;
+    return listEvents({
+      status: q.status ?? "open,closed,resolving,resolved,void", category: q.category || undefined, q: q.q || undefined,
+      sort: q.sort ?? "new", limit: Math.min(Number(q.limit ?? 50), 200), offset: Number(q.offset ?? 0),
+    });
+  });
 
   // ---------- Fuentes ----------
   app.get("/admin/sources", async () => many(pool, "SELECT * FROM sources ORDER BY id"));

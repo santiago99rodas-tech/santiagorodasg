@@ -19,8 +19,9 @@ export async function buildServer() {
   // CORS abierto para la API pública y del jugador (el casino puede llamarla desde su propio front).
   app.addHook("onRequest", async (req, reply) => {
     reply.header("access-control-allow-origin", "*");
-    reply.header("access-control-allow-headers", "authorization, content-type");
-    reply.header("access-control-allow-methods", "GET, POST, DELETE, OPTIONS");
+    // x-admin-key/x-admin-user permiten alojar el panel de administración en otro dominio (por ejemplo el back-office)
+    reply.header("access-control-allow-headers", "authorization, content-type, x-admin-key, x-admin-user");
+    reply.header("access-control-allow-methods", "GET, POST, PATCH, DELETE, OPTIONS");
     if (req.method === "OPTIONS") return reply.code(204).send();
   });
 
@@ -44,6 +45,15 @@ export async function buildServer() {
     // Permitir que cualquier casino lo embeba en un iframe; restrínge con frame-ancestors en producción.
     reply.header("content-security-policy", "frame-ancestors *");
     return readFileSync(embed, "utf8");
+  });
+
+  // Panel de administración (también se puede alojar aparte, por ejemplo en el dominio del back-office)
+  const adminPage = new URL("../../web/admin/index.html", import.meta.url);
+  app.get("/admin", (_req, reply) => reply.redirect("/admin/"));
+  app.get("/admin/", async (_req, reply) => {
+    if (!existsSync(adminPage)) return reply.code(404).send("Panel no encontrado");
+    reply.header("content-type", "text/html; charset=utf-8");
+    return readFileSync(adminPage, "utf8");
   });
 
   await app.register(v1Routes);

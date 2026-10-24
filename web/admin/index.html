@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Predicciones · Back-office</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Back-office de Predicciones: barra lateral fija + área de trabajo. Se sirve en /admin/ o se aloja aparte
+   (por ejemplo en el dominio del back-office del casino) apuntando a la API con ?api=https://… */
+:root {
+  --bg: #0d0e11; --side: #121318; --card: #17181d; --card-2: #1f2027; --line: #2a2b33; --grid: #24252c;
+  --text: #f1f2f4; --muted: #9a9ca8; --faint: #6c6e79;
+  --brand: #ffd400; --brand-ink: #111;
+  --ok: #2bb560; --ok-txt: #6ee08f; --warn: #f2a93b; --bad: #ef5350; --bad-txt: #ff8a8c; --info: #60a5fa;
+  --sans: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; }
+[hidden] { display: none !important; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; border: 0; background: none; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+a { color: var(--info); }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); } .faint { color: var(--faint); }
+.ok { color: var(--ok-txt); } .bad { color: var(--bad-txt); } .warn { color: var(--warn); }
+
+.app { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100%; }
+@media (max-width: 860px) { .app { grid-template-columns: minmax(0, 1fr); } .side { position: static !important; height: auto !important; } .nav { flex-direction: row !important; overflow-x: auto; } .nav a { white-space: nowrap; } .side .foot { display: none; } }
+.side { background: var(--side); border-right: 1px solid var(--line); position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; padding: 16px 12px; gap: 18px; }
+.brand { font-weight: 800; font-size: 18px; padding: 0 8px; display: flex; align-items: center; gap: 8px; }
+.brand i { width: 26px; height: 26px; border-radius: 7px; background: var(--brand); color: var(--brand-ink); display: grid; place-items: center; font-style: normal; font-size: 14px; }
+.brand small { display: block; font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav a { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 10px; border-radius: 8px; color: var(--muted); text-decoration: none; font-weight: 600; }
+.nav a:hover { background: var(--card); color: var(--text); }
+.nav a.on { background: var(--card-2); color: var(--text); box-shadow: inset 3px 0 0 var(--brand); }
+.nav .count { font-family: var(--mono); font-size: 11px; background: var(--brand); color: var(--brand-ink); border-radius: 999px; padding: 1px 7px; }
+.side .foot { margin-top: auto; font-size: 12px; color: var(--faint); padding: 0 8px; display: flex; flex-direction: column; gap: 6px; }
+
+main { padding: 22px 26px 60px; min-width: 0; }
+@media (max-width: 560px) { main { padding: 16px; } }
+.head { display: flex; align-items: end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+.head h1 { margin: 0; font-size: 24px; }
+.head p { margin: 4px 0 0; color: var(--muted); max-width: 70ch; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+.btn { background: var(--card-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-weight: 600; font-size: 13px; }
+.btn:hover:not(:disabled) { border-color: #3a3b45; }
+.btn.primary { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+.btn.ok { background: color-mix(in srgb, var(--ok) 22%, var(--card)); border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); color: var(--ok-txt); }
+.btn.bad { background: color-mix(in srgb, var(--bad) 18%, var(--card)); border-color: color-mix(in srgb, var(--bad) 40%, var(--line)); color: var(--bad-txt); }
+.btn.sm { padding: 5px 9px; font-size: 12px; }
+.input, select.input, textarea.input { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
+textarea.input { min-height: 84px; resize: vertical; line-height: 1.45; }
+label.f { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 600; }
+label.f > span em { font-style: normal; color: var(--faint); font-weight: 500; }
+
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 1100px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpi { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.kpi .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; font-weight: 700; }
+.kpi .v { font-family: var(--mono); font-size: 24px; font-weight: 700; }
+.kpi .d { font-size: 12px; color: var(--muted); }
+.kpi.alert { border-color: color-mix(in srgb, var(--bad) 50%, var(--line)); }
+.kpi.attn { border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); }
+
+.grid2 { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; }
+@media (max-width: 1100px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+.panel h2 { margin: 0 0 12px; font-size: 15px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.panel h2 small { color: var(--muted); font-weight: 500; font-size: 12px; }
+
+.cov { display: grid; grid-template-columns: 150px minmax(0, 1fr) 70px; gap: 10px; align-items: center; font-size: 13px; padding: 3px 0; }
+.cov .bar { position: relative; height: 12px; background: var(--card-2); border-radius: 3px; }
+.cov .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--ok); }
+.cov .bar i.p { background: var(--brand); opacity: .55; }
+.cov .bar b { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); opacity: .7; }
+.cov .n { text-align: right; font-family: var(--mono); font-size: 12px; }
+
+.chart svg text { fill: var(--faint); font-family: var(--mono); font-size: 10px; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 10px; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--card); position: sticky; top: 0; }
+td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+td .t { font-weight: 600; max-width: 460px; min-width: 240px; }
+a.btn { text-decoration: none; display: inline-block; }
+.pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--card-2); white-space: nowrap; }
+.pill.open { color: var(--ok-txt); } .pill.closed, .pill.resolving, .pill.proposed { color: var(--warn); } .pill.disputed, .pill.void, .pill.error { color: var(--bad-txt); } .pill.resolved, .pill.finalized { color: var(--info); }
+.opts { display: flex; flex-wrap: wrap; gap: 4px; }
+.opt { font-size: 11px; background: var(--card-2); border-radius: 6px; padding: 2px 6px; white-space: nowrap; }
+.opt b { font-family: var(--mono); }
+
+/* Diseñador */
+.designer { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr); gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .designer { grid-template-columns: minmax(0, 1fr); } }
+.form { display: flex; flex-direction: column; gap: 14px; }
+.form .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 600px) { .form .two { grid-template-columns: 1fr; } }
+.seg { display: inline-flex; background: var(--card-2); border-radius: 8px; padding: 3px; }
+.seg button { padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.seg button.on { background: var(--bg); color: var(--text); }
+.outrow { display: grid; grid-template-columns: minmax(0, 1fr) 120px 34px; gap: 8px; align-items: center; }
+.outrow input[type=range] { width: 100%; accent-color: var(--brand); }
+.sum { font-size: 12px; font-family: var(--mono); }
+.checks { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.checks div::before { margin-right: 6px; }
+.checks .y::before { content: "✓"; color: var(--ok-txt); } .checks .n::before { content: "✕"; color: var(--bad-txt); }
+.preview { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 12px; }
+.pcard { background: #17171a; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.pcard .pic { height: 84px; display: grid; place-items: center; background: radial-gradient(circle at 50% 35%, #3a3000, #0b0b0c 75%); position: relative; }
+.pcard .pic img { width: 100%; height: 100%; object-fit: cover; }
+.pcard .badge { position: absolute; left: 8px; bottom: -9px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; padding: 3px 8px; border-radius: 999px; color: #111; background: var(--brand); }
+.pcard .body { padding: 14px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.pcard .q { font-weight: 600; font-size: 15px; line-height: 1.3; }
+.pcard .big { font-family: var(--mono); font-weight: 700; font-size: 20px; }
+.pcard .yn { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-family: var(--mono); font-size: 12px; }
+.pcard .yn span { border-radius: 6px; padding: 6px; text-align: center; }
+.pcard .yn .y { background: color-mix(in srgb, var(--ok) 20%, transparent); color: var(--ok-txt); }
+.pcard .yn .n { background: color-mix(in srgb, var(--bad) 20%, transparent); color: var(--bad-txt); }
+.pcard .mo { position: relative; display: flex; justify-content: space-between; font-size: 12px; padding: 5px 8px; border-radius: 6px; background: var(--card-2); overflow: hidden; }
+.pcard .mo i { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--brand) 16%, transparent); }
+.pcard .mo span, .pcard .mo b { position: relative; }
+.rules { font-size: 12px; color: var(--muted); line-height: 1.5; background: var(--card-2); border-radius: 10px; padding: 10px 12px; }
+.rules b { color: var(--text); }
+
+.cards { display: flex; flex-direction: column; gap: 10px; }
+.dcard { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.dcard h3 { margin: 0 0 6px; font-size: 15px; }
+.dcard .meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.dcard details { font-size: 12px; color: var(--muted); margin-top: 8px; }
+.dcard details p { margin: 6px 0; line-height: 1.45; }
+.dcard .acts { display: flex; flex-direction: column; gap: 6px; }
+@media (max-width: 700px) { .dcard { grid-template-columns: 22px minmax(0, 1fr); } .dcard .acts { grid-column: 2; flex-direction: row; flex-wrap: wrap; } }
+.empty { color: var(--muted); padding: 28px; text-align: center; border: 1px dashed var(--line); border-radius: 12px; }
+
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: grid; place-items: center; z-index: 50; padding: 16px; }
+.modal { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; width: min(560px, 100%); max-height: 90vh; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.modal h3 { margin: 0; font-size: 17px; }
+.toast { position: fixed; right: 18px; bottom: 18px; background: #000; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; z-index: 60; max-width: 420px; font-size: 13px; }
+.toast.err { border-color: var(--bad); }
+.login { min-height: 100%; display: grid; place-items: center; padding: 16px; }
+.login .panel { width: min(400px, 100%); display: flex; flex-direction: column; gap: 12px; }
+.creds { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; word-break: break-all; display: flex; flex-direction: column; gap: 6px; }
+</style>
+</head>
+<body>
+<div class="login" id="login" hidden>
+  <form class="panel" id="loginForm">
+    <div class="brand"><i>P</i><div>Predicciones<small>Back-office</small></div></div>
+    <label class="f"><span>Clave de administración (ADMIN_API_KEY)</span><input class="input" id="lkKey" type="password" required autocomplete="current-password"></label>
+    <label class="f"><span>Tu nombre <em>(queda registrado en aprobaciones y resoluciones)</em></span><input class="input" id="lkUser" required autocomplete="username"></label>
+    <label class="f"><span>URL de la API <em>(vacío = este mismo servidor)</em></span><input class="input" id="lkApi" placeholder="https://api.predicciones.tu-dominio.com"></label>
+    <button class="btn primary" type="submit">Entrar</button>
+    <div class="bad" id="lkErr" role="alert"></div>
+  </form>
+</div>
+
+<div class="app" id="app" hidden>
+  <aside class="side">
+    <div class="brand"><i>P</i><div>Predicciones<small>Back-office</small></div></div>
+    <nav class="nav" id="nav">
+      <a href="#resumen" data-v="resumen">Resumen</a>
+      <a href="#disenar" data-v="disenar">Diseñar mercado</a>
+      <a href="#moderacion" data-v="moderacion">Moderación <span class="count" id="cDrafts" hidden></span></a>
+      <a href="#mercados" data-v="mercados">Mercados</a>
+      <a href="#resoluciones" data-v="resoluciones">Resoluciones <span class="count" id="cRes" hidden></span></a>
+      <a href="#tendencias" data-v="tendencias">Tendencias y señales</a>
+      <a href="#fuentes" data-v="fuentes">Fuentes</a>
+      <a href="#riesgo" data-v="riesgo">Riesgo de la casa</a>
+      <a href="#operadores" data-v="operadores">Casinos</a>
+    </nav>
+    <div class="foot"><span id="whoami"></span><span id="apiInfo"></span><button class="btn sm" id="logout" type="button">Salir</button></div>
+  </aside>
+  <main id="main"></main>
+</div>
+<div id="modalRoot"></div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>
+// ---------- Estado y utilidades ----------
+const qs = new URLSearchParams(location.search);
+const store = { get: (k) => { try { return sessionStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch {} }, del: (k) => { try { sessionStorage.removeItem(k); } catch {} } };
+const A = { key: store.get("pa_key"), user: store.get("pa_user"), api: qs.get("api") ?? store.get("pa_api") ?? "" };
+let CATS = [], OV = null, VIEW = "resumen", DESIGN = null;
+
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const money = (m) => "$" + (Number(m) / 1e6).toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const kmoney = (m) => { const u = Number(m) / 1e6; return u >= 1e6 ? "$" + (u / 1e6).toLocaleString("es-EC", { maximumFractionDigits: 2 }) + " M" : u >= 1e4 ? "$" + (u / 1e3).toLocaleString("es-EC", { maximumFractionDigits: 1 }) + " k" : "$" + u.toLocaleString("es-EC", { maximumFractionDigits: 2 }); };
+const fdate = (d) => d ? new Date(d).toLocaleString("es-EC", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
+const fday = (d) => d ? new Date(d).toLocaleDateString("es-EC", { day: "numeric", month: "short", year: "numeric" }) : "—";
+const catName = (s) => CATS.find((c) => c.slug === s)?.name ?? s;
+const ago = (d) => { const m = Math.round((Date.now() - new Date(d)) / 60000); return m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} d`; };
+const until = (d) => { const m = Math.round((new Date(d) - Date.now()) / 60000); return m <= 0 ? "terminó" : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
+const STATUS = { open: "Abierto", closed: "Cerrado", resolving: "En resolución", resolved: "Resuelto", void: "Anulado", proposed: "Propuesta", disputed: "Disputada", finalized: "Finalizada", rejected: "Rechazada", pending: "Pendiente", approved: "Aprobado" };
+const pill = (s) => `<span class="pill ${esc(s)}">${esc(STATUS[s] ?? s)}</span>`;
+
+function toast(msg, err) { const t = document.getElementById("toast"); t.textContent = msg; t.className = "toast" + (err ? " err" : ""); t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => (t.hidden = true), 4500); }
+
+async function api(path, opts = {}) {
+  const r = await fetch(A.api.replace(/\/$/, "") + path, { ...opts, headers: { "content-type": "application/json", "x-admin-key": A.key ?? "", "x-admin-user": A.user ?? "", ...(opts.headers ?? {}) }, body: opts.body && typeof opts.body !== "string" ? JSON.stringify(opts.body) : opts.body });
+  const body = await r.json().catch(() => ({}));
+  if (r.status === 401) { logout(); throw new Error("Sesión de administración inválida"); }
+  if (!r.ok) throw new Error(body.message ?? `Error ${r.status}`);
+  return body;
+}
+async function run(btn, fn, okMsg) {
+  if (btn) btn.disabled = true;
+  try { const r = await fn(); if (okMsg) toast(typeof okMsg === "function" ? okMsg(r) : okMsg); return r; }
+  catch (e) { toast(e.message, true); }
+  finally { if (btn) btn.disabled = false; }
+}
+
+/** Ventana modal con formulario. fields: [{id,label,type,options,value,placeholder}] -> devuelve objeto o null. */
+function modal({ title, text = "", fields = [], ok = "Confirmar", danger = false }) {
+  return new Promise((resolve) => {
+    const root = document.getElementById("modalRoot");
+    root.innerHTML = `<div class="modal-bg"><form class="modal" role="dialog" aria-modal="true"><h3>${esc(title)}</h3>${text ? `<div class="muted" style="line-height:1.5">${text}</div>` : ""}
+      ${fields.map((f) => `<label class="f"><span>${esc(f.label)}</span>${f.type === "select" ? `<select class="input" id="m_${f.id}">${f.options.map(([v, l]) => `<option value="${esc(v)}" ${v === f.value ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>` : f.type === "textarea" ? `<textarea class="input" id="m_${f.id}" placeholder="${esc(f.placeholder ?? "")}">${esc(f.value ?? "")}</textarea>` : f.type === "checkbox" ? `<span class="row"><input type="checkbox" id="m_${f.id}" ${f.value ? "checked" : ""}> ${esc(f.hint ?? "")}</span>` : `<input class="input" id="m_${f.id}" type="${f.type ?? "text"}" value="${esc(f.value ?? "")}" placeholder="${esc(f.placeholder ?? "")}">`}</label>`).join("")}
+      <div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-x>Cancelar</button><button class="btn ${danger ? "bad" : "primary"}" type="submit">${esc(ok)}</button></div></form></div>`;
+    const form = root.querySelector("form");
+    const close = (v) => { root.innerHTML = ""; resolve(v); };
+    root.querySelector("[data-x]").onclick = () => close(null);
+    root.querySelector(".modal-bg").onclick = (e) => { if (e.target.classList.contains("modal-bg")) close(null); };
+    form.onsubmit = (e) => { e.preventDefault(); const out = {}; for (const f of fields) { const el = document.getElementById("m_" + f.id); out[f.id] = f.type === "checkbox" ? el.checked : el.value; } close(out); };
+    (form.querySelector("input,select,textarea") ?? form.querySelector("button[type=submit]")).focus();
+  });
+}
+
+function barChart(data, { h = 140, fmt = (v) => v, label = "" } = {}) {
+  const W = 600, pad = { l: 4, r: 4, t: 8, b: 18 }, max = Math.max(1, ...data.map((d) => d.v));
+  const bw = (W - pad.l - pad.r) / data.length;
+  const bars = data.map((d, i) => { const bh = (d.v / max) * (h - pad.t - pad.b); return `<rect x="${pad.l + i * bw + 1}" y="${h - pad.b - bh}" width="${Math.max(1, bw - 2)}" height="${bh}" rx="2" fill="var(--brand)" opacity="${d.v ? .85 : .2}"><title>${esc(d.l)}: ${esc(fmt(d.v))}</title></rect>`; }).join("");
+  const ticks = data.map((d, i) => i % 4 === 0 ? `<text x="${pad.l + i * bw + bw / 2}" y="${h - 4}" text-anchor="middle">${esc(d.short)}</text>` : "").join("");
+  return `<div class="chart"><svg viewBox="0 0 ${W} ${h}" width="100%" height="${h}" preserveAspectRatio="none" role="img" aria-label="${esc(label)}">${bars}${ticks}</svg></div>`;
+}
+
+// ---------- Sesión ----------
+function logout() { store.del("pa_key"); A.key = null; document.getElementById("app").hidden = true; document.getElementById("login").hidden = false; }
+document.getElementById("logout").onclick = logout;
+document.getElementById("loginForm").onsubmit = async (e) => {
+  e.preventDefault();
+  A.key = document.getElementById("lkKey").value.trim(); A.user = document.getElementById("lkUser").value.trim(); A.api = document.getElementById("lkApi").value.trim();
+  try { await fetch(A.api.replace(/\/$/, "") + "/admin/overview", { headers: { "x-admin-key": A.key } }).then((r) => { if (!r.ok) throw new Error(r.status === 401 ? "Clave incorrecta" : `No se pudo conectar (${r.status})`); }); }
+  catch (err) { document.getElementById("lkErr").textContent = err.message.includes("fetch") ? "No se pudo conectar con la API. Revisa la URL." : err.message; return; }
+  store.set("pa_key", A.key); store.set("pa_user", A.user); store.set("pa_api", A.api);
+  start();
+};
+
+async function start() {
+  document.getElementById("login").hidden = true; document.getElementById("app").hidden = false;
+  document.getElementById("whoami").textContent = `Sesión: ${A.user}`;
+  document.getElementById("apiInfo").textContent = `API: ${A.api || location.host}`;
+  CATS = await fetch(A.api.replace(/\/$/, "") + "/v1/categories").then((r) => r.json()).catch(() => []);
+  await refreshCounts();
+  route();
+}
+async function refreshCounts() {
+  OV = await api("/admin/overview").catch(() => OV);
+  if (!OV) return;
+  const set = (id, n) => { const el = document.getElementById(id); el.hidden = !n; el.textContent = n; };
+  set("cDrafts", OV.pending_drafts); set("cRes", OV.open_resolutions);
+}
+setInterval(() => { if (A.key) refreshCounts(); }, 30000);
+
+const VIEWS = { resumen: viewResumen, disenar: viewDisenar, moderacion: viewModeracion, mercados: viewMercados, resoluciones: viewResoluciones, tendencias: viewTendencias, fuentes: viewFuentes, riesgo: viewRiesgo, operadores: viewOperadores };
+function route() {
+  VIEW = (location.hash.slice(1) || "resumen"); if (!VIEWS[VIEW]) VIEW = "resumen";
+  document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("on", a.dataset.v === VIEW));
+  const main = document.getElementById("main");
+  main.innerHTML = `<div class="muted">Cargando…</div>`;
+  VIEWS[VIEW](main).catch((e) => { main.innerHTML = `<div class="empty">No se pudo cargar: ${esc(e.message)}</div>`; });
+}
+addEventListener("hashchange", route);
+
+// ---------- Resumen ----------
+async function viewResumen(el) {
+  await refreshCounts();
+  const o = OV, cov = await api("/admin/categories/coverage");
+  const short = cov.filter((c) => c.open_events + c.pending_drafts < c.minimum);
+  const alerts = [
+    o.failed_credits && `<div class="bad">${o.failed_credits} crédito(s) al casino fallaron y se están reintentando.</div>`,
+    o.sources_failing && `<div class="warn">${o.sources_failing} fuente(s) con error en la última lectura. <a href="#fuentes">Ver fuentes</a></div>`,
+    o.awaiting_resolution && `<div class="warn">${o.awaiting_resolution} evento(s) cerrados esperan resolución. <a href="#mercados">Ver mercados</a></div>`,
+    short.length && `<div class="warn">${short.length} categoría(s) por debajo del mínimo de ${short[0].minimum} mercados.</div>`,
+    !o.aiEnabled && `<div class="muted">La IA está desactivada: configura ANTHROPIC_API_KEY para generar y resolver preguntas automáticamente.</div>`,
+  ].filter(Boolean);
+  const maxCov = Math.max(...cov.map((c) => Math.max(c.minimum, c.open_events + c.pending_drafts)), 1);
+  el.innerHTML = `<div class="head"><div><h1>Resumen</h1><p>Estado de la plataforma en las últimas 24 horas.</p></div><div class="row"><a class="btn primary" href="#disenar">+ Diseñar mercado</a></div></div>
+    <div class="kpis">
+      <div class="kpi"><span class="k">Volumen 24 h</span><span class="v">${kmoney(o.volume_24h)}</span><span class="d">${o.trades_24h.toLocaleString("es-EC")} apuestas · total ${kmoney(o.volume_total)}</span></div>
+      <div class="kpi"><span class="k">Comisiones 24 h</span><span class="v">${money(o.fees_24h)}</span><span class="d">Total ${money(o.fees_total)}</span></div>
+      <div class="kpi"><span class="k">Mercados abiertos</span><span class="v">${o.open_events}</span><span class="d">${o.awaiting_resolution} esperando resolución</span></div>
+      <div class="kpi"><span class="k">Jugadores en línea</span><span class="v">${o.players_online}</span><span class="d">${o.players_total.toLocaleString("es-EC")} registrados</span></div>
+      <a class="kpi ${o.pending_drafts ? "attn" : ""}" href="#moderacion" style="text-decoration:none;color:inherit"><span class="k">Por moderar</span><span class="v">${o.pending_drafts}</span><span class="d">${o.autoApprove ? "Autoaprobación de IA activa" : "Preguntas de la IA y manuales"}</span></a>
+      <a class="kpi ${o.open_resolutions ? "attn" : ""}" href="#resoluciones" style="text-decoration:none;color:inherit"><span class="k">Resoluciones abiertas</span><span class="v">${o.open_resolutions}</span><span class="d">Propuestas o disputadas</span></a>
+      <div class="kpi ${o.failed_credits ? "alert" : ""}"><span class="k">Créditos fallidos</span><span class="v">${o.failed_credits}</span><span class="d">${o.pending_webhooks} webhooks pendientes</span></div>
+      <a class="kpi" href="#riesgo" style="text-decoration:none;color:inherit"><span class="k">Riesgo de la casa</span><span class="v">${kmoney(o.house_open_cost)}</span><span class="d">Realizado ${money(o.house_realized)}</span></a>
+    </div>
+    <div class="grid2">
+      <div class="panel"><h2>Volumen por hora <small>últimas 24 h</small></h2>${barChart(o.hourly.map((h) => ({ v: Number(h.volume), l: fdate(h.t), short: new Date(h.t).toLocaleTimeString("es-EC", { hour: "2-digit" }) })), { fmt: kmoney, label: "Volumen por hora" })}
+        ${alerts.length ? `<h2 style="margin-top:16px">Alertas</h2><div style="display:flex;flex-direction:column;gap:8px;font-size:13px">${alerts.join("")}</div>` : `<p class="ok" style="margin:14px 0 0">Sin alertas.</p>`}</div>
+      <div class="panel"><h2>Cobertura por categoría <span class="row"><small>mínimo ${cov[0]?.minimum ?? 25}</small><button class="btn sm" id="refill" ${o.aiEnabled ? "" : "disabled title='Requiere ANTHROPIC_API_KEY'"}>Rellenar con IA</button></span></h2>
+        ${cov.map((c) => { const tot = c.open_events + c.pending_drafts; return `<div class="cov"><span>${esc(c.name)}</span><span class="bar" title="${c.open_events} abiertos + ${c.pending_drafts} pendientes"><i style="width:${(c.open_events / maxCov) * 100}%"></i><i class="p" style="left:${(c.open_events / maxCov) * 100}%;width:${(c.pending_drafts / maxCov) * 100}%"></i><b style="left:${(c.minimum / maxCov) * 100}%"></b></span><span class="n ${tot < c.minimum ? "warn" : ""}">${c.open_events}${c.pending_drafts ? `+${c.pending_drafts}` : ""}</span></div>`; }).join("")}
+        <p class="faint" style="font-size:11px;margin:8px 0 0">Verde: abiertos · Amarillo: borradores pendientes · Línea: mínimo</p></div>
+    </div>`;
+  el.querySelector("#refill")?.addEventListener("click", (e) => run(e.target, () => api("/admin/categories/refill", { method: "POST", body: {} }), (r) => `Relleno lanzado: ${r.reduce((a, x) => a + (x.created?.length ?? 0), 0)} borradores nuevos`).then(() => route()));
+}
+
+// ---------- Diseñador ----------
+const blankDesign = () => ({ title: "", description: "", category: CATS[0]?.slug ?? "politica", kind: "binary", yes: 0.5,
+  outcomes: [{ label: "", probability: 0.34 }, { label: "", probability: 0.33 }, { label: "Otro", probability: 0.33 }],
+  closeTime: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 16), resolutionCriteria: "", resolutionSource: "", imageUrl: "", tags: "", featured: false, draftId: null });
+
+function designFromPayload(p, draftId = null) {
+  const multi = p.kind === "multi";
+  return { ...blankDesign(), title: p.title ?? "", description: p.description ?? "", category: p.category, kind: p.kind ?? "binary",
+    yes: multi ? 0.5 : p.outcomes?.[0]?.probability ?? 0.5, outcomes: multi ? p.outcomes.map((o) => ({ label: o.label, probability: o.probability })) : blankDesign().outcomes,
+    closeTime: p.closeTime ? new Date(new Date(p.closeTime).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : blankDesign().closeTime,
+    resolutionCriteria: p.resolutionCriteria ?? "", resolutionSource: p.resolutionSource ?? "", imageUrl: p.imageUrl ?? "", tags: (p.tags ?? []).join(", "), featured: !!p.featured, draftId };
+}
+function designPayload(d) {
+  return { title: d.title.trim(), description: d.description.trim(), category: d.category, kind: d.kind,
+    outcomes: d.kind === "binary" ? [{ label: "Sí", probability: Number(d.yes) }] : d.outcomes.filter((o) => o.label.trim()).map((o) => ({ label: o.label.trim(), probability: Number(o.probability) })),
+    closeTime: new Date(d.closeTime).toISOString(), resolutionCriteria: d.resolutionCriteria.trim(), resolutionSource: d.resolutionSource.trim(),
+    ...(d.imageUrl.trim() ? { imageUrl: d.imageUrl.trim() } : {}), tags: d.tags.split(",").map((t) => t.trim()).filter(Boolean), featured: d.featured };
+}
+function designChecks(d) {
+  const p = designPayload(d), close = new Date(d.closeTime);
+  const sum = p.outcomes.reduce((a, o) => a + o.probability, 0);
+  return [
+    [/^¿.{6,}\?$/.test(p.title), "La pregunta empieza con ¿ y termina con ?"],
+    [p.title.length <= 200, "Máximo 200 caracteres"],
+    [close > new Date(Date.now() + 3600e3), "Cierra al menos 1 hora en el futuro"],
+    [p.kind === "binary" || (p.outcomes.length >= 2 && p.outcomes.length <= 20), "Opción múltiple: entre 2 y 20 opciones con nombre"],
+    [p.kind === "binary" || Math.abs(sum - 1) <= 0.02, `Las probabilidades suman 100% (ahora ${Math.round(sum * 100)}%)`],
+    [p.outcomes.every((o) => o.probability >= 0.01 && o.probability <= 0.99), "Cada probabilidad entre 1% y 99%"],
+    [p.resolutionCriteria.length >= 10, "Criterio de resolución claro (mín. 10 caracteres)"],
+    [p.resolutionSource.length >= 3, "Fuente oficial que decide"],
+  ];
+}
+
+async function viewDisenar(el) {
+  DESIGN ??= blankDesign();
+  const d = DESIGN;
+  el.innerHTML = `<div class="head"><div><h1>${d.draftId ? `Editar borrador #${d.draftId}` : "Diseñar mercado"}</h1><p>Crea una pregunta Sí/No o de opción múltiple. A la derecha ves cómo la verá el jugador.</p></div>
+    <div class="row"><button class="btn" id="dReset" type="button">Empezar de cero</button>${OV?.aiEnabled ? `<button class="btn" id="dAi" type="button">Generar con IA…</button>` : ""}</div></div>
+    <div class="designer">
+      <div class="panel form" id="dForm">
+        <label class="f"><span>Pregunta</span><input class="input" id="d_title" value="${esc(d.title)}" placeholder="¿Quién ganará Miss Universo 2026?" maxlength="200"></label>
+        <label class="f"><span>Contexto para el jugador <em>(opcional)</em></span><textarea class="input" id="d_description" style="min-height:60px" placeholder="Una o dos frases que expliquen por qué importa.">${esc(d.description)}</textarea></label>
+        <div class="two">
+          <label class="f"><span>Categoría</span><select class="input" id="d_category">${CATS.map((c) => `<option value="${c.slug}" ${c.slug === d.category ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label>
+          <label class="f"><span>Cierre de apuestas <em>(hora local)</em></span><input class="input" id="d_closeTime" type="datetime-local" value="${esc(d.closeTime)}"></label>
+        </div>
+        <div class="f"><span class="muted" style="font-size:12px;font-weight:600">Tipo de mercado</span>
+          <span class="seg" id="d_kind"><button type="button" data-k="binary" class="${d.kind === "binary" ? "on" : ""}">Sí / No</button><button type="button" data-k="multi" class="${d.kind === "multi" ? "on" : ""}">Opción múltiple</button></span></div>
+        <div id="d_outcomes"></div>
+        <label class="f"><span>Criterio de resolución</span><textarea class="input" id="d_resolutionCriteria" placeholder="Se resuelve Sí si…; empate, aplazamiento o cancelación se resuelven…">${esc(d.resolutionCriteria)}</textarea>
+          <button class="btn sm" type="button" id="dTpl" style="align-self:flex-start">Usar plantilla estándar</button></label>
+        <div class="two">
+          <label class="f"><span>Fuente oficial que decide</span><input class="input" id="d_resolutionSource" value="${esc(d.resolutionSource)}" placeholder="Organización Miss Universo"></label>
+          <label class="f"><span>Imagen <em>(URL, opcional)</em></span><input class="input" id="d_imageUrl" value="${esc(d.imageUrl)}" placeholder="https://…/imagen.jpg"></label>
+        </div>
+        <div class="two">
+          <label class="f"><span>Etiquetas <em>(separadas por coma)</em></span><input class="input" id="d_tags" value="${esc(d.tags)}" placeholder="miss universo, reinados"></label>
+          <label class="f"><span>Portada</span><span class="row" style="height:38px"><input type="checkbox" id="d_featured" ${d.featured ? "checked" : ""}> Destacar en la portada del módulo</span></label>
+        </div>
+      </div>
+      <div class="preview">
+        <div class="panel"><h2>Vista previa <small>tarjeta del jugador</small></h2><div id="dPreview"></div></div>
+        <div class="panel"><h2>Revisión</h2><div class="checks" id="dChecks"></div>
+          <div class="row" style="margin-top:14px">${d.draftId ? `<button class="btn primary" id="dApprove" type="button">Aprobar y publicar</button>` : `<button class="btn primary" id="dPublish" type="button">Publicar mercado</button><button class="btn" id="dDraft" type="button">Guardar como borrador</button>`}</div>
+          <p class="faint" style="font-size:12px;margin:10px 0 0">Al publicar, el market maker de la casa empieza a cotizar con las probabilidades iniciales.</p></div>
+      </div>
+    </div>`;
+  const read = () => {
+    for (const k of ["title", "description", "category", "closeTime", "resolutionCriteria", "resolutionSource", "imageUrl", "tags"]) d[k] = document.getElementById("d_" + k).value;
+    d.featured = document.getElementById("d_featured").checked;
+  };
+  const renderOutcomes = () => {
+    const box = document.getElementById("d_outcomes");
+    if (d.kind === "binary") {
+      box.innerHTML = `<label class="f"><span>Probabilidad inicial del Sí: <b class="num" id="d_yesv">${Math.round(d.yes * 100)}%</b> <em>(precio de apertura ${Math.round(d.yes * 100)}¢ / No ${100 - Math.round(d.yes * 100)}¢)</em></span><input type="range" min="1" max="99" value="${Math.round(d.yes * 100)}" id="d_yes" style="accent-color:var(--brand)"></label>`;
+      box.querySelector("#d_yes").oninput = (e) => { d.yes = e.target.value / 100; box.querySelector("#d_yesv").textContent = e.target.value + "%"; refresh(); };
+    } else {
+      const sum = d.outcomes.reduce((a, o) => a + Number(o.probability || 0), 0);
+      box.innerHTML = `<div class="f"><span class="muted" style="font-size:12px;font-weight:600">Opciones y probabilidad inicial</span>
+        ${d.outcomes.map((o, i) => `<div class="outrow"><input class="input" data-ol="${i}" value="${esc(o.label)}" placeholder="Opción ${i + 1}"><span class="row" style="flex-wrap:nowrap"><input class="input num" data-op="${i}" type="number" min="1" max="99" step="1" value="${Math.round(o.probability * 100)}" style="text-align:right"><span class="muted">%</span></span><button type="button" class="btn sm" data-od="${i}" aria-label="Quitar opción" ${d.outcomes.length <= 2 ? "disabled" : ""}>✕</button></div>`).join("")}
+        <div class="row" style="justify-content:space-between"><span class="row"><button type="button" class="btn sm" id="d_add">+ Agregar opción</button><button type="button" class="btn sm" id="d_norm">Normalizar a 100%</button></span><span class="sum ${Math.abs(sum - 1) > 0.02 ? "warn" : "ok"}">Suma: ${Math.round(sum * 100)}%</span></div></div>`;
+      box.querySelectorAll("[data-ol]").forEach((inp) => (inp.oninput = () => { d.outcomes[inp.dataset.ol].label = inp.value; refresh(); }));
+      box.querySelectorAll("[data-op]").forEach((inp) => (inp.oninput = () => { d.outcomes[inp.dataset.op].probability = Number(inp.value) / 100; refresh(true); }));
+      box.querySelectorAll("[data-od]").forEach((b) => (b.onclick = () => { d.outcomes.splice(Number(b.dataset.od), 1); renderOutcomes(); refresh(); }));
+      box.querySelector("#d_add").onclick = () => { d.outcomes.push({ label: "", probability: 0.05 }); renderOutcomes(); refresh(); };
+      box.querySelector("#d_norm").onclick = () => {
+        const s = d.outcomes.reduce((a, o) => a + Number(o.probability || 0), 0) || 1;
+        const pct = d.outcomes.map((o) => Math.max(1, Math.round((Number(o.probability || 0) / s) * 100)));
+        // El redondeo puede dejar 99% o 101%: el ajuste va a la opción más probable
+        pct[pct.indexOf(Math.max(...pct))] += 100 - pct.reduce((a, b) => a + b, 0);
+        d.outcomes.forEach((o, i) => (o.probability = pct[i] / 100));
+        renderOutcomes(); refresh();
+      };
+    }
+  };
+  const refresh = (sumOnly) => {
+    read();
+    if (sumOnly && d.kind === "multi") { const s = d.outcomes.reduce((a, o) => a + Number(o.probability || 0), 0); const el2 = document.querySelector("#d_outcomes .sum"); el2.textContent = `Suma: ${Math.round(s * 100)}%`; el2.className = "sum " + (Math.abs(s - 1) > 0.02 ? "warn" : "ok"); }
+    const p = designPayload(d);
+    const yes = Math.round((p.outcomes[0]?.probability ?? 0.5) * 100);
+    document.getElementById("dPreview").innerHTML = `<div class="pcard"><div class="pic">${p.imageUrl ? `<img src="${esc(p.imageUrl)}" alt="">` : ""}<span class="badge">${esc(catName(p.category))}</span></div><div class="body">
+      <div class="q">${esc(p.title || "Escribe la pregunta…")}</div>
+      ${p.kind === "binary" ? `<div class="big">${yes}% <span class="muted" style="font-size:12px;font-family:var(--sans)">Sí</span></div><div class="yn"><span class="y">Sí ${yes}¢</span><span class="n">No ${100 - yes}¢</span></div>`
+        : [...p.outcomes].sort((a, b) => b.probability - a.probability).slice(0, 4).map((o) => `<div class="mo"><i style="width:${o.probability * 100}%"></i><span>${esc(o.label)}</span><b class="num">${Math.round(o.probability * 100)}%</b></div>`).join("") || `<span class="faint">Agrega opciones…</span>`}
+      <div class="faint" style="font-size:11px">Cierra ${fdate(d.closeTime)}</div></div></div>
+      <div class="rules" style="margin-top:10px"><b>Cómo se resuelve:</b> ${esc(p.resolutionCriteria || "—")}<br><b>Fuente:</b> ${esc(p.resolutionSource || "—")}</div>`;
+    const checks = designChecks(d);
+    document.getElementById("dChecks").innerHTML = checks.map(([ok, t]) => `<div class="${ok ? "y" : "n"}">${esc(t)}</div>`).join("");
+    const allOk = checks.every(([ok]) => ok);
+    ["dPublish", "dDraft", "dApprove"].forEach((id) => { const b = document.getElementById(id); if (b) b.disabled = !allOk && id !== "dDraft"; });
+  };
+  el.querySelector("#dForm").addEventListener("input", () => refresh());
+  el.querySelectorAll("#d_kind button").forEach((b) => (b.onclick = () => { d.kind = b.dataset.k; el.querySelectorAll("#d_kind button").forEach((x) => x.classList.toggle("on", x === b)); renderOutcomes(); refresh(); }));
+  el.querySelector("#dTpl").onclick = () => {
+    read();
+    const src = d.resolutionSource || "la fuente oficial";
+    document.getElementById("d_resolutionCriteria").value = d.kind === "binary"
+      ? `Se resuelve "Sí" si ${src} confirma lo que plantea la pregunta antes del cierre (${fdate(d.closeTime)}). En cualquier otro caso se resuelve "No". Si el evento se cancela o se aplaza más allá de 60 días, el mercado se anula y se devuelve $0,50 por acción.`
+      : `Gana la opción que coincida con el resultado oficial publicado por ${src}. Si el resultado no corresponde a ninguna opción con nombre, gana "Otro" (si existe). Si el evento se cancela o no se define dentro de los 60 días posteriores al cierre, el mercado se anula y se devuelve $0,50 por acción.`;
+    refresh();
+  };
+  el.querySelector("#dReset").onclick = () => { DESIGN = blankDesign(); route(); };
+  el.querySelector("#dAi")?.addEventListener("click", async (e) => {
+    const r = await modal({ title: "Generar preguntas con IA", text: "La IA investiga en la web la categoría y deja las propuestas en Moderación.", ok: "Generar",
+      fields: [{ id: "category", label: "Categoría", type: "select", options: CATS.map((c) => [c.slug, c.name]), value: d.category }, { id: "count", label: "Cantidad", type: "number", value: 5 }] });
+    if (r) run(e.target, () => api("/admin/drafts/generate", { method: "POST", body: { category: r.category, count: Number(r.count) } }), (x) => `${x.created?.length ?? 0} borradores creados. Revísalos en Moderación.`).then(refreshCounts);
+  });
+  el.querySelector("#dPublish")?.addEventListener("click", (e) => run(e.target, () => api("/admin/events", { method: "POST", body: designPayload(d) }), (ev) => `Publicado: ${ev.title}`).then((ev) => { if (ev) { DESIGN = null; location.hash = "#mercados"; } }));
+  el.querySelector("#dDraft")?.addEventListener("click", (e) => run(e.target, () => api("/admin/drafts", { method: "POST", body: designPayload(d) }), "Guardado en Moderación").then((r) => { if (r) { DESIGN = null; refreshCounts(); location.hash = "#moderacion"; } }));
+  el.querySelector("#dApprove")?.addEventListener("click", (e) => run(e.target, () => api(`/admin/drafts/${d.draftId}/approve`, { method: "POST", body: { edits: designPayload(d) } }), (ev) => `Publicado: ${ev.title}`).then((ev) => { if (ev) { DESIGN = null; refreshCounts(); location.hash = "#moderacion"; } }));
+  renderOutcomes(); refresh();
+}
+
+// ---------- Moderación ----------
+async function viewModeracion(el) {
+  const status = viewModeracion.status ?? "pending";
+  const drafts = await api(`/admin/drafts?status=${status}`);
+  el.innerHTML = `<div class="head"><div><h1>Moderación</h1><p>Preguntas propuestas por la IA (a partir de tendencias o del relleno por categoría) y borradores manuales. Nada se publica sin aprobación${OV?.autoApprove ? ", salvo que la autoaprobación de IA esté activa" : ""}.</p></div>
+    <div class="row"><span class="seg" id="mStatus">${[["pending", "Pendientes"], ["approved", "Aprobados"], ["rejected", "Rechazados"]].map(([k, l]) => `<button type="button" data-s="${k}" class="${k === status ? "on" : ""}">${l}</button>`).join("")}</span>
+    ${status === "pending" ? `<button class="btn ok" id="mBulk" type="button" disabled>Aprobar seleccionados</button>` : ""}</div></div>
+    <div class="cards">${drafts.length ? drafts.map((dr) => { const p = dr.payload; return `<div class="dcard">
+      ${status === "pending" ? `<input type="checkbox" data-sel="${dr.id}" aria-label="Seleccionar">` : `<span></span>`}
+      <div><h3>${esc(p.title)}</h3>
+        <div class="meta"><span>${esc(catName(p.category))}</span><span>${p.kind === "multi" ? "Opción múltiple" : "Sí / No"}</span><span>Cierra ${fday(p.closeTime)}</span><span>${esc(dr.created_by)}</span><span>${ago(dr.created_at)}</span>${dr.trend_label ? `<span>Tendencia: ${esc(dr.trend_label)}</span>` : ""}</div>
+        <div class="opts">${(p.kind === "multi" ? p.outcomes : [{ label: "Sí", probability: p.outcomes?.[0]?.probability }]).map((o) => `<span class="opt">${esc(o.label)} <b>${Math.round((o.probability ?? 0) * 100)}%</b></span>`).join("")}</div>
+        <details><summary>Criterio, fuente y razonamiento</summary><p><b>Resolución:</b> ${esc(p.resolutionCriteria)}</p><p><b>Fuente:</b> ${esc(p.resolutionSource)}</p>${p.rationale ? `<p><b>Por qué:</b> ${esc(p.rationale)}</p>` : ""}${(p.sourceUrls ?? []).length ? `<p>${p.sourceUrls.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`).join("<br>")}</p>` : ""}${dr.review_note ? `<p><b>Nota de revisión:</b> ${esc(dr.review_note)}</p>` : ""}</details></div>
+      <div class="acts">${status === "pending" ? `<button class="btn ok sm" data-ap="${dr.id}">Aprobar</button><button class="btn sm" data-ed="${dr.id}">Editar</button><button class="btn bad sm" data-rj="${dr.id}">Rechazar</button>` : dr.event_id ? `<span class="faint" style="font-size:12px">Evento #${dr.event_id}</span>` : ""}</div></div>`; }).join("") : `<div class="empty">No hay borradores ${status === "pending" ? "pendientes" : STATUS[status]?.toLowerCase() + "s"}.</div>`}</div>`;
+  el.querySelectorAll("#mStatus button").forEach((b) => (b.onclick = () => { viewModeracion.status = b.dataset.s; route(); }));
+  const sel = () => [...el.querySelectorAll("[data-sel]:checked")].map((c) => c.dataset.sel);
+  el.querySelectorAll("[data-sel]").forEach((c) => (c.onchange = () => { document.getElementById("mBulk").disabled = !sel().length; }));
+  el.querySelector("#mBulk")?.addEventListener("click", async (e) => {
+    const ids = sel(); let ok = 0;
+    await run(e.target, async () => { for (const id of ids) { await api(`/admin/drafts/${id}/approve`, { method: "POST", body: { edits: {} } }).then(() => ok++).catch((err) => toast(`#${id}: ${err.message}`, true)); } });
+    toast(`${ok} de ${ids.length} publicados`); await refreshCounts(); route();
+  });
+  el.querySelectorAll("[data-ap]").forEach((b) => (b.onclick = () => run(b, () => api(`/admin/drafts/${b.dataset.ap}/approve`, { method: "POST", body: { edits: {} } }), (ev) => `Publicado: ${ev.title}`).then(async (r) => { if (r) { await refreshCounts(); route(); } })));
+  el.querySelectorAll("[data-ed]").forEach((b) => (b.onclick = () => { const dr = drafts.find((x) => String(x.id) === b.dataset.ed); DESIGN = designFromPayload(dr.payload, dr.id); location.hash = "#disenar"; }));
+  el.querySelectorAll("[data-rj]").forEach((b) => (b.onclick = async () => {
+    const r = await modal({ title: "Rechazar borrador", fields: [{ id: "note", label: "Motivo (queda registrado)", type: "textarea", placeholder: "Ambigua, duplicada, tema no permitido…" }], ok: "Rechazar", danger: true });
+    if (r) run(b, () => api(`/admin/drafts/${b.dataset.rj}/reject`, { method: "POST", body: { note: r.note } }), "Borrador rechazado").then(async () => { await refreshCounts(); route(); });
+  }));
+}
+
+// ---------- Mercados ----------
+const MK = { status: "open", category: "", q: "", sort: "new", offset: 0 };
+async function viewMercados(el) {
+  const params = new URLSearchParams({ status: MK.status, sort: MK.sort, limit: "50", offset: String(MK.offset) });
+  if (MK.category) params.set("category", MK.category);
+  if (MK.q) params.set("q", MK.q);
+  const events = await api(`/admin/events?${params}`);
+  el.innerHTML = `<div class="head"><div><h1>Mercados</h1><p>Todos los eventos publicados. Desde aquí se destacan, cierran, resuelven o duplican.</p></div><a class="btn primary" href="#disenar">+ Diseñar mercado</a></div>
+    <div class="row" style="margin-bottom:12px">
+      <select class="input" id="fStatus" style="width:auto">${[["open", "Abiertos"], ["closed,resolving", "Por resolver"], ["resolved,void", "Resueltos y anulados"], ["open,closed,resolving,resolved,void", "Todos"]].map(([v, l]) => `<option value="${v}" ${v === MK.status ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <select class="input" id="fCat" style="width:auto"><option value="">Todas las categorías</option>${CATS.map((c) => `<option value="${c.slug}" ${c.slug === MK.category ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>
+      <select class="input" id="fSort" style="width:auto">${[["new", "Más nuevos"], ["volume", "Más volumen"], ["volume24h", "Volumen 24 h"], ["closing", "Cierran pronto"]].map(([v, l]) => `<option value="${v}" ${v === MK.sort ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <input class="input" id="fQ" type="search" placeholder="Buscar…" value="${esc(MK.q)}" style="width:min(260px,100%)">
+    </div>
+    <div class="tablewrap"><table><thead><tr><th>Mercado</th><th>Categoría</th><th>Precios</th><th class="num">Volumen</th><th class="num">Jugadores</th><th>Cierre</th><th>Estado</th><th></th></tr></thead><tbody>
+    ${events.length ? events.map((e) => `<tr><td><div class="t">${e.featured ? "★ " : ""}${esc(e.title)}</div><span class="faint" style="font-size:11px">#${e.id} · ${e.kind === "multi" ? `${e.markets.length} opciones` : "Sí / No"}</span></td>
+      <td>${esc(catName(e.category))}</td>
+      <td><div class="opts">${(e.kind === "multi" ? [...e.markets].sort((a, b) => b.price - a.price).slice(0, 3) : e.markets).map((m) => `<span class="opt">${esc(e.kind === "multi" ? m.label : "Sí")} <b>${m.price}%</b>${m.resolvedOutcome ? ` → ${m.resolvedOutcome}` : ""}</span>`).join("")}</div></td>
+      <td class="num">${kmoney(e.volume)}</td><td class="num">${e.traders}</td><td style="white-space:nowrap">${fday(e.closeTime)}</td><td>${pill(e.status)}</td>
+      <td><div class="row" style="flex-wrap:nowrap">
+        ${["open", "closed", "resolving"].includes(e.status) ? `<button class="btn sm" data-res="${e.id}">Resolver</button>` : ""}
+        ${e.status === "open" ? `<button class="btn sm" data-feat="${e.id}" data-v="${e.featured ? 0 : 1}">${e.featured ? "Quitar ★" : "Destacar"}</button><button class="btn sm" data-close="${e.id}">Cerrar</button>` : ""}
+        <button class="btn sm" data-dup="${e.id}">Duplicar</button></div></td></tr>`).join("") : `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">No hay mercados con estos filtros.</td></tr>`}
+    </tbody></table></div>
+    <div class="row" style="justify-content:space-between;margin-top:10px"><button class="btn sm" id="pPrev" ${MK.offset ? "" : "disabled"}>← Anteriores</button><span class="faint">Mostrando ${MK.offset + 1}–${MK.offset + events.length}</span><button class="btn sm" id="pNext" ${events.length === 50 ? "" : "disabled"}>Siguientes →</button></div>`;
+  const reload = () => { MK.offset = 0; route(); };
+  el.querySelector("#fStatus").onchange = (e) => { MK.status = e.target.value; reload(); };
+  el.querySelector("#fCat").onchange = (e) => { MK.category = e.target.value; reload(); };
+  el.querySelector("#fSort").onchange = (e) => { MK.sort = e.target.value; reload(); };
+  el.querySelector("#fQ").oninput = (e) => { clearTimeout(viewMercados.t); viewMercados.t = setTimeout(() => { MK.q = e.target.value.trim(); reload(); }, 350); };
+  el.querySelector("#pPrev").onclick = () => { MK.offset = Math.max(0, MK.offset - 50); route(); };
+  el.querySelector("#pNext").onclick = () => { MK.offset += 50; route(); };
+  const ev = (id) => events.find((x) => String(x.id) === String(id));
+  el.querySelectorAll("[data-feat]").forEach((b) => (b.onclick = () => run(b, () => api(`/admin/events/${b.dataset.feat}`, { method: "PATCH", body: { featured: b.dataset.v === "1" } }), "Actualizado").then(() => route())));
+  el.querySelectorAll("[data-close]").forEach((b) => (b.onclick = async () => {
+    const r = await modal({ title: "Cerrar mercado", text: `Se detienen las apuestas de <b>${esc(ev(b.dataset.close).title)}</b> y se devuelven las órdenes pendientes. Después hay que resolverlo.`, ok: "Cerrar ahora", danger: true });
+    if (r) run(b, () => api(`/admin/events/${b.dataset.close}/close`, { method: "POST", body: {} }), "Mercado cerrado").then(() => route());
+  }));
+  el.querySelectorAll("[data-dup]").forEach((b) => (b.onclick = () => { const e = ev(b.dataset.dup);
+    DESIGN = designFromPayload({ title: e.title, description: e.description, category: e.category, kind: e.kind, outcomes: e.kind === "multi" ? e.markets.map((m) => ({ label: m.label, probability: m.price / 100 })) : [{ label: "Sí", probability: e.markets[0].price / 100 }], resolutionCriteria: e.resolutionCriteria, resolutionSource: e.resolutionSource, imageUrl: e.imageUrl ?? "", tags: e.tags });
+    location.hash = "#disenar"; }));
+  el.querySelectorAll("[data-res]").forEach((b) => (b.onclick = () => resolveDialog(ev(b.dataset.res), b)));
+}
+async function resolveDialog(e, btn) {
+  const options = e.kind === "multi" ? [...e.markets.map((m) => [String(m.id), `Gana: ${m.label}`]), ["VOID", "Anular (paga $0,50 por acción)"]] : [["YES", "Sí"], ["NO", "No"], ["VOID", "Anular (paga $0,50 por acción)"]];
+  const fields = [{ id: "result", label: "Resultado", type: "select", options }, { id: "explanation", label: "Explicación (la verán los jugadores)", type: "textarea" }, { id: "url", label: "Evidencia (URL de la fuente oficial)", type: "url", placeholder: "https://" }];
+  const r = await modal({ title: "Proponer resolución", text: `<b>${esc(e.title)}</b><br>Fuente: ${esc(e.resolutionSource)}<br>Se detiene el trading y corre la ventana de disputa antes de pagar.${OV?.aiEnabled ? "" : ""}`, fields, ok: "Proponer" });
+  if (!r) return;
+  const body = { explanation: r.explanation, evidence: r.url ? [{ url: r.url }] : [] };
+  if (r.result === "VOID" || r.result === "YES" || r.result === "NO") body.outcome = r.result; else body.winningMarketId = Number(r.result);
+  run(btn, () => api(`/admin/events/${e.id}/resolve`, { method: "POST", body }), "Propuesta creada. Corre la ventana de disputa.").then(async (x) => { if (x) { await refreshCounts(); route(); } });
+}
+
+// ---------- Resoluciones ----------
+async function viewResoluciones(el) {
+  const status = viewResoluciones.status ?? "proposed,disputed";
+  const list = await api(`/admin/resolutions?status=${status}`);
+  const closed = OV?.aiEnabled ? await api("/admin/events?status=closed&sort=closing&limit=20") : [];
+  el.innerHTML = `<div class="head"><div><h1>Resoluciones</h1><p>Como el oráculo optimista de Polymarket: alguien propone el resultado, corre la ventana de disputa y, si nadie disputa, se paga $1 por acción ganadora.</p></div>
+    <span class="seg" id="rStatus">${[["proposed,disputed", "Abiertas"], ["finalized", "Finalizadas"], ["rejected", "Rechazadas"]].map(([k, l]) => `<button type="button" data-s="${k}" class="${k === status ? "on" : ""}">${l}</button>`).join("")}</span></div>
+    <div class="cards">${list.length ? list.map((r) => `<div class="dcard"><span></span><div><h3>${esc(r.title)}</h3>
+      <div class="meta">${pill(r.status)}<span>Resultado: <b>${r.outcome === "VOID" ? "Anulado" : r.winning_market_id ? `mercado #${r.winning_market_id}` : r.outcome === "YES" ? "Sí" : "No"}</b></span><span>Propuso: ${esc(r.proposer)}</span><span>${ago(r.created_at)}</span>${r.status === "proposed" ? `<span>Ventana: ${until(r.challenge_ends_at)}</span>` : ""}</div>
+      ${r.explanation ? `<div class="muted" style="font-size:13px">${esc(r.explanation)}</div>` : ""}
+      ${(r.evidence ?? []).length ? `<details><summary>Evidencia</summary><p>${r.evidence.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title || x.url)}</a>${x.quote ? ` — “${esc(x.quote)}”` : ""}`).join("<br>")}</p></details>` : ""}
+      ${r.dispute_reason ? `<div class="bad" style="font-size:13px;margin-top:6px">Disputa (${esc(r.disputed_by)}): ${esc(r.dispute_reason)}</div>` : ""}</div>
+      <div class="acts">${r.status === "proposed" ? `<button class="btn sm" data-dis="${r.id}">Disputar</button><button class="btn ok sm" data-fin="${r.id}" data-force="${new Date(r.challenge_ends_at) > new Date() ? 1 : 0}">Finalizar${new Date(r.challenge_ends_at) > new Date() ? " ya" : ""}</button>` : ""}
+        ${r.status === "disputed" ? `<button class="btn ok sm" data-fin="${r.id}" data-force="1">Confirmar y pagar</button><button class="btn bad sm" data-rej="${r.id}">Rechazar propuesta</button>` : ""}</div></div>`).join("") : `<div class="empty">No hay resoluciones en este estado.</div>`}</div>
+    ${closed.length && status !== "finalized" ? `<h2 style="font-size:16px;margin:24px 0 10px">Cerrados sin propuesta <span class="faint" style="font-size:12px;font-weight:500">la IA puede investigar el resultado</span></h2>
+      <div class="tablewrap"><table><tbody>${closed.filter((e) => !e.resolution).map((e) => `<tr><td><div class="t">${esc(e.title)}</div><span class="faint" style="font-size:11px">Cerró ${fday(e.closeTime)} · ${esc(e.resolutionSource)}</span></td><td style="width:1%"><button class="btn sm" data-ai="${e.id}">Resolver con IA</button></td></tr>`).join("")}</tbody></table></div>` : ""}`;
+  el.querySelectorAll("#rStatus button").forEach((b) => (b.onclick = () => { viewResoluciones.status = b.dataset.s; route(); }));
+  el.querySelectorAll("[data-dis]").forEach((b) => (b.onclick = async () => { const r = await modal({ title: "Disputar propuesta", fields: [{ id: "reason", label: "Motivo", type: "textarea" }], ok: "Disputar", danger: true }); if (r) run(b, () => api(`/admin/resolutions/${b.dataset.dis}/dispute`, { method: "POST", body: { reason: r.reason } }), "Propuesta disputada").then(() => route()); }));
+  el.querySelectorAll("[data-rej]").forEach((b) => (b.onclick = () => run(b, () => api(`/admin/resolutions/${b.dataset.rej}/reject`, { method: "POST", body: {} }), "Propuesta rechazada. Puedes proponer otro resultado desde Mercados.").then(() => route())));
+  el.querySelectorAll("[data-fin]").forEach((b) => (b.onclick = async () => {
+    if (b.dataset.force === "1") { const r = await modal({ title: "Finalizar y pagar", text: "Se pagará a los ganadores en sus casinos. Esta acción no se puede deshacer.", ok: "Finalizar" }); if (!r) return; }
+    run(b, () => api(`/admin/resolutions/${b.dataset.fin}/finalize`, { method: "POST", body: { force: b.dataset.force === "1" } }), (x) => `Finalizada. ${x.payouts ?? 0} pagos enviados.`).then(async () => { await refreshCounts(); route(); });
+  }));
+  el.querySelectorAll("[data-ai]").forEach((b) => (b.onclick = () => run(b, () => api(`/admin/events/${b.dataset.ai}/ai-resolve`, { method: "POST", body: {} }), (x) => x.proposed ? `La IA propuso: ${x.decision} (${Math.round(x.confidence * 100)}%)` : `Sin propuesta: ${x.explanation ?? x.decision}`).then(() => route())));
+}
+
+// ---------- Tendencias y señales ----------
+async function viewTendencias(el) {
+  const trends = await api("/admin/trends?status=active,used");
+  el.innerHTML = `<div class="head"><div><h1>Tendencias y señales</h1><p>Temas que se repiten en varias fuentes en las últimas 48 h. Las señales de Instagram, TikTok y otras redes suman puntaje.</p></div>
+    <div class="row"><button class="btn" id="tDetect">Recalcular tendencias</button><button class="btn primary" id="tSignal">+ Señal social</button></div></div>
+    <div class="tablewrap"><table><thead><tr><th>Tendencia</th><th>Categoría</th><th class="num">Puntaje</th><th class="num">Artículos</th><th class="num">Fuentes</th><th class="num">Redes</th><th>Visto</th><th>Estado</th><th></th></tr></thead><tbody>
+    ${trends.length ? trends.map((t) => `<tr><td><div class="t">${esc(t.label)}</div><div class="opts" style="margin-top:4px">${t.keywords.slice(0, 6).map((k) => `<span class="opt">${esc(k)}</span>`).join("")}</div></td><td>${esc(catName(t.category))}</td><td class="num">${Number(t.score).toFixed(1)}</td><td class="num">${t.article_count}</td><td class="num">${t.source_count}</td><td class="num">${t.social_count}</td><td style="white-space:nowrap">${ago(t.last_seen)}</td><td>${t.status === "used" ? `<span class="pill resolved">Usada</span>` : `<span class="pill open">Activa</span>`}</td>
+      <td><div class="row" style="flex-wrap:nowrap">${OV?.aiEnabled ? `<button class="btn sm" data-gen="${t.id}">Generar preguntas</button>` : ""}<button class="btn sm" data-ign="${t.id}">Ignorar</button></div></td></tr>`).join("") : `<tr><td colspan="9" class="muted" style="text-align:center;padding:24px">Aún no hay tendencias. Ejecuta la ingesta desde Fuentes.</td></tr>`}
+    </tbody></table></div>`;
+  el.querySelector("#tDetect").onclick = (e) => run(e.target, () => api("/admin/trends/detect", { method: "POST", body: {} }), (r) => `${r.trends} tendencias detectadas`).then(() => route());
+  el.querySelector("#tSignal").onclick = async () => {
+    const r = await modal({ title: "Agregar señal social", text: "Lo que el equipo (o el agente de navegador) vio en Instagram, TikTok, X o YouTube.", ok: "Guardar",
+      fields: [{ id: "platform", label: "Plataforma", type: "select", options: [["instagram", "Instagram"], ["tiktok", "TikTok"], ["x", "X"], ["youtube", "YouTube"], ["otra", "Otra"]] }, { id: "text", label: "Qué se está viralizando", type: "textarea" }, { id: "url", label: "Enlace", type: "url", placeholder: "https://" }, { id: "views", label: "Vistas o interacciones (aprox.)", type: "number" }] });
+    if (r) run(null, () => api("/admin/social-signals", { method: "POST", body: { platform: r.platform, text: r.text, ...(r.url ? { url: r.url } : {}), metrics: r.views ? { views: Number(r.views) } : {}, capturedBy: A.user } }), "Señal guardada");
+  };
+  el.querySelectorAll("[data-gen]").forEach((b) => (b.onclick = () => run(b, () => api("/admin/drafts/generate", { method: "POST", body: { trendId: Number(b.dataset.gen) } }), (x) => `${x.created?.length ?? 0} borradores en Moderación`).then(async () => { await refreshCounts(); route(); })));
+  el.querySelectorAll("[data-ign]").forEach((b) => (b.onclick = () => run(b, () => api(`/admin/trends/${b.dataset.ign}`, { method: "PATCH", body: { status: "ignored" } }), "Tendencia ignorada").then(() => route())));
+}
+
+// ---------- Fuentes ----------
+async function viewFuentes(el) {
+  const sources = await api("/admin/sources");
+  el.innerHTML = `<div class="head"><div><h1>Fuentes de información</h1><p>Periódicos, revistas, Google Trends por país, GDELT y feeds JSON (por ejemplo TikTok Creative Center vía proveedor). Se leen cada ${esc("INGEST_EVERY_MIN")} minutos.</p></div>
+    <div class="row"><button class="btn" id="sRun">Leer fuentes ahora</button><button class="btn primary" id="sAdd">+ Agregar fuente</button></div></div>
+    <div class="tablewrap"><table><thead><tr><th>Fuente</th><th>Tipo</th><th>Categoría</th><th>Última lectura</th><th>Resultado</th><th>Activa</th></tr></thead><tbody>
+    ${sources.map((s) => `<tr><td><div class="t">${esc(s.name)}</div><span class="faint" style="font-size:11px;word-break:break-all">${esc(s.url)}</span></td><td>${esc(s.kind)}</td><td>${esc(s.category ? catName(s.category) : "Automática")}</td><td style="white-space:nowrap">${s.last_fetched_at ? ago(s.last_fetched_at) : "Nunca"}</td>
+      <td class="${(s.last_status ?? "").startsWith("error") ? "bad" : "muted"}" style="font-size:12px">${esc(s.last_status ?? "—")}</td><td><input type="checkbox" data-en="${s.id}" ${s.enabled ? "checked" : ""} aria-label="Activa"></td></tr>`).join("")}
+    </tbody></table></div>`;
+  el.querySelector("#sRun").onclick = (e) => run(e.target, () => api("/admin/ingest/run", { method: "POST", body: {} }), (r) => `${r.sources.reduce((a, s) => a + s.inserted, 0)} artículos nuevos · ${r.trends} tendencias`).then(() => route());
+  el.querySelector("#sAdd").onclick = async () => {
+    const r = await modal({ title: "Agregar fuente", ok: "Agregar", fields: [
+      { id: "kind", label: "Tipo", type: "select", options: [["rss", "RSS / Atom"], ["google_trends", "Google Trends (RSS por país)"], ["gdelt", "GDELT"], ["newsapi", "NewsAPI"], ["json_feed", "Feed JSON"], ["tiktok_cc", "TikTok Creative Center (feed JSON)"]] },
+      { id: "name", label: "Nombre", placeholder: "El Comercio" }, { id: "url", label: "URL", type: "url", placeholder: "https://…/rss" },
+      { id: "category", label: "Categoría fija (opcional)", type: "select", options: [["", "Automática (por palabras clave)"], ...CATS.map((c) => [c.slug, c.name])] }] });
+    if (r) run(null, () => api("/admin/sources", { method: "POST", body: { kind: r.kind, name: r.name, url: r.url, category: r.category || null } }), "Fuente agregada").then(() => route());
+  };
+  el.querySelectorAll("[data-en]").forEach((c) => (c.onchange = () => run(null, () => api(`/admin/sources/${c.dataset.en}`, { method: "PATCH", body: { enabled: c.checked } }), c.checked ? "Fuente activada" : "Fuente desactivada")));
+}
+
+// ---------- Riesgo ----------
+async function viewRiesgo(el) {
+  const r = await api("/admin/exposure");
+  const rows = r.markets.filter((m) => m.house_cost > 0 || m.players_yes > 0 || m.players_no > 0);
+  el.innerHTML = `<div class="head"><div><h1>Riesgo de la casa</h1><p>El market maker de la casa da liquidez a ambos lados. Aquí ves su inventario y dinero comprometido por mercado.</p></div><button class="btn" id="mmRefresh">Recotizar ahora</button></div>
+    <div class="kpis" style="margin-bottom:14px"><div class="kpi"><span class="k">Comprometido en posiciones</span><span class="v">${kmoney(r.house.open_cost)}</span></div><div class="kpi"><span class="k">Resultado realizado</span><span class="v ${r.house.realized >= 0 ? "ok" : "bad"}">${money(r.house.realized)}</span></div><div class="kpi"><span class="k">Comisiones cobradas</span><span class="v">${money(r.house.fees)}</span></div><div class="kpi"><span class="k">Mercados con exposición</span><span class="v">${rows.filter((m) => m.house_cost > 0).length}</span></div></div>
+    <div class="tablewrap"><table><thead><tr><th>Mercado</th><th>Estado</th><th class="num">Precio</th><th class="num">Justo</th><th class="num">Casa Sí</th><th class="num">Casa No</th><th class="num">Comprometido</th><th class="num">Jugadores Sí / No</th><th class="num">Volumen</th></tr></thead><tbody>
+    ${rows.length ? rows.slice(0, 200).map((m) => `<tr><td><div class="t">${esc(m.question)}</div></td><td>${pill(m.status)}</td><td class="num">${m.last_price}¢</td><td class="num">${m.fair_price}¢</td><td class="num">${(m.house_yes / 100).toLocaleString("es-EC")}</td><td class="num">${(m.house_no / 100).toLocaleString("es-EC")}</td><td class="num">${money(m.house_cost)}</td><td class="num">${(m.players_yes / 100).toLocaleString("es-EC")} / ${(m.players_no / 100).toLocaleString("es-EC")}</td><td class="num">${kmoney(m.volume)}</td></tr>`).join("") : `<tr><td colspan="9" class="muted" style="text-align:center;padding:24px">Sin exposición todavía.</td></tr>`}
+    </tbody></table></div>`;
+  el.querySelector("#mmRefresh").onclick = (e) => run(e.target, () => api("/admin/mm/refresh", { method: "POST", body: {} }), (x) => `${x.markets} mercados recotizados`).then(() => route());
+}
+
+// ---------- Casinos ----------
+async function viewOperadores(el) {
+  const ops = await api("/admin/operators");
+  el.innerHTML = `<div class="head"><div><h1>Casinos</h1><p>Operadores integrados por API. Cada uno usa su propia billetera, marca y comisión.</p></div><button class="btn primary" id="oAdd">+ Agregar casino</button></div>
+    <div id="oCreds"></div>
+    <div class="tablewrap"><table><thead><tr><th>Casino</th><th>Clave pública</th><th>Billetera</th><th>Webhook</th><th class="num">Comisión</th><th>Moneda</th><th>Estado</th></tr></thead><tbody>
+    ${ops.length ? ops.map((o) => `<tr><td><div class="t">${esc(o.theme?.brandName ?? o.name)}</div><span class="faint" style="font-size:11px">${esc(o.id)}</span></td><td class="num" style="font-size:12px">${esc(o.api_key)}</td><td style="font-size:12px;word-break:break-all">${esc(o.wallet_url)}</td><td style="font-size:12px;word-break:break-all">${esc(o.webhook_url ?? "—")}</td><td class="num">${o.fee_bps == null ? "Global" : (o.fee_bps / 100).toFixed(2) + "%"}</td><td>${esc(o.currency)}</td><td>${o.active ? `<span class="pill open">Activo</span>` : `<span class="pill void">Inactivo</span>`}</td></tr>`).join("") : `<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">Aún no hay casinos.</td></tr>`}
+    </tbody></table></div>`;
+  el.querySelector("#oAdd").onclick = async () => {
+    const r = await modal({ title: "Agregar casino", ok: "Crear credenciales", fields: [
+      { id: "id", label: "Identificador (minúsculas y guiones)", placeholder: "ecuabet" }, { id: "name", label: "Nombre", placeholder: "Ecuabet" },
+      { id: "walletUrl", label: "URL de la billetera", type: "url", placeholder: "https://api.casino.com/predicciones/wallet" }, { id: "webhookUrl", label: "URL de webhooks (opcional)", type: "url" },
+      { id: "feeBps", label: "Comisión en puntos básicos (200 = 2%, vacío = global)", type: "number" }, { id: "primary", label: "Color de marca", type: "color", value: "#ffd400" }] });
+    if (!r) return;
+    const out = await run(null, () => api("/admin/operators", { method: "POST", body: { id: r.id, name: r.name, walletUrl: r.walletUrl, ...(r.webhookUrl ? { webhookUrl: r.webhookUrl } : {}), ...(r.feeBps ? { feeBps: Number(r.feeBps) } : {}), theme: { brandName: r.name, primary: r.primary } } }), "Casino creado");
+    if (!out) return;
+    await viewOperadores(el);
+    el.querySelector("#oCreds").innerHTML = `<div class="panel" style="margin-bottom:14px;border-color:var(--brand)"><h2>Credenciales de ${esc(out.id)} <small>se muestran una sola vez</small></h2>
+      <div class="creds"><span>X-Operator-Key: <b>${esc(out.apiKey)}</b></span><span>API secret: <b>${esc(out.apiSecret)}</b></span><span>Wallet secret: <b>${esc(out.walletSecret)}</b></span></div>
+      <div class="row" style="margin-top:10px"><button class="btn sm" id="oCopy">Copiar</button><span class="faint" style="font-size:12px">Envíalas al casino por un canal seguro junto con la guía de integración.</span></div></div>`;
+    el.querySelector("#oCopy").onclick = () => navigator.clipboard?.writeText(`X-Operator-Key: ${out.apiKey}\nAPI secret: ${out.apiSecret}\nWallet secret: ${out.walletSecret}`).then(() => toast("Copiado"), () => toast("Selecciona y copia el texto manualmente", true));
+  };
+}
+
+// ---------- Arranque ----------
+if (A.key) start().catch(() => logout()); else { document.getElementById("login").hidden = false; if (A.api) document.getElementById("lkApi").value = A.api; if (A.user) document.getElementById("lkUser").value = A.user; }
+</script>
+</body>
+</html>

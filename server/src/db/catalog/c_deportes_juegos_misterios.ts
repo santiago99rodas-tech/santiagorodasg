@@ -122,8 +122,6 @@ export default [
     { q: "¿Ganará un equipo latinoamericano un Major de Counter-Strike 2 en 2027?", close: "2027-05-31", p: 0.10, src: "Valve / organizadores del Major" },
     { q: "¿De qué región será el campeón del Mundial de League of Legends 2027?", close: "2027-10-01", src: "Riot Games / LoL Esports",
       options: [["LCK (Corea)", 0.58], ["LPL (China)", 0.32], ["LEC (Europa)", 0.05], ["Otra", 0.05]] },
-    { q: "¿Recaudará la secuela de Una película de Minecraft más de 800 millones de dólares en taquilla mundial?", close: "2027-07-22", p: 0.40, src: "Box Office Mojo",
-      rule: "Se toma la recaudación mundial reportada por Box Office Mojo a los 60 días del estreno. Si el estreno se aplaza más allá del 31 de diciembre de 2027, se resuelve No." },
     { q: "¿Superará GTA VI los 1.000 millones de dólares en ventas en sus primeras 24 horas según Take-Two?", close: "2026-11-18", p: 0.55, src: "Take-Two Interactive" },
     { q: "¿Qué precio en dólares tendrá la PlayStation 6 estándar al anunciarse oficialmente (si se anuncia antes del 31 de diciembre de 2027)?", close: "2027-12-31", src: "Sony Interactive Entertainment",
       options: [["No se anuncia precio en ese plazo", 0.65], ["Menos de 600 USD", 0.10], ["600 a 699 USD", 0.12], ["700 USD o más", 0.13]] },

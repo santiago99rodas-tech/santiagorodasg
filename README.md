@@ -61,6 +61,29 @@ npm test                          # 24 pruebas: motor, trading, billetera, resol
 npm run typecheck
 ```
 
+## Panel de administración (back-office)
+
+`web/admin/index.html` es el back-office de Predicciones, servido en `/admin/`. Se entra con `ADMIN_API_KEY` y el nombre de quien opera, que queda registrado en aprobaciones y resoluciones.
+
+| Sección | Qué permite |
+|---|---|
+| Resumen | Volumen, comisiones, jugadores en línea, alertas (créditos fallidos, fuentes caídas, eventos sin resolver) y cobertura de las 26 categorías frente al mínimo de 25, con botón "Rellenar con IA" |
+| Diseñar mercado | Crear preguntas Sí/No o de opción múltiple con probabilidades iniciales, criterio de resolución (con plantilla), fuente, imagen y portada; vista previa en vivo de la tarjeta del jugador y validación antes de publicar |
+| Moderación | Aprobar (una a una o en lote), editar en el diseñador o rechazar con motivo las preguntas que propone la IA |
+| Mercados | Buscar y filtrar, destacar, cerrar, proponer resolución y duplicar |
+| Resoluciones | Ver propuestas y evidencias, disputar, rechazar, finalizar y pagar; resolver con IA los eventos cerrados |
+| Tendencias y señales | Tendencias detectadas, generar preguntas desde una tendencia, cargar señales de Instagram/TikTok |
+| Fuentes | Estado de cada fuente, activar o desactivar, agregar nuevas y leer ahora |
+| Riesgo de la casa | Inventario y dinero comprometido del market maker por mercado; recotizar |
+| Casinos | Alta de operadores con sus credenciales (se muestran una sola vez) |
+
+**Montarlo en bo-sio.com** (o en cualquier back-office existente), de tres maneras:
+1. **Proxy inverso**: publicar el servidor bajo `https://bo-sio.com/predicciones/` (Nginx o similar apuntando a la API). El panel queda en `https://bo-sio.com/predicciones/admin/`.
+2. **Archivo estático**: copiar `web/admin/index.html` al hosting de bo-sio.com y abrirlo con `?api=https://<url-de-la-api>`. La API ya permite llamadas de otro dominio con `X-Admin-Key`.
+3. **Dentro del back-office actual**: agregar un menú "Predicciones" que lo abra en un iframe.
+
+En todos los casos, restringe `/admin` por IP o VPN y cambia `ADMIN_API_KEY` en producción.
+
 ## Operación diaria (API de admin, cabecera `X-Admin-Key`)
 
 | Tarea | Llamada |
