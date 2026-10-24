@@ -56,7 +56,9 @@ svg { display: block; }
 .chip { position: absolute; font-weight: 900; font-style: italic; padding: 6px 14px; border-radius: 10px; font-size: clamp(14px, 3vw, 22px); color: #fff; box-shadow: 0 6px 20px rgba(0,0,0,.5); }
 .chip.y { background: var(--up); right: 46%; top: 16%; transform: rotate(-10deg); }
 .chip.n { background: var(--down); right: 10%; top: 50%; transform: rotate(10deg); }
-@media (max-width: 560px) { .art { opacity: .5; } .hero h1 { max-width: 85%; } }
+.hero { align-content: start; }
+.hero .tag { align-self: start; }
+@media (max-width: 560px) { .art { opacity: .5; } .art .chip { display: none; } .hero { min-height: 170px; } .hero h1 { max-width: 85%; } }
 
 .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
 @media (max-width: 860px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
