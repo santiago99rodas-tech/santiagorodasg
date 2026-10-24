@@ -12,7 +12,8 @@
     "mock-casino": "tsx mock-casino/server.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test --test-concurrency=1 test/*.test.ts",
-    "simulate": "tsx mock-casino/simulate.ts"
+    "simulate": "tsx mock-casino/simulate.ts",
+    "demo:build": "tsx ../demo/build.mts"
   },
   "engines": {
     "node": ">=22"

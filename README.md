@@ -52,6 +52,16 @@ Abre http://localhost:4000: es un casino de ejemplo con la pestaña Predicciones
 
 Con Docker: `docker compose up --build`, luego `docker compose exec api npm run seed -- --demo` y `docker compose --profile demo up mock-casino`.
 
+## Demo autónoma (sin servidor)
+
+`demo/` arma un solo HTML que corre todo en el navegador: el motor de órdenes, el market maker de la casa, la billetera, las resoluciones, el catálogo de 702 mercados y jugadores simulados (`demo/backend.js`). El módulo del jugador y el back-office reales se cargan dentro de un casino de demostración, y sus llamadas a la API las atiende ese backend en memoria.
+
+```bash
+cd server && npm run demo:build     # genera demo/dist/predicciones-demo.html
+```
+
+Sirve para mostrar el producto a casinos sin desplegar nada. Se reinicia al recargar, y la IA y la ingesta de noticias quedan desactivadas porque necesitan el servidor.
+
 ## Pruebas
 
 ```bash
