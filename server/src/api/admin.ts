@@ -6,7 +6,7 @@ import { parse, requireAdmin, adminUser } from "./auth.js";
 import { notFound } from "../lib/errors.js";
 import { randomToken } from "../lib/crypto.js";
 import { runIngest, addSocialSignal, detectTrends } from "../ingest/pipeline.js";
-import { generateForTrend, generateForTopTrends } from "../ai/questions.js";
+import { generateForTrend, generateForTopTrends, generateForCategory, categoryCoverage, refillCategories } from "../ai/questions.js";
 import { aiResolve } from "../ai/resolver.js";
 import { listDrafts, approveDraft, rejectDraft, createManualDraft } from "../services/drafts.js";
 import { createEvent } from "../services/events.js";
@@ -83,9 +83,16 @@ export async function adminRoutes(app: FastifyInstance) {
 
   // ---------- Preguntas (borradores) ----------
   app.post("/admin/drafts/generate", async (req) => {
-    const b = parse(z.object({ trendId: z.number().int().optional(), limit: z.number().int().min(1).max(20).optional() }), req.body ?? {});
+    const b = parse(z.object({
+      trendId: z.number().int().optional(), category: z.string().optional(),
+      count: z.number().int().min(1).max(30).optional(), limit: z.number().int().min(1).max(20).optional(),
+    }), req.body ?? {});
+    if (b.category) return generateForCategory(b.category, b.count ?? 10);
     return b.trendId ? generateForTrend(b.trendId) : generateForTopTrends(b.limit ?? 5);
   });
+  /** Mercados abiertos y borradores por categoría frente al mínimo configurado. */
+  app.get("/admin/categories/coverage", async () => categoryCoverage());
+  app.post("/admin/categories/refill", async () => refillCategories());
   app.get("/admin/drafts", async (req) => listDrafts((req.query as any).status ?? "pending"));
   app.post("/admin/drafts", async (req) => createManualDraft(req.body as object, adminUser(req)));
   app.post<{ Params: { id: string } }>("/admin/drafts/:id/approve", async (req) => approveDraft(Number(req.params.id), (req.body as any)?.edits ?? {}, adminUser(req)));

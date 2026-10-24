@@ -1,7 +1,7 @@
 // Tareas programadas. En producción con varias instancias, ejecútalas en una sola (JOBS_ENABLED=true).
 import { config } from "./config.js";
 import { runIngest } from "./ingest/pipeline.js";
-import { generateForTopTrends } from "./ai/questions.js";
+import { generateForTopTrends, refillCategories } from "./ai/questions.js";
 import { aiResolveClosed } from "./ai/resolver.js";
 import { aiEnabled } from "./ai/claude.js";
 import { closeExpired, finalizeDue } from "./services/resolution.js";
@@ -34,6 +34,7 @@ export function startJobs() {
   every("ingesta", config.jobs.ingestEveryMin * 60_000, () => runIngest());
   if (aiEnabled()) {
     every("generar-preguntas", config.jobs.generateEveryMin * 60_000, () => generateForTopTrends(5));
+    every("rellenar-categorias", config.jobs.refillEveryMin * 60_000, refillCategories);
     every("resolver-con-ia", 30 * 60_000, () => aiResolveClosed(10));
   }
 }

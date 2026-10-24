@@ -31,9 +31,17 @@ export const config = {
     levels: num("MM_LEVELS", 3),
     maxExposureUsd: num("MM_MAX_EXPOSURE_USD", 5000),
   },
+  catalog: {
+    // Mínimo de mercados abiertos (más borradores pendientes) por categoría que la IA intenta mantener
+    minOpenPerCategory: num("MIN_OPEN_PER_CATEGORY", 25),
+    maxNewPerCategoryRun: num("MAX_NEW_PER_CATEGORY_RUN", 10),
+    // true: los borradores de la IA que pasan la validación se publican sin moderación humana
+    autoApproveAi: str("AUTO_APPROVE_AI_DRAFTS", "false") === "true",
+  },
   jobs: {
     ingestEveryMin: num("INGEST_EVERY_MIN", 30),
     generateEveryMin: num("GENERATE_EVERY_MIN", 120),
     mmRefreshEverySec: num("MM_REFRESH_EVERY_SEC", 30),
+    refillEveryMin: num("REFILL_EVERY_MIN", 360),
   },
 };

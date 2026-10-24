@@ -91,6 +91,35 @@ test("generación con IA crea borradores válidos y descarta los inválidos", as
   assert.equal((await pool.query("SELECT status FROM trends WHERE id=$1", [trend.id])).rows[0].status, "used");
 });
 
+test("relleno por categoría: investiga, propone y respeta el mínimo", async () => {
+  const close = new Date(Date.now() + 100 * 864e5).toISOString();
+  const calls: string[] = [];
+  setClaudeClient({
+    beta: { messages: {
+      create: async (p: any) => { calls.push("investigar"); assert.equal(p.tools[0].type, "web_search_20260209"); return { stop_reason: "end_turn", content: [{ type: "text", text: "GTA VI sale el 19 de noviembre de 2026." }] }; },
+      parse: async (p: any) => {
+        calls.push("proponer");
+        assert.match(p.messages[0].content, /Categoría obligatoria: videojuegos/);
+        return { stop_reason: "end_turn", model: "claude-opus-5-5", parsed_output: { skipped: "", questions: [
+          { title: "¿Superará GTA VI los 20 millones de copias en su primera semana?", description: "", category: "otra", kind: "binary", outcomes: [{ label: "Sí", probability: 0.4 }],
+            closeTime: close, resolutionCriteria: "Cifra oficial de Take-Two de la primera semana.", resolutionSource: "Take-Two Interactive", tags: [], rationale: "", sourceUrls: [] },
+        ] } };
+      },
+    } },
+  } as any);
+  const { categoryCoverage, refillCategories } = await import("../src/ai/questions.js");
+  const before = (await categoryCoverage()).find((c: any) => c.slug === "videojuegos");
+  assert.equal(before.minimum, 25);
+  const r = await refillCategories();
+  const vg = r.find((x: any) => x.category === "videojuegos") as any;
+  assert.equal(vg.created.length, 1);
+  assert.deepEqual(calls.slice(0, 2), ["investigar", "proponer"]);
+  const d = (await pool.query("SELECT payload FROM drafts WHERE id=$1", [vg.created[0]])).rows[0];
+  assert.equal(d.payload.category, "videojuegos"); // la categoría la fija el relleno, no el modelo
+  const after = (await categoryCoverage()).find((c: any) => c.slug === "videojuegos");
+  assert.equal(after.pending_drafts, 1);
+});
+
 test("validación de borradores: probabilidades de un múltiple deben sumar ~1", () => {
   const r = validateDraft({ title: "¿Quién gana el certamen de prueba?", description: "", category: "reinados", kind: "multi",
     outcomes: [{ label: "A", probability: 0.6 }, { label: "B", probability: 0.6 }], closeTime: new Date(Date.now() + 10 * 864e5).toISOString(),

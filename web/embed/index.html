@@ -246,6 +246,7 @@ h2.sec .aside { margin-left: auto; font-size: 13px; color: var(--brand); font-we
     <input class="search" id="search" type="search" placeholder="Buscar mercado…" aria-label="Buscar mercado">
   </div>
   <div class="grid" id="grid"></div>
+  <div style="text-align:center;margin-top:14px"><button type="button" class="btn-s" id="more" hidden style="padding:10px 18px;font-size:14px">Ver más mercados</button></div>
   <div id="mine" hidden></div>
 </main>
 <div class="scrim" id="scrim" hidden></div>
@@ -253,7 +254,7 @@ h2.sec .aside { margin-left: auto; font-size: 13px; color: var(--brand); font-we
 
 <script>
 const TOKEN = new URLSearchParams(location.search).get("token");
-const S = { me: null, events: [], stats: null, cats: [], feed: [], cat: null, sort: "volume24h", q: "", view: "markets", mv: "up",
+const S = { me: null, events: [], list: [], more: false, stats: null, cats: [], feed: [], cat: null, sort: "volume24h", q: "", view: "markets", mv: "up",
   open: null, marketId: null, side: "YES", amount: 5, range: "1w", positions: [], orders: [] };
 
 const I = {
@@ -272,6 +273,17 @@ const I = {
   moda: '<path d="M12 6a2 2 0 1 1 2-2M12 6v2L3 15a1.5 1.5 0 0 0 1 2.7h16a1.5 1.5 0 0 0 1-2.7l-9-7"/>',
   reinados: '<path d="m3 8 4 4 5-7 5 7 4-4-2 11H5z"/><path d="M5 19h14"/>',
   redes: '<rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2M12 9.5c-1-1.5-3.5-1-3 1 .4 1.5 3 3 3 3s2.6-1.5 3-3c.5-2-2-2.5-3-1z"/>',
+  elecciones: '<path d="M4 11h16v10H4zM8 11V7l4-4 4 4v4"/><path d="M10 16h4"/>',
+  futbol: '<circle cx="12" cy="12" r="9"/><path d="m12 7 4 3-1.5 4.5h-5L8 10z"/><path d="M12 3v4M21 10h-5M18 19l-3.5-4.5M6 19l3.5-4.5M3 10h5"/>',
+  ia: '<rect x="5" y="7" width="14" height="12" rx="3"/><path d="M12 3v4M9 12h.01M15 12h.01M9.5 15.5h5M2 12h3M19 12h3"/>',
+  cine: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 8h4M3 12h4M3 16h4M17 8h4M17 12h4M17 16h4"/>',
+  television: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="m8 2 4 4 4-4M8 21h8"/>',
+  premios: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4c0 3 1.5 4.5 3 5M17 6h3c0 3-1.5 4.5-3 5"/>',
+  videojuegos: '<path d="M6 9h12a4 4 0 0 1 3.9 4.9l-.8 3.3a2 2 0 0 1-3.5.7L15.5 15h-7l-2.1 2.9a2 2 0 0 1-3.5-.7l-.8-3.3A4 4 0 0 1 6 9z"/><path d="M8 11v3M6.5 12.5h3M15.5 12h.01M17.5 13.5h.01"/>',
+  espacio: '<path d="M12 2c3 2.5 4.5 6 4.5 10l-2 4h-5l-2-4C7.5 8 9 4.5 12 2z"/><circle cx="12" cy="9" r="1.6"/><path d="M9.5 16 7 20l2.5-1M14.5 16l2.5 4-2.5-1"/>',
+  ovnis: '<ellipse cx="12" cy="11" rx="10" ry="3.5"/><path d="M7.5 9.5a4.5 4.5 0 0 1 9 0"/><path d="m8 15-2 5M16 15l2 5M12 15v6"/>',
+  naturaleza: '<path d="M5 21c0-9 5-15 15-16-1 10-7 15-15 16z"/><path d="M5 21 14 12"/>',
+  ciencia: '<path d="M9 3h6M10 3v6L4.5 18.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3"/><path d="M7 15h10"/>',
 };
 const CC = {
   politica: ["#c81e1e", "linear-gradient(160deg,#5a6b8c,#1b2233 70%)", "#f3e7c9"], deportes: ["#15803d", "radial-gradient(circle at 50% 30%,#2f7d3a,#0d2512 75%)", "#fff"],
@@ -282,6 +294,12 @@ const CC = {
   farandula: ["#db2777", "radial-gradient(circle at 50% 35%,#9d174d,#1f0612 75%)", "#fbcfe8"], musica: ["#9333ea", "radial-gradient(circle at 50% 35%,#581c87,#12061f 75%)", "#e9d5ff"],
   moda: ["#be123c", "linear-gradient(160deg,#4c0519,#14030a 75%)", "#fecdd3"], reinados: ["#b45309", "radial-gradient(circle at 50% 35%,#92400e,#1c0d02 75%)", "#fde68a"],
   redes: ["#0891b2", "radial-gradient(circle at 50% 35%,#155e75,#04161c 75%)", "#a5f3fc"],
+  elecciones: ["#b91c1c", "linear-gradient(160deg,#334155,#0f172a 70%)", "#fecaca"], futbol: ["#16a34a", "radial-gradient(circle at 50% 30%,#166534,#052e16 75%)", "#fff"],
+  ia: ["#4f46e5", "radial-gradient(circle at 50% 40%,#3730a3,#0b0a26 75%)", "#c7d2fe"], cine: ["#dc2626", "radial-gradient(circle at 50% 35%,#7f1d1d,#1a0505 75%)", "#fecaca"],
+  television: ["#7c3aed", "radial-gradient(circle at 50% 35%,#4c1d95,#120724 75%)", "#ddd6fe"], premios: ["#ca8a04", "radial-gradient(circle at 50% 35%,#854d0e,#1a1003 75%)", "#fef08a"],
+  videojuegos: ["#2563eb", "radial-gradient(circle at 50% 35%,#1e3a8a,#050b1f 75%)", "#93c5fd"], espacio: ["#0f172a", "radial-gradient(circle at 70% 30%,#312e81,#020617 70%)", "#e0e7ff"],
+  ovnis: ["#059669", "radial-gradient(circle at 50% 30%,#064e3b,#010d09 75%)", "#6ee7b7"], naturaleza: ["#15803d", "linear-gradient(160deg,#3f6212,#0c1a04 75%)", "#d9f99d"],
+  ciencia: ["#0d9488", "radial-gradient(circle at 50% 35%,#115e59,#031614 75%)", "#99f6e4"],
 };
 const cc = (k) => CC[k] ?? CC.sociedad;
 const svg = (k, size = 24, cls = "") => `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${I[k] ?? I.sociedad}</svg>`;
@@ -423,10 +441,18 @@ function renderFeed(fresh) {
   document.getElementById("feedCount").textContent = S.stats ? `${S.stats.trades_24h.toLocaleString("es-EC")} hoy` : "";
 }
 
-function filteredEvents() {
-  const q = S.q.toLowerCase();
-  return S.events.filter((e) => (!S.cat || e.category === S.cat) && (!q || e.title.toLowerCase().includes(q) || e.markets.some((m) => m.label.toLowerCase().includes(q))));
+// Lista paginada del servidor según categoría, orden y búsqueda
+const PAGE = 48;
+async function fetchList(reset = true) {
+  const params = new URLSearchParams({ limit: String(PAGE), offset: String(reset ? 0 : S.list.length), spark: "1", sort: S.sort });
+  if (S.cat) params.set("category", S.cat);
+  if (S.q) params.set("q", S.q);
+  const page = await api(`/v1/events?${params}`);
+  S.list = reset ? page : [...S.list, ...page];
+  S.more = page.length === PAGE;
+  renderGrid();
 }
+function filteredEvents() { return S.list; }
 
 function renderGrid() {
   document.getElementById("listTitle").innerHTML = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H3c0 3 2 5 4 5M17 6h4c0 3-2 5-4 5M12 14v4M8 21h8M9 18h6"/></svg>`
@@ -435,6 +461,7 @@ function renderGrid() {
   document.getElementById("mine").hidden = S.view !== "mine";
   document.getElementById("sortSeg").hidden = S.view !== "markets";
   document.getElementById("search").hidden = S.view !== "markets";
+  document.getElementById("more").hidden = S.view !== "markets" || !S.more;
   if (S.view === "mine") return renderMine();
   const list = filteredEvents();
   document.getElementById("grid").innerHTML = list.length ? list.map((e, idx) => {
@@ -566,15 +593,16 @@ async function placeBet() {
 async function refreshMe() { if (TOKEN) { try { S.me = await api("/v1/me"); } catch { S.me = null; } } renderHeader(); }
 async function refreshMine() { if (!S.me) return; [S.positions, S.orders] = await Promise.all([api("/v1/positions"), api("/v1/orders?status=open")]); if (S.view === "mine") renderMine(); }
 async function refreshMarkets() {
-  [S.events, S.stats] = await Promise.all([api(`/v1/events?limit=120&spark=1&sort=${S.sort}`), api("/v1/stats")]);
-  renderTicker(); renderBoard(); renderGrid(); renderKpis(); renderFeed(false);
+  [S.events, S.stats] = await Promise.all([api(`/v1/events?limit=200&sort=volume24h`), api("/v1/stats")]);
+  renderTicker(); renderBoard(); renderKpis(); renderFeed(false);
+  await fetchList(true);
 }
 
 function connectStream() {
   const es = new EventSource("/v1/stream");
   es.addEventListener("trade", (ev) => {
     const t = JSON.parse(ev.data);
-    const e = S.events.find((x) => x.id === t.eventId), m = e?.markets.find((x) => x.id === t.marketId);
+    const e = S.events.find((x) => x.id === t.eventId) ?? S.list.find((x) => x.id === t.eventId), m = e?.markets.find((x) => x.id === t.marketId);
     if (!e) return;
     const price = t.outcome === "YES" ? t.yesPrice : 100 - t.yesPrice;
     S.feed.unshift({ player: t.player, side: t.side, outcome: t.outcome, outcomeLabel: e.kind === "multi" ? m?.label : null, eventTitle: e.title, amount: t.amount, price });
@@ -584,8 +612,10 @@ function connectStream() {
   });
   es.addEventListener("price", (ev) => {
     const p = JSON.parse(ev.data);
-    const e = S.events.find((x) => x.id === p.eventId), m = e?.markets.find((x) => x.id === p.marketId);
-    if (m) { m.change24h += p.price - m.lastPrice; m.lastPrice = p.price; m.price = p.price; dirty = true; }
+    for (const src of [S.events, S.list]) {
+      const e = src.find((x) => x.id === p.eventId), m = e?.markets.find((x) => x.id === p.marketId);
+      if (m) { m.change24h += p.price - m.lastPrice; m.lastPrice = p.price; m.price = p.price; dirty = true; }
+    }
   });
 }
 let dirty = false;
@@ -606,10 +636,11 @@ document.addEventListener("click", async (ev) => {
     return;
   }
   const op = t.closest("[data-open]"); if (op) return openEvent(Number(op.dataset.open), op.dataset.market ? Number(op.dataset.market) : undefined).catch((e) => toast(e.message));
-  const cat = t.closest("[data-cat]"); if (cat) { S.cat = S.cat === cat.dataset.cat ? null : cat.dataset.cat; S.view = "markets"; syncSeg("viewSeg", "markets"); renderCats(); renderGrid(); document.getElementById("listTitle").scrollIntoView({ behavior: "smooth" }); return; }
-  if (t.closest("#clear")) { S.cat = null; renderCats(); renderGrid(); return; }
+  const cat = t.closest("[data-cat]"); if (cat) { S.cat = S.cat === cat.dataset.cat ? null : cat.dataset.cat; S.view = "markets"; syncSeg("viewSeg", "markets"); renderCats(); await fetchList(true); document.getElementById("listTitle").scrollIntoView({ behavior: "smooth" }); return; }
+  if (t.closest("#clear")) { S.cat = null; renderCats(); await fetchList(true); return; }
+  if (t.closest("#more")) { await fetchList(false); return; }
   const mv = t.closest("[data-mv]"); if (mv) { S.mv = mv.dataset.mv; syncSeg("mvSeg", S.mv, "mv"); renderBoard(); return; }
-  const so = t.closest("[data-sort]"); if (so) { S.sort = so.dataset.sort; syncSeg("sortSeg", S.sort, "sort"); S.events = await api(`/v1/events?limit=120&spark=1&sort=${S.sort}`); renderGrid(); return; }
+  const so = t.closest("[data-sort]"); if (so) { S.sort = so.dataset.sort; syncSeg("sortSeg", S.sort, "sort"); await fetchList(true); return; }
   const vw = t.closest("[data-view]"); if (vw) { S.view = vw.dataset.view; syncSeg("viewSeg", S.view, "view"); if (S.view === "mine") await refreshMine(); renderGrid(); return; }
   const sell = t.closest("[data-sell]"); if (sell) {
     sell.disabled = true;
@@ -624,7 +655,7 @@ document.addEventListener("click", async (ev) => {
 });
 function syncSeg(id, val, key = "view") { document.querySelectorAll(`#${id} button`).forEach((b) => b.classList.toggle("on", b.dataset[key] === val)); }
 document.addEventListener("input", (ev) => {
-  if (ev.target.id === "search") { S.q = ev.target.value.trim(); renderGrid(); return; }
+  if (ev.target.id === "search") { S.q = ev.target.value.trim(); clearTimeout(fetchList.t); fetchList.t = setTimeout(() => fetchList(true), 300); return; }
   if (ev.target.id !== "amount") return;
   S.amount = Math.max(0, Number(ev.target.value) || 0);
   const m = curMarket(), price = buyPrice(m, S.side), shares = S.amount > 0 ? (S.amount * 0.98) / (price / 100) : 0;

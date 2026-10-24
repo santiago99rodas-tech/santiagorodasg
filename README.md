@@ -25,6 +25,15 @@ prototipo/         Prototipo visual inicial
 docs/              Arquitectura y guía de integración para casinos
 ```
 
+## Catálogo de mercados
+
+`server/src/db/catalog/` trae más de 650 preguntas listas para publicar en 26 categorías, con al menos 25 por categoría: política, elecciones, internacional, fútbol, deportes, cripto, economía, finanzas, tecnología, inteligencia artificial, cine y sagas, programas de TV, streaming, música, premios, farándula, reinados, moda, redes sociales, videojuegos, espacio, OVNIs y misterios, animales y naturaleza, clima, ciencia y sociedad.
+
+- `npm run seed -- --catalog` las carga (omite las que ya existen o ya cerraron).
+- `npx tsx src/db/catalog/validate.ts` revisa formato, fechas, probabilidades, duplicados y el mínimo por categoría.
+- Para mantener el mínimo, la tarea `rellenar-categorias` revisa cada categoría. Si tiene menos de `MIN_OPEN_PER_CATEGORY` (25) mercados abiertos más borradores pendientes, la IA investiga en la web lo que está pasando y lo que la gente busca, y propone preguntas nuevas. Por defecto pasan por moderación; con `AUTO_APPROVE_AI_DRAFTS=true` se publican solas si cumplen las reglas.
+- Cobertura actual: `GET /admin/categories/coverage`. Relleno manual: `POST /admin/categories/refill` o `POST /admin/drafts/generate { "category": "videojuegos", "count": 10 }`.
+
 ## Arranque rápido
 
 Requisitos: Node.js 22+ y PostgreSQL 16 (o Docker).
@@ -33,7 +42,7 @@ Requisitos: Node.js 22+ y PostgreSQL 16 (o Docker).
 cd server
 cp .env.example .env              # ajusta DATABASE_URL; agrega ANTHROPIC_API_KEY para activar la IA
 npm install
-npm run seed -- --demo            # crea tablas, categorías, fuentes, 15 mercados de ejemplo y el operador demo
+npm run seed -- --demo            # crea tablas, categorías, fuentes, el catálogo completo (con historial de demostración) y el operador demo
 npm run dev                       # API en http://localhost:8080
 npm run mock-casino               # en otra terminal: casino de prueba en http://localhost:4000
 npm run simulate                  # opcional: jugadores simulados para ver actividad en vivo

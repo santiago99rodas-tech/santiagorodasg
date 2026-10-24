@@ -2,6 +2,7 @@
 // Todo lo que genera queda como borrador 'pending' para que un moderador lo apruebe.
 
 import { z } from "zod";
+import type Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { pool, many, one } from "../db/pool.js";
 import { config } from "../config.js";
@@ -78,17 +79,110 @@ export async function generateForTrend(trendId: number) {
   const out = response.parsed_output;
   if (!out) throw new Error(`Respuesta de la IA sin formato válido (stop_reason=${response.stop_reason})`);
 
-  const created: number[] = [];
-  const rejected: string[] = [];
-  for (const q of out.questions) {
-    const check = validateDraft(q);
-    if (!check.ok) { rejected.push(`${q.title}: ${check.error}`); continue; }
-    const d = await one(pool, "INSERT INTO drafts (trend_id, payload, created_by) VALUES ($1,$2,$3) RETURNING id",
-      [trendId, JSON.stringify({ ...q, model: response.model }), `ai:${response.model}`]);
-    created.push(d.id);
-  }
+  const { created, rejected } = await saveDrafts(out.questions, trendId, response.model);
   await pool.query("UPDATE trends SET status=$2 WHERE id=$1", [trendId, created.length ? "used" : "ignored"]);
   return { created, rejected, skipped: out.skipped };
+}
+
+/** Valida y guarda borradores. Con AUTO_APPROVE_AI_DRAFTS=true los publica de inmediato. */
+async function saveDrafts(questions: z.infer<typeof Question>[], trendId: number | null, model: string, forceCategory?: string) {
+  const created: number[] = [];
+  const rejected: string[] = [];
+  for (const raw of questions) {
+    const q = forceCategory ? { ...raw, category: forceCategory } : raw;
+    const check = validateDraft(q);
+    if (!check.ok) { rejected.push(`${q.title}: ${check.error}`); continue; }
+    const dup = await one(pool,
+      "SELECT 1 FROM events WHERE lower(title)=lower($1) UNION SELECT 1 FROM drafts WHERE status='pending' AND lower(payload->>'title')=lower($1)", [q.title]);
+    if (dup) { rejected.push(`${q.title}: duplicada`); continue; }
+    const d = await one(pool, "INSERT INTO drafts (trend_id, payload, created_by) VALUES ($1,$2,$3) RETURNING id",
+      [trendId, JSON.stringify({ ...q, model }), `ai:${model}`]);
+    created.push(d.id);
+    if (config.catalog.autoApproveAi) {
+      const { approveDraft } = await import("../services/drafts.js");
+      await approveDraft(d.id, {}, "auto:ia").catch((e) => rejected.push(`${q.title}: ${(e as Error).message}`));
+    }
+  }
+  return { created, rejected };
+}
+
+/**
+ * Genera preguntas para una categoría concreta investigando primero en la web qué está pasando
+ * y qué busca la gente. Se usa para mantener el mínimo de mercados por categoría.
+ */
+export async function generateForCategory(category: string, count: number) {
+  if (!aiEnabled()) throw new Error("IA desactivada: configura ANTHROPIC_API_KEY");
+  const cat = await one(pool, "SELECT slug, name FROM categories WHERE slug=$1", [category]);
+  if (!cat) throw new Error(`Categoría desconocida: ${category}`);
+  const existing = await many(pool,
+    `SELECT title FROM events WHERE category=$1 AND status IN ('open','closed')
+     UNION ALL SELECT payload->>'title' FROM drafts WHERE status='pending' AND payload->>'category'=$1`, [category]);
+  const recent = await many(pool,
+    "SELECT title, url FROM articles WHERE category=$1 AND published_at > now() - interval '7 days' ORDER BY published_at DESC LIMIT 30", [category]);
+  const today = new Date().toISOString();
+
+  // Paso 1: investigación con búsqueda web
+  const messages: Anthropic.Beta.BetaMessageParam[] = [{
+    role: "user",
+    content: `Fecha actual (UTC): ${today}. Categoría: ${cat.name}.
+Investiga en la web las noticias, lanzamientos, eventos programados y búsquedas populares más recientes de esta categoría que interesen al público de Latinoamérica (Ecuador, Colombia y la región) y al público global. Busca especialmente eventos con fecha en los próximos 1 a 18 meses y temas con mucho interés en Google.
+Titulares recientes que ya tenemos:\n${recent.map((r) => `- ${r.title} (${r.url})`).join("\n") || "(ninguno)"}
+Resume en viñetas los hechos útiles para crear mercados de predicción, con fechas y URLs.`,
+  }];
+  let research: Anthropic.Beta.BetaMessage | undefined;
+  for (let i = 0; i < 4; i++) {
+    research = await claude().beta.messages.create({
+      model: config.aiModel, max_tokens: 16000, ...FALLBACK,
+      output_config: { effort: "medium" },
+      tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 8 }],
+      messages,
+    });
+    if (research.stop_reason !== "pause_turn") break;
+    messages.push({ role: "assistant", content: research.content });
+  }
+  if (!research || research.stop_reason === "refusal") return { created: [], rejected: [], skipped: "La IA no pudo investigar esta categoría" };
+  const findings = research.content.filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text").map((b) => b.text).join("\n");
+
+  // Paso 2: preguntas estructuradas
+  const response = await claude().beta.messages.parse({
+    model: config.aiModel, max_tokens: 16000, ...FALLBACK,
+    output_config: { effort: "medium", format: betaZodOutputFormat(Output) },
+    system: SYSTEM.replace("Propón como máximo 3 preguntas por tendencia", `Propón hasta ${count} preguntas para esta categoría`),
+    messages: [{ role: "user", content: `Fecha y hora actual (UTC): ${today}
+Categoría obligatoria: ${category} (${cat.name})
+Investigación reciente:\n${findings}
+Mercados que ya existen en esta categoría (no los repitas ni hagas variantes casi iguales):\n${existing.map((e) => `- ${e.title}`).join("\n") || "(ninguno)"}
+
+Propón ${count} preguntas nuevas y variadas para esta categoría.` }],
+  });
+  if (response.stop_reason === "refusal" || !response.parsed_output) return { created: [], rejected: [], skipped: "Sin preguntas válidas" };
+  const r = await saveDrafts(response.parsed_output.questions, null, response.model, category);
+  return { ...r, skipped: response.parsed_output.skipped };
+}
+
+/** Cuántos mercados abiertos y borradores pendientes hay por categoría frente al mínimo. */
+export async function categoryCoverage() {
+  return many(pool, `
+    SELECT c.slug, c.name,
+      (SELECT COUNT(*) FROM events e WHERE e.category=c.slug AND e.status='open')::int AS open_events,
+      (SELECT COUNT(*) FROM drafts d WHERE d.status='pending' AND d.payload->>'category'=c.slug)::int AS pending_drafts,
+      $1::int AS minimum
+    FROM categories c ORDER BY c.sort`, [config.catalog.minOpenPerCategory]);
+}
+
+/** Rellena las categorías que están por debajo del mínimo (abiertos + pendientes). */
+export async function refillCategories() {
+  const out = [];
+  for (const c of await categoryCoverage()) {
+    const deficit = c.minimum - c.open_events - c.pending_drafts;
+    if (deficit <= 0) continue;
+    try {
+      out.push({ category: c.slug, deficit, ...(await generateForCategory(c.slug, Math.min(deficit, config.catalog.maxNewPerCategoryRun))) });
+    } catch (e) {
+      out.push({ category: c.slug, deficit, error: (e as Error).message });
+    }
+  }
+  return out;
 }
 
 /** Revisa reglas duras antes de mandar el borrador a moderación. */

@@ -89,7 +89,8 @@ Si la transacción falla después del débito, se reembolsa con un `txId` determ
 2. **Señales sociales**: `POST /admin/social-signals` recibe lo que encuentra el agente que navega Instagram y TikTok con un perfil propio, o lo que carga un moderador. Pesan más que una noticia en el puntaje.
 3. **Tendencias**: agrupa lo publicado en las últimas 48 h por palabras clave compartidas. Exige 2 o más fuentes distintas, o una búsqueda en alza o señal social. El puntaje combina volumen, diversidad de fuentes, frescura, señales sociales y búsquedas.
 4. **IA generadora** (`server/src/ai/questions.ts`): con Claude y salida estructurada propone hasta 3 preguntas por tendencia. Cada una trae opciones, probabilidades iniciales, fecha de cierre, criterios exactos y fuente oficial. Las instrucciones excluyen temas sensibles: muertes, violencia, menores, personas privadas y resultados manipulables. Además se validan reglas duras: horizonte entre 24 h y 18 meses, probabilidades que suman 1 y 2 a 8 opciones.
-5. **Moderación**: todo queda como borrador `pending`. Un moderador lo aprueba (puede editarlo) o lo rechaza. Al aprobarse se crea el evento y el market maker empieza a cotizar.
+5. **Mínimo por categoría**: la tarea `rellenar-categorias` (cada `REFILL_EVERY_MIN`) calcula, para cada una de las 26 categorías, mercados abiertos + borradores pendientes. Si el total no llega a `MIN_OPEN_PER_CATEGORY` (25), la IA investiga con búsqueda web las noticias, estrenos, eventos programados y búsquedas populares de esa categoría, y propone las preguntas que faltan (hasta `MAX_NEW_PER_CATEGORY_RUN` por pasada). El catálogo semilla (`server/src/db/catalog/`) arranca con más de 650 preguntas.
+6. **Moderación**: todo queda como borrador `pending`, salvo que se active `AUTO_APPROVE_AI_DRAFTS`. Un moderador lo aprueba (puede editarlo) o lo rechaza. Al aprobarse se crea el evento y el market maker empieza a cotizar.
 
 ## Resolución
 
