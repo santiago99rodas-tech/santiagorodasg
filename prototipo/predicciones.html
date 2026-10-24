@@ -1,332 +1,360 @@
 <title>Módulo Predicciones</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,500;0,600;0,700;0,800;1,800;1,900&family=JetBrains+Mono:wght@500;700&display=swap">
 <style>
-/* Layout: barra del casino arriba, pestañas de categoría, rejilla de mercados + boleto de apuesta lateral (abajo en móvil).
-   Tema oscuro único a propósito: hereda el look nocturno típico del casino anfitrión. */
+/* Layout: móvil primero, como en la referencia. Encabezado del casino, banner, carrusel de categorías,
+   rejilla Top 20 (2 col en móvil, 5 en escritorio), lista de categorías y barra fija de sesión.
+   Tema oscuro único a propósito: negro con amarillo de marca del casino anfitrión. */
 :root {
-  --ink: #0f1424;       /* fondo */
-  --panel: #171e33;     /* tarjetas */
-  --panel-2: #1f2842;   /* controles */
-  --line: #2a3555;
-  --text: #e8ebf5;
-  --muted: #8d97b5;
-  --gold: #f2b544;      /* acento de marca del módulo */
-  --yes: #3fc6a5;
-  --no: #ef6f7c;
-  --display: "Unbounded", "Arial Black", system-ui, sans-serif;
-  --body: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --bg: #0b0b0c;
+  --card: #18181b;
+  --card-2: #222226;
+  --line: #2e2e33;
+  --text: #f4f4f5;
+  --muted: #a1a1aa;
+  --brand: #ffd400;      /* amarillo del casino; se reemplaza por el color de cada operador */
+  --brand-ink: #111;
+  --yes: #22b14c;
+  --no: #e5383b;
+  --sans: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-body { background: var(--ink); color: var(--text); font-family: var(--body); font-size: 14px; }
-body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--panel); }
-button { font: inherit; color: inherit; cursor: pointer; }
-button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
-.wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 1320px; margin: 0 auto; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 20; background: var(--bg); }
+button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+svg { display: block; }
+.wrap { max-width: 1040px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 
-/* Barra del casino anfitrión (simulada) */
-.host { background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; }
-.host .wrap { display: flex; align-items: center; gap: 20px; padding-block: 10px; flex-wrap: wrap; }
-.logo { font-family: var(--display); font-weight: 700; letter-spacing: .02em; font-size: 16px; color: var(--text); }
-.logo span { color: var(--gold); }
-.hostnav { display: flex; gap: 4px; flex: 1; overflow-x: auto; scrollbar-width: none; min-width: 0; }
-.hostnav a { padding: 8px 12px; border-radius: 8px; color: var(--muted); text-decoration: none; font-weight: 600; white-space: nowrap; }
-.hostnav a.on { color: var(--ink); background: var(--gold); }
-.hostnav a .new { font-size: 10px; margin-left: 6px; padding: 1px 5px; border-radius: 4px; background: var(--ink); color: var(--gold); letter-spacing: .06em; }
-.wallet { display: flex; align-items: center; gap: 10px; }
-.bal { font-family: var(--mono); background: var(--panel-2); border: 1px solid var(--line); padding: 7px 12px; border-radius: 8px; }
-.dep { background: var(--yes); color: var(--ink); border: 0; padding: 8px 14px; border-radius: 8px; font-weight: 700; }
+/* Encabezado del casino (simulado) */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); border-bottom: 1px solid var(--line); }
+.top .wrap { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding-block: 10px; }
+.icons { display: flex; gap: 10px; }
+.round { width: 42px; height: 42px; border-radius: 50%; background: var(--brand); color: var(--brand-ink); display: grid; place-items: center; }
+.logo { justify-self: center; font-weight: 900; font-style: italic; font-size: 26px; color: var(--brand); letter-spacing: -.01em; }
+.bal { font-family: var(--mono); font-size: 13px; background: var(--card); border: 1px solid var(--line); padding: 7px 10px; border-radius: 8px; white-space: nowrap; }
+.spacer { width: 42px; }
 
-.demo { margin-top: 14px; font-size: 12px; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; }
+/* Banner */
+.hero { margin-top: 14px; position: relative; overflow: hidden; border-radius: 18px; border: 1px solid #3a3200;
+  background: radial-gradient(120% 140% at 85% 30%, #3a3000 0%, #151200 45%, #070707 75%); padding: 22px 20px; min-height: 230px; display: grid; }
+.hero h1 { margin: 0; font-weight: 900; font-style: italic; text-transform: uppercase; line-height: .92; letter-spacing: -.01em; font-size: clamp(30px, 7vw, 54px); position: relative; z-index: 1; max-width: 62%; text-wrap: balance; }
+.hero h1 b { display: block; color: var(--brand); font-size: 1.32em; }
+.hero .tag { position: relative; z-index: 1; display: inline-block; margin-top: 12px; border: 2px solid var(--brand); border-radius: 12px; padding: 6px 14px; font-weight: 700; font-size: clamp(13px, 2.6vw, 17px); transform: rotate(-2deg); justify-self: start; }
+.hero .tag em { color: var(--brand); font-style: normal; }
+.feats { position: relative; z-index: 1; display: flex; gap: 0; margin-top: 18px; align-self: end; }
+.feat { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 14px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; line-height: 1.15; color: var(--text); }
+.feat + .feat { border-left: 1px solid #4a4220; }
+.feat:first-child { padding-left: 0; }
+.feat svg { color: var(--brand); }
+.art { position: absolute; right: -10px; bottom: 0; width: 52%; height: 100%; pointer-events: none; }
+.bars { position: absolute; right: 18px; bottom: 0; display: flex; align-items: end; gap: 7px; height: 70%; }
+.bars i { width: clamp(10px, 2.2vw, 20px); background: linear-gradient(var(--brand), #6b5800); border-radius: 3px 3px 0 0; opacity: .85; }
+.chip { position: absolute; font-weight: 900; font-style: italic; padding: 6px 14px; border-radius: 10px; font-size: clamp(14px, 3vw, 22px); box-shadow: 0 6px 20px rgba(0,0,0,.5); }
+.chip.y { background: var(--yes); right: 40%; top: 22%; transform: rotate(-10deg); }
+.chip.n { background: var(--no); right: 12%; top: 40%; transform: rotate(10deg); }
+@media (max-width: 560px) { .art { opacity: .55; } .hero h1 { max-width: 80%; } }
 
-/* Encabezado del módulo */
-.head { display: flex; align-items: end; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-block: 22px 6px; }
-.head h1 { font-family: var(--display); font-weight: 700; font-size: clamp(22px, 3.4vw, 32px); margin: 0; text-wrap: balance; }
-.head p { margin: 6px 0 0; color: var(--muted); max-width: 60ch; }
-.search { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; color: var(--text); width: min(280px, 100%); font: inherit; }
+h2.sec { display: flex; align-items: center; gap: 10px; font-size: clamp(19px, 3.6vw, 24px); font-weight: 700; margin: 26px 0 12px; }
+h2.sec svg { color: var(--brand); flex: none; }
+h2.sec .clear { margin-left: auto; font-size: 13px; color: var(--brand); font-weight: 600; }
 
-/* Pestañas de categoría */
-.cats { display: flex; gap: 8px; overflow-x: auto; padding-block: 14px; scrollbar-width: thin; }
-.cat { flex: none; display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); padding: 9px 14px; border-radius: 999px; font-weight: 600; color: var(--muted); }
-.cat .n { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--panel-2); padding: 1px 6px; border-radius: 999px; }
-.cat.on { color: var(--text); border-color: var(--gold); background: var(--panel-2); }
-.cat.on .n { background: var(--gold); color: var(--ink); }
+/* Carrusel de categorías populares */
+.carousel { position: relative; }
+.ctrack { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding-bottom: 2px; }
+.ctrack::-webkit-scrollbar { display: none; }
+.ctile { flex: none; width: 132px; aspect-ratio: 1 / 1; max-width: 100%; border-radius: 12px; overflow: hidden; position: relative; scroll-snap-align: start; border: 1px solid var(--line); display: grid; }
+.ctile .ill { position: absolute; inset: 0; display: grid; place-items: center; padding-bottom: 26px; }
+.ctile .ill svg { width: 54%; height: 54%; filter: drop-shadow(0 4px 10px rgba(0,0,0,.5)); }
+.ctile span { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(10,10,10,.82); padding: 7px 10px; font-weight: 700; font-size: 16px; text-align: left; }
+.ctile.on { outline: 2px solid var(--brand); outline-offset: -2px; }
+.arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; border-radius: 50%; background: rgba(0,0,0,.7); color: var(--brand); display: grid; place-items: center; z-index: 2; }
+.arrow.l { left: -6px; } .arrow.r { right: -6px; }
+@media (hover: none) { .arrow { display: none; } }
 
-.layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; padding-bottom: 40px; }
-@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+/* Top 20 */
+.grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 900px) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.q { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; text-align: left; display: flex; flex-direction: column; min-width: 0; }
+.q:hover { border-color: #55551f; }
+.q .pic { position: relative; height: 92px; display: grid; place-items: center; }
+.q .pic svg.big { width: 46px; height: 46px; opacity: .95; filter: drop-shadow(0 4px 10px rgba(0,0,0,.5)); }
+.rank { position: absolute; top: 8px; left: 8px; width: 26px; height: 26px; border-radius: 50%; background: var(--brand); color: var(--brand-ink); font-weight: 800; font-size: 13px; display: grid; place-items: center; font-family: var(--mono); }
+.badge { position: absolute; left: 8px; bottom: -9px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; padding: 3px 8px; border-radius: 999px; color: #fff; }
+.q .body { padding: 14px 10px 10px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.q .txt { display: flex; gap: 6px; align-items: start; justify-content: space-between; font-weight: 600; font-size: 14px; line-height: 1.25; }
+.q .txt svg { flex: none; margin-top: 2px; color: var(--muted); }
+.q .yn { margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-family: var(--mono); font-size: 12px; }
+.q .yn span { border-radius: 6px; padding: 4px 6px; text-align: center; }
+.q .yn .y { background: color-mix(in srgb, var(--yes) 20%, transparent); color: #6ee08f; }
+.q .yn .n { background: color-mix(in srgb, var(--no) 20%, transparent); color: #ff8a8c; }
+.empty { grid-column: 1 / -1; color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; padding: 24px; text-align: center; }
 
-.sortbar { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
-.sortbar button { background: transparent; border: 1px solid var(--line); color: var(--muted); padding: 6px 12px; border-radius: 8px; font-size: 13px; }
-.sortbar button.on { color: var(--text); background: var(--panel-2); }
+/* Categorías existentes */
+.cats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 900px) { .cats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .cats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.cat { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; font-weight: 600; font-size: 15px; text-align: left; min-width: 0; }
+.cat svg { color: var(--brand); flex: none; }
+.cat .n { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.cat.on { border-color: var(--brand); }
 
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.meta { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
-.tag { text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: var(--gold); }
-.hot { color: var(--no); font-weight: 700; }
-.q { font-weight: 700; font-size: 16px; line-height: 1.35; margin: 0; text-wrap: balance; }
-.opts { display: flex; flex-direction: column; gap: 6px; }
-.opt { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; background: var(--panel-2); border: 1px solid transparent; border-radius: 10px; padding: 9px 10px; text-align: left; overflow: hidden; }
-.opt .bar { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--gold) 14%, transparent); pointer-events: none; }
-.opt > span { position: relative; }
-.opt .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.opt .pct { font-family: var(--mono); color: var(--muted); font-size: 13px; }
-.opt .odd { font-family: var(--mono); font-weight: 500; background: var(--ink); color: var(--gold); padding: 3px 8px; border-radius: 6px; min-width: 56px; text-align: center; }
-.opt:hover { border-color: var(--line); }
-.opt.sel { border-color: var(--gold); }
-.yn { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.yn .opt { grid-template-columns: minmax(0, 1fr) auto; }
-.yn .opt.y .odd { color: var(--yes); }
-.yn .opt.n .odd { color: var(--no); }
-.yn .opt.y .bar { background: color-mix(in srgb, var(--yes) 16%, transparent); }
-.yn .opt.n .bar { background: color-mix(in srgb, var(--no) 16%, transparent); }
-.foot { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; gap: 8px; flex-wrap: wrap; }
-.foot b { color: var(--text); font-family: var(--mono); font-weight: 500; }
-.src { font-size: 12px; color: var(--muted); }
-.empty { color: var(--muted); padding: 30px; text-align: center; border: 1px dashed var(--line); border-radius: 14px; }
+.demo { margin: 26px 0 0; font-size: 12px; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; }
 
-/* Boleto de apuesta */
-.slip { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 72px); display: flex; flex-direction: column; gap: 12px; }
-.slip h2 { font-family: var(--display); font-size: 15px; font-weight: 500; margin: 0; letter-spacing: .02em; }
-.slip .none { color: var(--muted); font-size: 13px; line-height: 1.5; }
-.pick { background: var(--panel-2); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
-.pick .pq { color: var(--muted); font-size: 12px; }
-.pick .pn { font-weight: 700; display: flex; justify-content: space-between; gap: 8px; }
-.pick .pn span:last-child { font-family: var(--mono); color: var(--gold); }
-.amt label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
-.amt input { width: 100%; background: var(--ink); border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 10px 12px; font-family: var(--mono); font-size: 15px; }
+/* Barra de sesión inferior */
+.bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: linear-gradient(transparent, #000 30%); padding-top: 18px; padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+.bar .wrap { display: flex; justify-content: center; align-items: center; gap: 24px; }
+.login { color: var(--brand); font-weight: 700; font-size: 20px; border-bottom: 2px solid var(--brand); padding-bottom: 2px; }
+.reg { background: var(--yes); color: #fff; font-weight: 800; font-size: 22px; padding: 12px 38px; border-radius: 12px; }
+.mine { color: var(--text); font-weight: 600; font-size: 15px; }
+.mine b { color: var(--brand); font-family: var(--mono); }
+
+/* Hoja de apuesta */
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.65); z-index: 30; display: grid; align-items: end; justify-items: center; }
+.sheet { width: min(560px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 18px 18px 0 0; padding: 18px; padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px)); padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 14px; max-height: 90%; overflow-y: auto; }
+@media (min-width: 700px) { .scrim { align-items: center; } .sheet { border-radius: 18px; } }
+.sh-head { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.sh-head .k { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--brand); }
+.sh-head h3 { margin: 4px 0 0; font-size: 20px; line-height: 1.25; text-wrap: balance; }
+.x { width: 34px; height: 34px; border-radius: 50%; background: var(--card-2); display: grid; place-items: center; flex: none; }
+.facts { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.facts b { color: var(--text); font-family: var(--mono); font-weight: 500; }
+.prob { height: 10px; border-radius: 999px; background: var(--no); overflow: hidden; }
+.prob i { display: block; height: 100%; background: var(--yes); }
+.pick2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.side { border-radius: 12px; padding: 12px; border: 2px solid transparent; display: flex; flex-direction: column; align-items: center; gap: 2px; font-weight: 800; font-size: 18px; }
+.side small { font-family: var(--mono); font-weight: 500; font-size: 12px; opacity: .85; }
+.side.y { background: color-mix(in srgb, var(--yes) 22%, var(--card)); }
+.side.n { background: color-mix(in srgb, var(--no) 22%, var(--card)); }
+.side.sel { border-color: var(--brand); }
+.amt label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.amt input { width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 11px 12px; font-family: var(--mono); font-size: 16px; }
 .chips { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-.chips button { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; font-family: var(--mono); font-size: 12px; }
-.row { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
-.row b { color: var(--text); font-family: var(--mono); font-weight: 500; }
-.row.win b { color: var(--yes); font-size: 16px; }
-.place { background: var(--gold); color: var(--ink); border: 0; border-radius: 10px; padding: 12px; font-weight: 700; font-size: 15px; }
-.place:disabled { opacity: .45; cursor: not-allowed; }
-.msg { font-size: 13px; color: var(--yes); min-height: 1.2em; }
-.msg.err { color: var(--no); }
-.mybets { border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
-.mybets h3 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
-.mb { font-size: 12px; display: flex; justify-content: space-between; gap: 8px; }
-.mb span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.mb span:last-child { font-family: var(--mono); color: var(--muted); flex: none; }
-@media (prefers-reduced-motion: no-preference) { .opt, .cat { transition: border-color .15s, background .15s; } }
+.chips button { background: var(--card-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-family: var(--mono); font-size: 12px; }
+.row { display: flex; justify-content: space-between; color: var(--muted); }
+.row b { color: var(--yes); font-family: var(--mono); font-size: 18px; }
+.place { background: var(--brand); color: var(--brand-ink); font-weight: 800; font-size: 16px; border-radius: 12px; padding: 14px; }
+.msg { min-height: 1.2em; font-size: 13px; color: #6ee08f; }
+.msg.err { color: #ff8a8c; }
+.src { font-size: 12px; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { .q, .ctile, .cat { transition: border-color .15s, transform .15s; } .q:hover { transform: translateY(-2px); } }
 </style>
 
-<header class="host">
+<header class="top">
   <div class="wrap">
-    <div class="logo">TU<span>CASINO</span></div>
-    <nav class="hostnav" aria-label="Secciones del casino">
-      <a href="#">Inicio</a>
-      <a href="#">Casino</a>
-      <a href="#">Casino en vivo</a>
-      <a href="#">Deportes</a>
-      <a href="#" class="on">Predicciones<span class="new">NUEVO</span></a>
-      <a href="#">Promociones</a>
-    </nav>
-    <div class="wallet">
-      <span class="bal" id="bal">$ 250.000</span>
-      <button class="dep" type="button">Depositar</button>
+    <div class="icons">
+      <button class="round" type="button" aria-label="Menú"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 6h12M4 12h9M4 18h12M17 9l3 3-3 3"/></svg></button>
+      <button class="round" type="button" aria-label="Buscar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></button>
     </div>
+    <div class="logo">TuCasino</div>
+    <div id="topRight"><div class="spacer"></div></div>
   </div>
 </header>
 
 <main class="wrap">
-  <div class="demo">Prototipo con datos de ejemplo. La barra superior representa el casino existente; todo lo de abajo es el módulo que se integra.</div>
-
-  <div class="head">
-    <div>
-      <h1>Predicciones</h1>
-      <p>Apuesta a lo que va a pasar en el mundo: política, farándula, moda, música, ambiente y más. Las cuotas cambian según lo que apuestan los demás jugadores.</p>
+  <section class="hero" aria-label="Mercados de predicción">
+    <div class="art" aria-hidden="true">
+      <div class="bars"><i style="height:22%"></i><i style="height:34%"></i><i style="height:30%"></i><i style="height:48%"></i><i style="height:62%"></i><i style="height:78%"></i><i style="height:96%"></i></div>
+      <span class="chip y">↑ SÍ</span><span class="chip n">↓ NO</span>
     </div>
-    <input class="search" id="search" type="search" placeholder="Buscar mercado…" aria-label="Buscar mercado">
+    <h1>Mercados de <b>predicción</b></h1>
+    <span class="tag">Pronostica lo que viene <em>y gana</em></span>
+    <div class="feats">
+      <div class="feat"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="14" width="4" height="7" rx="1"/><rect x="10" y="9" width="4" height="12" rx="1"/><rect x="17" y="4" width="4" height="17" rx="1"/></svg>Eventos<br>reales</div>
+      <div class="feat"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg>Múltiples<br>categorías</div>
+      <div class="feat"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Apuestas en<br>tiempo real</div>
+    </div>
+  </section>
+
+  <h2 class="sec"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c1 4 5 5.5 5 11a5 5 0 0 1-10 0c0-2.5 1.2-4 2.5-5 .2 2 1 3 2 3 0-3.5-1-6 .5-9z"/></svg>Categorías populares</h2>
+  <div class="carousel">
+    <button class="arrow l" type="button" aria-label="Anteriores" data-scroll="-1"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m15 5-7 7 7 7"/></svg></button>
+    <div class="ctrack" id="popular"></div>
+    <button class="arrow r" type="button" aria-label="Siguientes" data-scroll="1"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m9 5 7 7-7 7"/></svg></button>
   </div>
 
-  <div class="cats" id="cats" role="tablist" aria-label="Categorías"></div>
+  <h2 class="sec" id="topTitle"></h2>
+  <div class="grid" id="grid"></div>
 
-  <div class="layout">
-    <section>
-      <div class="sortbar" id="sortbar">
-        <button type="button" data-sort="trend" class="on">Tendencia</button>
-        <button type="button" data-sort="vol">Más apostados</button>
-        <button type="button" data-sort="close">Cierran pronto</button>
-        <button type="button" data-sort="new">Nuevos</button>
-      </div>
-      <div class="grid" id="grid"></div>
-    </section>
+  <h2 class="sec"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Categorías existentes</h2>
+  <div class="cats" id="cats"></div>
 
-    <aside class="slip" aria-label="Boleto de apuesta">
-      <h2>Boleto de apuesta</h2>
-      <div id="slipBody"></div>
-      <div class="mybets" id="mybets" hidden>
-        <h3>Mis predicciones</h3>
-        <div id="mbList"></div>
-      </div>
-    </aside>
-  </div>
+  <p class="demo">Prototipo con datos de ejemplo. El nombre "TuCasino", el logo y el amarillo se reemplazan por la marca de cada casino al integrar el módulo.</p>
 </main>
 
+<nav class="bar" aria-label="Sesión"><div class="wrap" id="barInner"></div></nav>
+<div class="scrim" id="scrim" hidden></div>
+
 <script>
-const CATS = [
-  { id: "todo", name: "Tendencias" },
-  { id: "politica", name: "Política" },
-  { id: "farandula", name: "Farándula" },
-  { id: "belleza", name: "Reinados" },
-  { id: "entretenimiento", name: "Cine y series" },
-  { id: "musica", name: "Música" },
-  { id: "moda", name: "Moda" },
-  { id: "ambiente", name: "Ambiente" },
-  { id: "deportes", name: "Deportes" },
-  { id: "redes", name: "Redes sociales" },
-];
+// Íconos por categoría (trazos simples, heredan color)
+const I = {
+  politica: '<path d="M3 21h18M5 18h14M6 18v-7M10 18v-7M14 18v-7M18 18v-7M3 11h18L12 4z"/>',
+  deportes: '<circle cx="12" cy="12" r="9"/><path d="m12 7 4 3-1.5 4.5h-5L8 10z"/><path d="M12 3v4M21 10l-5 0M18 19l-3.5-4.5M6 19l3.5-4.5M3 10h5"/>',
+  cripto: '<circle cx="12" cy="12" r="9"/><path d="M9.5 7v10M9.5 7h3.5a2.5 2.5 0 0 1 0 5H9.5h4a2.5 2.5 0 0 1 0 5H9.5M11 5.5V7M11 17v1.5M13 5.5V7M13 17v1.5"/>',
+  economia: '<path d="M3 21h18"/><rect x="5" y="13" width="3" height="6"/><rect x="10.5" y="9" width="3" height="10"/><rect x="16" y="5" width="3" height="14"/>',
+  entretenimiento: '<rect x="3" y="9" width="18" height="12" rx="1"/><path d="m3 9 2-5 16 3-1 2M8 5l2 3M13 6l2 3"/>',
+  tecnologia: '<rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
+  clima: '<path d="M7 15a4 4 0 1 1 1-7.9A5 5 0 0 1 17.6 8 3.5 3.5 0 0 1 17 15z"/><path d="M8 18l-1 3M12 18l-1 3M16 18l-1 3"/>',
+  internacional: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/>',
+  finanzas: '<ellipse cx="9" cy="7" rx="6" ry="2.5"/><path d="M3 7v4c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V7M3 11v4c0 1.4 2.7 2.5 6 2.5"/><ellipse cx="15" cy="15" rx="6" ry="2.5"/><path d="M9 15v3c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5v-3"/>',
+  sociedad: '<circle cx="12" cy="8" r="3"/><circle cx="5" cy="10" r="2.2"/><circle cx="19" cy="10" r="2.2"/><path d="M6 20a6 6 0 0 1 12 0M1.5 19a4 4 0 0 1 5-3.8M22.5 19a4 4 0 0 0-5-3.8"/>',
+};
+const svg = (k, size = 24, cls = "") => `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${I[k]}</svg>`;
 
-// Mercados de ejemplo. p = probabilidad implícita actual (0-1).
-const MARKETS = [
-  { id: 1, cat: "belleza", q: "¿Quién ganará Miss Universo 2027?", close: "2027-11-20", vol: 184200000, trend: 98, created: 3, src: "Organización Miss Universo",
-    opts: [["Colombia", .31], ["Venezuela", .28], ["Egipto", .12], ["Rusia", .09], ["Otro país", .20]] },
-  { id: 2, cat: "politica", q: "¿Quién ganará la segunda vuelta presidencial de Colombia 2026?", close: "2026-06-21", vol: 512000000, trend: 95, created: 20, src: "Registraduría Nacional",
-    opts: [["Candidato A", .46], ["Candidato B", .41], ["Voto en blanco gana", .03], ["Otro", .10]] },
-  { id: 3, cat: "farandula", q: "¿Shakira anunciará nueva gira mundial antes del 31 de diciembre?", close: "2026-12-31", vol: 38400000, trend: 88, created: 2, src: "Comunicado oficial o cuenta verificada", yn: .37 },
-  { id: 4, cat: "musica", q: "¿Qué artista latino tendrá más reproducciones en Spotify en 2026?", close: "2026-12-05", vol: 96100000, trend: 91, created: 8, src: "Spotify Wrapped",
-    opts: [["Bad Bunny", .52], ["Karol G", .18], ["Peso Pluma", .14], ["Feid", .09], ["Otro", .07]] },
-  { id: 5, cat: "ambiente", q: "¿Se declarará fenómeno de La Niña antes de febrero de 2027?", close: "2027-02-01", vol: 12700000, trend: 60, created: 5, src: "NOAA / IDEAM", yn: .58 },
-  { id: 6, cat: "entretenimiento", q: "¿Qué película ganará el Óscar a Mejor Película 2027?", close: "2027-03-14", vol: 74300000, trend: 79, created: 12, src: "Academia de Hollywood",
-    opts: [["Película A", .27], ["Película B", .22], ["Película C", .19], ["Otra", .32]] },
-  { id: 7, cat: "moda", q: "¿Qué color dominará las pasarelas de la temporada primavera 2027?", close: "2027-03-31", vol: 5900000, trend: 52, created: 1, src: "Informe de tendencias Pantone",
-    opts: [["Verde menta", .34], ["Rojo cereza", .29], ["Azul eléctrico", .21], ["Otro", .16]] },
-  { id: 8, cat: "redes", q: "¿El video más visto de TikTok en Colombia esta semana superará 50 millones de vistas?", close: "2026-11-01", vol: 21800000, trend: 93, created: 1, src: "TikTok Creative Center", yn: .44 },
-  { id: 9, cat: "deportes", q: "¿Colombia llegará a cuartos de final del Mundial 2026?", close: "2026-07-05", vol: 388000000, trend: 90, created: 30, src: "FIFA", yn: .41 },
-  { id: 10, cat: "farandula", q: "¿Cuál será la pareja de famosos que anuncie compromiso primero?", close: "2027-01-31", vol: 17400000, trend: 74, created: 4, src: "Anuncio oficial o cuenta verificada",
-    opts: [["Pareja A", .38], ["Pareja B", .33], ["Pareja C", .29]] },
-  { id: 11, cat: "politica", q: "¿El Banco de la República bajará su tasa en la próxima reunión?", close: "2026-12-18", vol: 44600000, trend: 66, created: 6, src: "Banco de la República", yn: .62 },
-  { id: 12, cat: "redes", q: "¿Qué creador colombiano llegará primero a 30 millones de seguidores en Instagram?", close: "2027-06-30", vol: 9300000, trend: 71, created: 2, src: "Perfil público de Instagram",
-    opts: [["Creador A", .45], ["Creador B", .35], ["Creador C", .20]] },
-];
+// Colores por categoría: fondo de ilustración y chip
+const CATS = {
+  politica:        { name: "Política",        chip: "#c81e1e", g: "linear-gradient(160deg,#5a6b8c,#1b2233 70%)", ic: "#f3e7c9" },
+  deportes:        { name: "Deportes",        chip: "#15803d", g: "radial-gradient(circle at 50% 30%,#2f7d3a,#0d2512 75%)", ic: "#ffffff" },
+  cripto:          { name: "Cripto",          chip: "#7c3aed", g: "radial-gradient(circle at 50% 40%,#8a6a10,#1c1404 75%)", ic: "#ffcf3a" },
+  economia:        { name: "Economía",        chip: "#0f766e", g: "linear-gradient(160deg,#0f4c5c,#081a20 75%)", ic: "#4ade80" },
+  entretenimiento: { name: "Entretenimiento", chip: "#c2410c", g: "radial-gradient(circle at 60% 30%,#7e22ce,#1b0b2e 75%)", ic: "#fde047" },
+  tecnologia:      { name: "Tecnología",      chip: "#0369a1", g: "radial-gradient(circle at 50% 40%,#1d4ed8,#07122e 75%)", ic: "#7dd3fc" },
+  clima:           { name: "Clima",           chip: "#0e7490", g: "linear-gradient(170deg,#3b5a7a,#0d1726 75%)", ic: "#e0f2fe" },
+  internacional:   { name: "Internacional",   chip: "#1d4ed8", g: "linear-gradient(120deg,#9f1d1d 0 50%,#1e3a8a 50% 100%)", ic: "#fde68a" },
+  finanzas:        { name: "Finanzas",        chip: "#a16207", g: "radial-gradient(circle at 50% 40%,#a37a12,#231802 75%)", ic: "#fde047" },
+  sociedad:        { name: "Sociedad",        chip: "#be185d", g: "linear-gradient(160deg,#6b2147,#1f0a16 75%)", ic: "#fbcfe8" },
+};
+const POPULAR = ["politica", "deportes", "cripto", "economia", "entretenimiento", "tecnologia", "clima", "finanzas"];
 
-const MARGIN = 0.94; // la casa retiene ~6% en la cuota
-const cop = n => "$ " + Math.round(n).toLocaleString("es-CO");
-const short = n => n >= 1e6 ? "$ " + (n / 1e6).toLocaleString("es-CO", { maximumFractionDigits: 1 }) + " M" : cop(n);
+// Top 20 de ejemplo. p = probabilidad del Sí. vol = apostado hoy (USD).
+const Q = [
+  ["cripto", "¿Subirá BTC esta semana?", .56, 48210, "2026-10-31", "Precio de cierre en CoinMarketCap"],
+  ["deportes", "¿Ganará Ecuador su próximo partido?", .48, 45120, "2026-11-14", "Resultado oficial FIFA / FEF"],
+  ["economia", "¿Bajará la inflación este trimestre?", .61, 39800, "2026-12-31", "INEC Ecuador"],
+  ["politica", "¿Ganará el candidato X las elecciones?", .44, 37450, "2027-02-07", "CNE Ecuador"],
+  ["economia", "¿Subirá el precio del petróleo?", .52, 33900, "2026-11-30", "Precio WTI de cierre"],
+  ["clima", "¿Lloverá en Quito mañana?", .67, 31200, "2026-10-25", "INAMHI"],
+  ["economia", "¿Habrá recorte de tasas en EE. UU.?", .58, 29870, "2026-12-16", "Reserva Federal"],
+  ["tecnologia", "¿Subirá NVIDIA este mes?", .54, 27400, "2026-10-31", "Cierre NASDAQ"],
+  ["tecnologia", "¿Elon Musk comprará otra red social?", .12, 25110, "2027-06-30", "Comunicado oficial"],
+  ["deportes", "¿Ganará el Real Madrid el próximo clásico?", .47, 24300, "2026-11-08", "Resultado oficial LaLiga"],
+  ["cripto", "¿Subirá ETH este mes?", .51, 22950, "2026-10-31", "Precio de cierre en CoinMarketCap"],
+  ["internacional", "¿Habrá acuerdo comercial entre EE. UU. y China?", .29, 21000, "2026-12-31", "Anuncio oficial de ambos gobiernos"],
+  ["finanzas", "¿Superará el oro los $2.500 este año?", .73, 19860, "2026-12-31", "Precio spot LBMA"],
+  ["entretenimiento", "¿Netflix lanzará un plan más barato?", .35, 18240, "2026-12-31", "Anuncio oficial de Netflix"],
+  ["clima", "¿Habrá huracán en el Caribe este año?", .82, 17500, "2026-11-30", "Centro Nacional de Huracanes (NHC)"],
+  ["tecnologia", "¿Subirá Tesla este mes?", .46, 16900, "2026-10-31", "Cierre NASDAQ"],
+  ["politica", "¿Se aprobará la reforma fiscal en Ecuador?", .39, 15420, "2027-01-31", "Registro Oficial / Asamblea Nacional"],
+  ["deportes", "¿Clasificará Ecuador a octavos del Mundial 2026?", .57, 14800, "2026-06-30", "FIFA"],
+  ["tecnologia", "¿Lanzará Apple un nuevo iPhone este año?", .91, 13900, "2026-12-31", "Evento oficial de Apple"],
+  ["finanzas", "¿El S&P 500 superará los 6.000 puntos?", .64, 12750, "2026-12-31", "Cierre S&P 500"],
+].map((r, i) => ({ id: i + 1, cat: r[0], q: r[1], p: r[2], vol: r[3], close: r[4], src: r[5] }));
+
+const MARGIN = 0.94; // margen de la casa en la cuota
 const odd = p => Math.max(1.01, MARGIN / p).toFixed(2);
-const daysLeft = d => Math.max(0, Math.ceil((new Date(d + "T23:59:59") - new Date()) / 864e5));
-const fmtDate = d => new Date(d + "T12:00:00").toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" });
+const usd = n => "$" + Math.round(n).toLocaleString("es-EC");
+const fmtDate = d => new Date(d + "T12:00:00").toLocaleDateString("es-EC", { day: "numeric", month: "short", year: "numeric" });
 const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
-let state = { cat: "todo", sort: "trend", q: "", pick: null, amount: 20000, balance: 250000, bets: [] };
-try { const c = localStorage.getItem("pred-cat"); if (c && CATS.some(x => x.id === c)) state.cat = c; } catch (e) {}
+const S = { cat: null, logged: false, balance: 150, bets: 0, open: null, side: null, amount: 5 };
 
-function optionsOf(m) {
-  return m.yn != null ? [["Sí", m.yn], ["No", 1 - m.yn]] : m.opts;
-}
-
-function renderCats() {
-  const el = document.getElementById("cats");
-  el.innerHTML = CATS.map(c => {
-    const n = c.id === "todo" ? MARKETS.length : MARKETS.filter(m => m.cat === c.id).length;
-    return `<button type="button" role="tab" class="cat${c.id === state.cat ? " on" : ""}" aria-selected="${c.id === state.cat}" data-cat="${c.id}">${c.name}<span class="n">${n}</span></button>`;
+function renderPopular() {
+  document.getElementById("popular").innerHTML = POPULAR.map(k => {
+    const c = CATS[k];
+    return `<button type="button" class="ctile${S.cat === k ? " on" : ""}" data-cat="${k}" style="background:${c.g}">
+      <div class="ill" style="color:${c.ic}">${svg(k, 64)}</div><span>${c.name}</span></button>`;
   }).join("");
 }
 
 function renderGrid() {
-  let list = MARKETS.filter(m => state.cat === "todo" || m.cat === state.cat);
-  if (state.q) list = list.filter(m => m.q.toLowerCase().includes(state.q) || optionsOf(m).some(o => o[0].toLowerCase().includes(state.q)));
-  const sorters = { trend: (a, b) => b.trend - a.trend, vol: (a, b) => b.vol - a.vol, close: (a, b) => a.close.localeCompare(b.close), new: (a, b) => a.created - b.created };
-  list.sort(sorters[state.sort]);
-  const grid = document.getElementById("grid");
-  if (!list.length) { grid.innerHTML = `<div class="empty">No hay mercados que coincidan con la búsqueda.</div>`; return; }
-  grid.innerHTML = list.map(m => {
-    const catName = CATS.find(c => c.id === m.cat).name;
-    const dl = daysLeft(m.close);
-    const opts = optionsOf(m);
-    const btn = (o, i, cls = "") => {
-      const sel = state.pick && state.pick.m === m.id && state.pick.i === i;
-      return `<button type="button" class="opt ${cls}${sel ? " sel" : ""}" data-m="${m.id}" data-i="${i}" aria-pressed="${sel}">
-        <span class="bar" style="width:${(o[1] * 100).toFixed(1)}%"></span>
-        <span class="name">${esc(o[0])}</span>
-        ${m.yn != null ? "" : `<span class="pct">${Math.round(o[1] * 100)}%</span>`}
-        <span class="odd">${m.yn != null ? Math.round(o[1] * 100) + "% · " : ""}${odd(o[1])}</span>
-      </button>`;
-    };
-    const body = m.yn != null
-      ? `<div class="yn">${btn(opts[0], 0, "y")}${btn(opts[1], 1, "n")}</div>`
-      : `<div class="opts">${opts.map((o, i) => btn(o, i)).join("")}</div>`;
-    return `<article class="card">
-      <div class="meta"><span class="tag">${catName}</span>${m.trend >= 90 ? `<span class="hot">En tendencia</span>` : `<span>${dl} días</span>`}</div>
-      <h3 class="q">${esc(m.q)}</h3>
-      ${body}
-      <div class="foot"><span>Apostado <b>${short(m.vol)}</b></span><span>Cierra <b>${fmtDate(m.close)}</b></span></div>
-      <div class="src">Se resuelve con: ${esc(m.src)}</div>
-    </article>`;
+  const t = document.getElementById("topTitle");
+  const list = S.cat ? Q.filter(q => q.cat === S.cat) : Q;
+  t.innerHTML = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H3c0 3 2 5 4 5M17 6h4c0 3-2 5-4 5M12 14v4M8 21h8M9 18h6"/></svg>`
+    + (S.cat ? `${CATS[S.cat].name}: preguntas abiertas<button type="button" class="clear" id="clear">Ver todas</button>` : "Top 20 preguntas más apostadas hoy");
+  document.getElementById("grid").innerHTML = list.length ? list.map(q => {
+    const c = CATS[q.cat];
+    return `<button type="button" class="q" data-q="${q.id}">
+      <div class="pic" style="background:${c.g};color:${c.ic}">
+        <span class="rank">${q.id}</span>${svg(q.cat, 46, "big")}
+        <span class="badge" style="background:${c.chip}">${c.name}</span>
+      </div>
+      <div class="body">
+        <div class="txt"><span>${esc(q.q)}</span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m9 5 7 7-7 7"/></svg></div>
+        <div class="yn"><span class="y">Sí ${odd(q.p)}</span><span class="n">No ${odd(1 - q.p)}</span></div>
+      </div></button>`;
+  }).join("") : `<div class="empty">Todavía no hay preguntas abiertas en esta categoría.</div>`;
+}
+
+function renderCats() {
+  document.getElementById("cats").innerHTML = Object.entries(CATS).map(([k, c]) => {
+    const n = Q.filter(q => q.cat === k).length;
+    return `<button type="button" class="cat${S.cat === k ? " on" : ""}" data-cat="${k}">${svg(k, 26)}<span>${c.name}</span><span class="n">${n}</span></button>`;
   }).join("");
 }
 
-function renderSlip() {
-  const body = document.getElementById("slipBody");
-  if (!state.pick) {
-    body.innerHTML = `<p class="none">Elige una opción en cualquier mercado para armar tu apuesta. La cuota que ves es lo que multiplica tu dinero si aciertas.</p>`;
-  } else {
-    const m = MARKETS.find(x => x.id === state.pick.m);
-    const o = optionsOf(m)[state.pick.i];
-    const o_ = odd(o[1]);
-    body.innerHTML = `<div class="pick"><span class="pq">${esc(m.q)}</span><span class="pn"><span>${esc(o[0])}</span><span>${o_}</span></span></div>
-      <div class="amt"><label for="amount">Valor de la apuesta (COP)</label>
-        <input id="amount" type="number" min="1000" step="1000" inputmode="numeric" value="${state.amount}">
-        <div class="chips">${[10000, 20000, 50000, 100000].map(v => `<button type="button" data-amt="${v}">${short(v).replace("$ ", "")}</button>`).join("")}</div>
-      </div>
-      <div class="row"><span>Cuota</span><b>${o_}</b></div>
-      <div class="row win"><span>Ganancia posible</span><b id="win">${cop(state.amount * o_)}</b></div>
-      <button type="button" class="place" id="place">Apostar ${cop(state.amount)}</button>
-      <div class="msg" id="msg" role="status"></div>`;
+function renderBar() {
+  document.getElementById("topRight").innerHTML = S.logged ? `<span class="bal">${usd(S.balance)}</span>` : `<div class="spacer"></div>`;
+  document.getElementById("barInner").innerHTML = S.logged
+    ? `<span class="mine">Saldo <b>${usd(S.balance)}</b> · ${S.bets} predicción${S.bets === 1 ? "" : "es"} activa${S.bets === 1 ? "" : "s"}</span>`
+    : `<button type="button" class="login" id="login">Iniciar Sesión</button><button type="button" class="reg" id="reg">Regístrate</button>`;
+}
+
+function renderSheet() {
+  const scrim = document.getElementById("scrim");
+  if (!S.open) { scrim.hidden = true; scrim.innerHTML = ""; return; }
+  const q = Q.find(x => x.id === S.open), c = CATS[q.cat];
+  const o = S.side === "y" ? odd(q.p) : S.side === "n" ? odd(1 - q.p) : null;
+  scrim.hidden = false;
+  scrim.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="shq">
+    <div class="sh-head"><div><div class="k">${c.name} · #${q.id} más apostada</div><h3 id="shq">${esc(q.q)}</h3></div>
+      <button type="button" class="x" id="close" aria-label="Cerrar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+    <div class="facts"><span>Probabilidad Sí <b>${Math.round(q.p * 100)}%</b></span><span>Apostado hoy <b>${usd(q.vol)}</b></span><span>Cierra <b>${fmtDate(q.close)}</b></span></div>
+    <div class="prob" aria-hidden="true"><i style="width:${q.p * 100}%"></i></div>
+    <div class="pick2">
+      <button type="button" class="side y${S.side === "y" ? " sel" : ""}" data-side="y">Sí<small>cuota ${odd(q.p)}</small></button>
+      <button type="button" class="side n${S.side === "n" ? " sel" : ""}" data-side="n">No<small>cuota ${odd(1 - q.p)}</small></button>
+    </div>
+    <div class="amt"><label for="amount">Valor de la apuesta (USD)</label>
+      <input id="amount" type="number" min="1" step="1" inputmode="decimal" value="${S.amount}">
+      <div class="chips">${[1, 5, 10, 25, 50].map(v => `<button type="button" data-amt="${v}">$${v}</button>`).join("")}</div></div>
+    <div class="row"><span>Ganancia posible</span><b id="win">${o ? usd(S.amount * o) : "Elige Sí o No"}</b></div>
+    <button type="button" class="place" id="place">${S.logged ? "Apostar " + usd(S.amount) : "Inicia sesión para apostar"}</button>
+    <div class="msg" id="msg" role="status"></div>
+    <div class="src">Se resuelve con: ${esc(q.src)}</div>
+  </div>`;
+}
+
+function setCat(k) {
+  S.cat = S.cat === k ? null : k;
+  renderPopular(); renderGrid(); renderCats();
+  document.getElementById("topTitle").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+document.addEventListener("click", e => {
+  const t = e.target;
+  const cat = t.closest("[data-cat]"); if (cat) return setCat(cat.dataset.cat);
+  if (t.closest("#clear")) { S.cat = null; renderPopular(); renderGrid(); renderCats(); return; }
+  const sc = t.closest("[data-scroll]"); if (sc) { document.getElementById("popular").scrollBy({ left: +sc.dataset.scroll * 290, behavior: "smooth" }); return; }
+  const qb = t.closest("[data-q]"); if (qb) { S.open = +qb.dataset.q; S.side = null; renderSheet(); return; }
+  if (t.closest("#login") || t.closest("#reg")) { S.logged = true; renderBar(); renderSheet(); return; }
+  if (t.closest("#close") || t === document.getElementById("scrim")) { S.open = null; renderSheet(); return; }
+  const sd = t.closest("[data-side]"); if (sd) { S.side = sd.dataset.side; renderSheet(); return; }
+  const ch = t.closest("[data-amt]"); if (ch) { S.amount = +ch.dataset.amt; renderSheet(); return; }
+  if (t.closest("#place")) {
+    const msg = document.getElementById("msg");
+    if (!S.logged) { S.logged = true; renderBar(); renderSheet(); return; }
+    if (!S.side) { msg.className = "msg err"; msg.textContent = "Elige Sí o No antes de apostar."; return; }
+    if (!(S.amount >= 1)) { msg.className = "msg err"; msg.textContent = "La apuesta mínima es $1."; return; }
+    if (S.amount > S.balance) { msg.className = "msg err"; msg.textContent = "Saldo insuficiente. Deposita o baja el valor."; return; }
+    const q = Q.find(x => x.id === S.open);
+    S.balance -= S.amount; S.bets++; q.vol += S.amount;
+    renderBar(); renderSheet();
+    const m2 = document.getElementById("msg"); m2.className = "msg"; m2.textContent = `Listo: apostaste ${usd(S.amount)} al ${S.side === "y" ? "Sí" : "No"}.`;
   }
-  const mb = document.getElementById("mybets");
-  mb.hidden = !state.bets.length;
-  document.getElementById("mbList").innerHTML = state.bets.map(b => `<div class="mb"><span>${esc(b.name)} · ${esc(b.q)}</span><span>${cop(b.amount)} @ ${b.odd}</span></div>`).join("");
-  document.getElementById("bal").textContent = cop(state.balance);
-}
+});
+document.addEventListener("input", e => {
+  if (e.target.id !== "amount") return;
+  S.amount = Math.max(0, +e.target.value || 0);
+  const q = Q.find(x => x.id === S.open);
+  const o = S.side === "y" ? odd(q.p) : S.side === "n" ? odd(1 - q.p) : null;
+  document.getElementById("win").textContent = o ? usd(S.amount * o) : "Elige Sí o No";
+  if (S.logged) document.getElementById("place").textContent = "Apostar " + usd(S.amount);
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape" && S.open) { S.open = null; renderSheet(); } });
 
-function updateAmount(v) {
-  state.amount = Math.max(0, Math.round(+v || 0));
-  const m = MARKETS.find(x => x.id === state.pick.m);
-  const o_ = odd(optionsOf(m)[state.pick.i][1]);
-  document.getElementById("win").textContent = cop(state.amount * o_);
-  document.getElementById("place").textContent = "Apostar " + cop(state.amount);
-}
-
-document.getElementById("cats").addEventListener("click", e => {
-  const b = e.target.closest("[data-cat]"); if (!b) return;
-  state.cat = b.dataset.cat;
-  try { localStorage.setItem("pred-cat", state.cat); } catch (err) {}
-  renderCats(); renderGrid();
-});
-document.getElementById("sortbar").addEventListener("click", e => {
-  const b = e.target.closest("[data-sort]"); if (!b) return;
-  state.sort = b.dataset.sort;
-  document.querySelectorAll("#sortbar button").forEach(x => x.classList.toggle("on", x === b));
-  renderGrid();
-});
-document.getElementById("search").addEventListener("input", e => { state.q = e.target.value.trim().toLowerCase(); renderGrid(); });
-document.getElementById("grid").addEventListener("click", e => {
-  const b = e.target.closest(".opt"); if (!b) return;
-  state.pick = { m: +b.dataset.m, i: +b.dataset.i };
-  renderGrid(); renderSlip();
-});
-document.getElementById("slipBody").addEventListener("input", e => { if (e.target.id === "amount") updateAmount(e.target.value); });
-document.getElementById("slipBody").addEventListener("click", e => {
-  const chip = e.target.closest("[data-amt]");
-  if (chip) { document.getElementById("amount").value = chip.dataset.amt; updateAmount(chip.dataset.amt); return; }
-  if (e.target.id !== "place") return;
-  const msg = document.getElementById("msg");
-  if (state.amount < 1000) { msg.className = "msg err"; msg.textContent = "La apuesta mínima es $ 1.000."; return; }
-  if (state.amount > state.balance) { msg.className = "msg err"; msg.textContent = "Saldo insuficiente. Deposita o baja el valor."; return; }
-  const m = MARKETS.find(x => x.id === state.pick.m);
-  const o = optionsOf(m)[state.pick.i];
-  state.balance -= state.amount;
-  m.vol += state.amount;
-  state.bets.unshift({ name: o[0], q: m.q, amount: state.amount, odd: odd(o[1]) });
-  state.pick = null;
-  renderGrid(); renderSlip();
-});
-
-renderCats(); renderGrid(); renderSlip();
+renderPopular(); renderGrid(); renderCats(); renderBar();
 </script>
