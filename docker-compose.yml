@@ -1,0 +1,33 @@
+# Levanta la plataforma completa para desarrollo o demo:
+#   docker compose up --build
+#   docker compose exec api npm run seed -- --demo      (carga mercados de ejemplo)
+#   docker compose --profile demo up mock-casino        (casino de prueba en http://localhost:4000)
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: predicciones
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+  api:
+    build: { context: ., dockerfile: server/Dockerfile }
+    depends_on: [db]
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/predicciones
+      PUBLIC_URL: http://localhost:8080
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-cambia-esta-clave-admin}
+      SESSION_SECRET: ${SESSION_SECRET:-cambia-este-secreto}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      NEWSAPI_KEY: ${NEWSAPI_KEY:-}
+      DEMO_CASINO_URL: http://mock-casino:4000
+    ports: ["8080:8080"]
+  mock-casino:
+    profiles: [demo]
+    build: { context: ., dockerfile: server/Dockerfile }
+    command: ["npx", "tsx", "mock-casino/server.ts"]
+    environment:
+      PLATFORM_URL: http://api:8080
+    ports: ["4000:4000"]
+volumes:
+  pgdata:
