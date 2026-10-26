@@ -73,7 +73,11 @@
   const bad = (c, m) => new ApiError(400, c, m), conflict = (c, m) => new ApiError(409, c, m), notFound = (m = "No encontrado") => new ApiError(404, "not_found", m);
 
   // ---------- Estado ----------
-  const FEE_BPS = 200, CHALLENGE_MS = 90 * 1000, MM = { spread: 4, size: 200, levels: 3 };
+  const FEE_BPS = 200, CHALLENGE_MS = 90 * 1000;
+  // Mismos parámetros por defecto que el servidor (config.mm) para el market maker v2
+  const MM = { levels: 3, levelSizeShares: 200, bShares: 1500, minLiquidity: 0.15, tauRefDays: 7, gamma: 0.5, kappa: 12,
+    sigmaFloor: 0.25, holdDays: 1, minHalfSpreadCents: 1, maxLossUsd: 2000, maxTotalLossUsd: 50000 };
+  const mmControl = { killed: false };
   const S = {
     events: [], markets: new Map(), books: new Map(), players: new Map(), orders: new Map(), trades: [], positions: new Map(),
     ledger: [], fees: [], history: new Map(), drafts: [], resolutions: [], trends: [], sources: [], signals: [], operators: [],
@@ -211,6 +215,8 @@
         const amount = dry.fills.reduce((a, f) => a + notional(ownPrice(kind, f.yesPrice), f.qty), 0);
         publish({ type: "trade", marketId: m.id, eventId: m.eventId, yesPrice: last, qty: dry.filled, outcome: input.outcome, side: input.side, amount, player: mask(pid), at: iso(now()) });
         player.lastSeen = now();
+        const yesFlow = dry.fills.reduce((a, f) => a + f.qty, 0) / 100;
+        learnFlow(m, kind === "BUY_YES" || kind === "SELL_NO" ? yesFlow : -yesFlow);
         refreshQuotes(m.id);
       }
     }
@@ -255,27 +261,75 @@
 
   // ---------- Market maker de la casa ----------
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  /*__QUOTING__*/
+  // Matemática de engine/quoting.ts (la inyecta build.mts): precio justo que aprende del flujo (LMSR),
+  // spread Avellaneda-Stoikov, liquidez que baja con √(tiempo al cierre) y límites de pérdida.
+  const eventMarkets = (m) => { const e = S.events.find((x) => x.id === m.eventId); return e.kind === "multi" ? e.marketIds.map((id) => S.markets.get(id)).filter((x) => x.status === "open") : [m]; };
+  const tauOf = (m) => Math.max(0, (new Date(m.closeTime) - now()) / 864e5);
+  function learnFlow(m, yesShares) {
+    const ms = eventMarkets(m);
+    const b = MM.bShares * liquidityFactor(tauOf(m), MM);
+    const kind = ms.length > 1 ? "multi" : "binary";
+    const prev = ms.map((x) => x.fairExact ?? x.fair / 100);
+    const sum = prev.reduce((a, x) => a + x, 0);
+    const next = flowUpdate(kind, kind === "multi" ? prev.map((x) => x / sum) : prev, ms.map((x) => (x.id === m.id ? yesShares : 0)), b);
+    ms.forEach((x, i) => { x.fairExact = clamp(next[i], 0.02, 0.98); x.fair = clamp(Math.round(x.fairExact * 100), 2, 98); });
+  }
+  function eventState(m) {
+    const ms = eventMarkets(m);
+    return { ms, state: { kind: ms.length > 1 ? "multi" : "binary", tauDays: tauOf(m),
+      outcomes: ms.map((x) => { const y = pos(HOUSE, x.id, "YES"), n = pos(HOUSE, x.id, "NO"); return { fair: x.fairExact != null ? x.fairExact * 100 : x.fair, yesShares: y.qty / 100, noShares: n.qty / 100, costUsd: (y.cost + n.cost) / 1e6 }; }) } };
+  }
+  function totalWorstLoss() {
+    const seen = new Set(); let t = 0;
+    for (const m of S.markets.values()) {
+      if (!["open", "closed", "resolving"].includes(m.status) || seen.has(m.eventId)) continue;
+      seen.add(m.eventId);
+      const e = S.events.find((x) => x.id === m.eventId);
+      const ms = e.marketIds.map((id) => S.markets.get(id));
+      for (const g of e.kind === "multi" ? [ms] : ms.map((x) => [x])) t += worstCaseLoss({ kind: g.length > 1 ? "multi" : "binary", tauDays: 0,
+        outcomes: g.map((x) => { const y = pos(HOUSE, x.id, "YES"), n = pos(HOUSE, x.id, "NO"); return { fair: 50, yesShares: y.qty / 100, noShares: n.qty / 100, costUsd: (y.cost + n.cost) / 1e6 }; }) });
+    }
+    return t;
+  }
+  function clearHouse(mid) {
+    const book = bookOf(mid);
+    for (const o of book.ordersOf(HOUSE)) { book.remove(o.id); const ord = S.orders.get(o.id); if (ord) ord.status = "cancelled"; }
+  }
   function refreshQuotes(mid) {
     const m = S.markets.get(mid);
     if (!m || m.status !== "open") return;
-    m.fair = clamp(Math.round(0.6 * m.fair + 0.4 * m.last), 2, 98);
-    const yes = pos(HOUSE, mid, "YES"), no = pos(HOUSE, mid, "NO");
-    const net = (yes.qty - no.qty) / 100, skew = clamp(Math.round(net / (MM.size * 2)), -5, 5);
-    const fair = clamp(m.fair - skew, 2, 98), half = Math.ceil(MM.spread / 2);
-    const book = bookOf(mid);
-    for (const o of book.ordersOf(HOUSE)) { book.remove(o.id); const ord = S.orders.get(o.id); if (ord) ord.status = "cancelled"; }
-    for (let i = 0; i < MM.levels; i++) {
-      const bid = fair - half - i, ask = fair + half + i;
-      if (bid >= 1) quote(mid, "BUY_YES", bid);
-      if (ask <= 99) quote(mid, "BUY_NO", ask);
-    }
+    const { ms, state } = eventState(m);
+    ms.forEach((x) => clearHouse(x.id));
+    if (mmControl.killed) return;
+    const { quotes } = quoteV2(state, { ...MM, riskOff: totalWorstLoss() > MM.maxTotalLossUsd });
+    for (const q of quotes) quote(ms[q.outcome].id, q.kind, q.yesPrice, q.shares);
   }
-  function quote(mid, kind, yesPrice) {
+  function mmStatus() {
+    const seen = new Set(), events = [];
+    for (const m of S.markets.values()) {
+      if (m.status !== "open" || seen.has(m.eventId)) continue;
+      seen.add(m.eventId);
+      const { ms, state } = eventState(m);
+      const { quotes, diag } = quoteV2(state, MM);
+      const e = S.events.find((x) => x.id === m.eventId);
+      events.push({ eventId: e.id, marketIds: ms.map((x) => x.id), title: e.title, kind: state.kind, tauDays: Math.round(state.tauDays * 10) / 10,
+        liquidity: Math.round(diag.liquidity * 100) / 100, b: Math.round(diag.b), halfSpreadCents: Math.round(diag.halfSpreadCents * 10) / 10, prices: diag.prices,
+        worstCaseLossUsd: Math.round(diag.worstCaseLossUsd), lmsrMaxLossUsd: Math.round(diag.lmsrMaxLossUsd), limited: diag.limited, quotes: quotes.length });
+    }
+    events.sort((a, b) => b.worstCaseLossUsd - a.worstCaseLossUsd);
+    const worst = events.reduce((a, e) => a + e.worstCaseLossUsd, 0);
+    return { strategy: "v2", enabled: true, killed: mmControl.killed, params: { ...MM, weightPrev: 0.6, weightExternal: 0.5 },
+      limits: { maxLossUsd: MM.maxLossUsd, maxTotalLossUsd: MM.maxTotalLossUsd },
+      totals: { worstCaseLossUsd: worst, riskOff: worst > MM.maxTotalLossUsd, limitedEvents: events.filter((e) => e.limited).length, events: events.length },
+      events: events.slice(0, 100) };
+  }
+  function quote(mid, kind, yesPrice, shares) {
     // Cotización directa al libro (la casa no tiene billetera externa): no cruza, solo agrega liquidez
     const book = bookOf(mid);
     if (kind === "BUY_YES" && book.bestAsk() !== undefined && book.bestAsk() <= yesPrice) return;
     if (kind === "BUY_NO" && book.bestBid() !== undefined && book.bestBid() >= yesPrice) return;
-    const id = ++S.seq.order, q = MM.size * 100;
+    const id = ++S.seq.order, q = shares * 100;
     S.orders.set(id, { id, marketId: mid, playerId: HOUSE, side: "BUY", outcome: outcomeOf(kind), type: "LIMIT", tif: "GTC", price: ownPrice(kind, yesPrice), qty: q, filled: 0, reserved: notional(ownPrice(kind, yesPrice), q), status: "open", createdAt: iso(now()) });
     book.add({ id, ownerId: HOUSE, kind, yesPrice, remaining: q, seq: id });
   }
@@ -612,6 +666,12 @@
   route("POST", "/admin/markets/:id/reference", ({ p, b }) => { const m = S.markets.get(Number(p.id)); if (!m) throw notFound("Mercado no encontrado"); const x = { marketId: m.id, source: b.source, price: Math.round(b.price), capturedAt: iso(now()) }; refs.push(x); return x; });
   route("POST", "/admin/references/refresh", () => { throw new ApiError(503, "offline", "La demo no tiene conexión a internet para leer Polymarket. En el servidor real se actualiza cada 30 minutos."); });
   route("POST", "/admin/mm/refresh", () => { let n = 0; for (const m of S.markets.values()) if (m.status === "open") { refreshQuotes(m.id); n++; } return { markets: n }; });
+  route("GET", "/admin/mm/status", () => mmStatus());
+  route("POST", "/admin/mm/kill", ({ b }) => {
+    mmControl.killed = !!b.on; let n = 0;
+    for (const m of S.markets.values()) if (m.status === "open") { if (mmControl.killed) { if (bookOf(m.id).ordersOf(HOUSE).length) { clearHouse(m.id); n++; } } else refreshQuotes(m.id); }
+    return { killed: mmControl.killed, marketsCleared: n };
+  });
   route("GET", "/admin/operators", () => S.operators);
   route("POST", "/admin/operators", ({ b }) => { const tok = () => Math.random().toString(36).slice(2, 14); const creds = { apiKey: `pk_${tok()}`, apiSecret: `sk_${tok()}${tok()}`, walletSecret: `ws_${tok()}${tok()}` };
     S.operators.push({ id: b.id, name: b.name, api_key: creds.apiKey, wallet_url: b.walletUrl, webhook_url: b.webhookUrl ?? null, currency: "USD", fee_bps: b.feeBps ?? null, theme: b.theme ?? {}, active: true }); return { id: b.id, ...creds }; });

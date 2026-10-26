@@ -612,14 +612,36 @@ async function viewFuentes(el) {
 
 // ---------- Riesgo ----------
 async function viewRiesgo(el) {
-  const r = await api("/admin/exposure");
+  const [r, mm] = await Promise.all([api("/admin/exposure"), api("/admin/mm/status").catch(() => null)]);
   const rows = r.markets.filter((m) => m.house_cost > 0 || m.players_yes > 0 || m.players_no > 0);
-  el.innerHTML = `<div class="head"><div><h1>Riesgo de la casa</h1><p>El market maker de la casa da liquidez a ambos lados. Aquí ves su inventario y dinero comprometido por mercado.</p></div><button class="btn" id="mmRefresh">Recotizar ahora</button></div>
+  el.innerHTML = `<div class="head"><div><h1>Riesgo de la casa</h1><p>El market maker de la casa da liquidez a ambos lados. Aquí ves su inventario y dinero comprometido por mercado.</p></div><div class="row"><button class="btn" id="mmRefresh">Recotizar ahora</button>${mm ? `<button class="btn ${mm.killed ? "ok" : "bad"}" id="mmKill">${mm.killed ? "Reanudar market maker" : "Botón de pánico"}</button>` : ""}</div></div>
+    ${mm ? mmPanel(mm) : ""}
     <div class="kpis" style="margin-bottom:14px"><div class="kpi"><span class="k">Comprometido en posiciones</span><span class="v">${kmoney(r.house.open_cost)}</span></div><div class="kpi"><span class="k">Resultado realizado</span><span class="v ${r.house.realized >= 0 ? "ok" : "bad"}">${money(r.house.realized)}</span></div><div class="kpi"><span class="k">Comisiones cobradas</span><span class="v">${money(r.house.fees)}</span></div><div class="kpi"><span class="k">Mercados con exposición</span><span class="v">${rows.filter((m) => m.house_cost > 0).length}</span></div></div>
     <div class="tablewrap"><table><thead><tr><th>Mercado</th><th>Estado</th><th class="num">Precio</th><th class="num">Justo</th><th class="num">Casa Sí</th><th class="num">Casa No</th><th class="num">Comprometido</th><th class="num">Jugadores Sí / No</th><th class="num">Volumen</th></tr></thead><tbody>
     ${rows.length ? rows.slice(0, 200).map((m) => `<tr><td><div class="t">${esc(m.question)}</div></td><td>${pill(m.status)}</td><td class="num">${m.last_price}¢</td><td class="num">${m.fair_price}¢</td><td class="num">${(m.house_yes / 100).toLocaleString("es-EC")}</td><td class="num">${(m.house_no / 100).toLocaleString("es-EC")}</td><td class="num">${money(m.house_cost)}</td><td class="num">${(m.players_yes / 100).toLocaleString("es-EC")} / ${(m.players_no / 100).toLocaleString("es-EC")}</td><td class="num">${kmoney(m.volume)}</td></tr>`).join("") : `<tr><td colspan="9" class="muted" style="text-align:center;padding:24px">Sin exposición todavía.</td></tr>`}
     </tbody></table></div>`;
   el.querySelector("#mmRefresh").onclick = (e) => run(e.target, () => api("/admin/mm/refresh", { method: "POST", body: {} }), (x) => `${x.markets} mercados recotizados`).then(() => route());
+  const kill = el.querySelector("#mmKill");
+  if (kill) kill.onclick = async () => {
+    const on = !mm.killed;
+    if (on && !(await modal({ title: "Botón de pánico", text: "La casa retira todas sus cotizaciones y deja de dar liquidez hasta que la reanudes. Las apuestas entre jugadores siguen funcionando.", ok: "Retirar cotizaciones", danger: true }))) return;
+    run(kill, () => api("/admin/mm/kill", { method: "POST", body: { on } }), on ? (x) => `Market maker detenido · ${x.marketsCleared} mercados retirados` : "Market maker reanudado").then(() => route());
+  };
+}
+
+function mmPanel(mm) {
+  const t = mm.totals, use = mm.limits.maxTotalLossUsd ? t.worstCaseLossUsd / mm.limits.maxTotalLossUsd : 0;
+  const usd = (v) => "$" + Math.round(v).toLocaleString("es-EC");
+  const p = mm.params ?? {};
+  return `<div class="kpis" style="margin-bottom:14px">
+      <div class="kpi ${mm.killed ? "alert" : ""}"><span class="k">Market maker</span><span class="v ${mm.killed ? "bad" : "ok"}">${mm.killed ? "Detenido" : mm.strategy.toUpperCase()}</span><span class="d">${mm.killed ? "Botón de pánico activo" : mm.strategy === "v2" ? "LMSR + spread Avellaneda-Stoikov" : "Spread fijo"}</span></div>
+      <div class="kpi ${use > 0.8 ? "alert" : use > 0.5 ? "attn" : ""}"><span class="k">Pérdida en el peor escenario</span><span class="v">${usd(t.worstCaseLossUsd)}</span><span class="d">${Math.round(use * 100)}% del límite total de ${usd(mm.limits.maxTotalLossUsd)}</span></div>
+      <div class="kpi ${t.limitedEvents ? "attn" : ""}"><span class="k">Eventos en su límite</span><span class="v">${t.limitedEvents}</span><span class="d">de ${t.events} · límite ${usd(mm.limits.maxLossUsd)} por evento</span></div>
+      <div class="kpi"><span class="k">Parámetros</span><span class="v" style="font-size:15px">b ${p.bShares ?? "—"} · γ ${p.gamma ?? "—"} · κ ${p.kappa ?? "—"}</span><span class="d">Liquidez completa con más de ${p.tauRefDays ?? "—"} días al cierre</span></div>
+    </div>
+    ${mm.events?.length ? `<div class="panel" style="margin-bottom:14px"><h2>Riesgo por evento <small>v2 · ordenado por pérdida en el peor escenario</small></h2><div class="tablewrap"><table><thead><tr><th>Evento</th><th class="num">Días al cierre</th><th class="num">Liquidez</th><th class="num">Medio spread</th><th class="num">Peor escenario</th><th class="num">Techo LMSR</th><th>Estado</th></tr></thead><tbody>
+      ${mm.events.slice(0, 15).map((e) => `<tr><td><div class="t">${esc(e.title)}</div><span class="faint" style="font-size:11px">${e.kind === "multi" ? `${e.marketIds.length} opciones` : "Sí / No"} · b ${e.b.toLocaleString("es-EC")}</span></td><td class="num">${e.tauDays}</td><td class="num">${Math.round(e.liquidity * 100)}%</td><td class="num">${e.halfSpreadCents}¢</td><td class="num ${e.worstCaseLossUsd > mm.limits.maxLossUsd * 0.8 ? "bad" : ""}">${usd(e.worstCaseLossUsd)}</td><td class="num">${usd(e.lmsrMaxLossUsd)}</td><td>${e.limited ? `<span class="pill void">Solo reduce riesgo</span>` : `<span class="pill open">Normal</span>`}</td></tr>`).join("")}
+      </tbody></table></div><p class="faint" style="font-size:12px;margin:10px 0 0">Peor escenario: lo que perdería la casa si gana la opción que más le cuesta. Techo LMSR: lo máximo que puede perder desde ahora siguiendo la curva, aunque todos los que compren tengan razón. Con menos de ${p.tauRefDays ?? 7} días al cierre la liquidez baja con la raíz del tiempo que falta.</p></div>` : ""}`;
 }
 
 // ---------- Casinos ----------

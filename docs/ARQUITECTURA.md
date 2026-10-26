@@ -76,12 +76,15 @@ Si la transacción falla después del débito, se reembolsa con un `txId` determ
 
 ## Market maker de la casa
 
-`server/src/services/marketmaker.ts`, cada `MM_REFRESH_EVERY_SEC`:
+`server/src/services/marketmaker.ts`, cada `MM_REFRESH_EVERY_SEC`, con la matemática de `server/src/engine/quoting.ts` (detalle y resultados de simulación en [MARKET-MAKER.md](MARKET-MAKER.md)):
 
-- **Precio justo**: media móvil entre el precio justo anterior y el último negociado. En eventos múltiples se normaliza para que las opciones sumen ~100%.
-- **Cotizaciones**: `MM_LEVELS` niveles a cada lado, con `MM_SPREAD_CENTS` de spread y `MM_LEVEL_SIZE_SHARES` acciones por nivel. Solo usa órdenes de compra (BUY_YES y BUY_NO), así no necesita inventario: cuando un jugador le compra, el cruce *mint* crea las acciones.
-- **Inventario**: si acumula Sí, baja sus precios (*skew*). Si supera `MM_MAX_EXPOSURE_USD` en un mercado, solo cotiza el lado que reduce el riesgo.
-- **Ingresos de la casa**: comisión de taker (`TAKER_FEE_BPS`), spread y redondeos. `GET /admin/exposure` muestra el riesgo por mercado.
+- **Precio justo (v2)**: aprende del flujo de los jugadores con la curva LMSR (cada acción Sí neta sube el log-odds en 1/b). Se combina en log-odds con las referencias externas nuevas. En eventos múltiples todas las opciones se mueven juntas y suman 100%.
+- **Cotizaciones**: `MM_LEVELS` niveles a cada lado sobre la curva LMSR, con el medio spread de Avellaneda-Stoikov. Solo usa órdenes de compra (BUY_YES y BUY_NO), así no necesita inventario: cuando un jugador le compra, el cruce *mint* crea las acciones.
+- **Tiempo al cierre**: la profundidad y el tamaño por nivel bajan con √(días al cierre / `MM_TAU_REF_DAYS`).
+- **Límites**: pérdida en el peor escenario por evento (`MM_MAX_LOSS_USD`) y total (`MM_MAX_TOTAL_LOSS_USD`). Al superarlos, solo cotiza lo que reduce el riesgo. El botón de pánico (`POST /admin/mm/kill`) retira todo.
+- **Simulador** (`npm run sim`): jugadores casuales, informados, hinchada y ballenas contra v1 y v2, con el mismo motor de órdenes.
+- **Ingresos de la casa**: comisión de taker (`TAKER_FEE_BPS`), spread y redondeos. `GET /admin/exposure` y `GET /admin/mm/status` muestran el riesgo.
+- `MM_STRATEGY=v1` vuelve a la versión anterior (media móvil, spread fijo, corrimiento simple por inventario).
 
 ## Información → preguntas
 

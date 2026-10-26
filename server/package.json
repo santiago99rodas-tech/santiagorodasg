@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test --test-concurrency=1 test/*.test.ts",
     "simulate": "tsx mock-casino/simulate.ts",
+    "sim": "tsx src/sim/run.ts",
     "demo:build": "tsx ../demo/build.mts"
   },
   "engines": {
@@ -28,6 +29,7 @@
   "devDependencies": {
     "@types/node": "^26.6.5",
     "@types/pg": "^8.23.1",
+    "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }

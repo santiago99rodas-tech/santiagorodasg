@@ -12,7 +12,7 @@ import { listDrafts, approveDraft, rejectDraft, createManualDraft } from "../ser
 import { createEvent } from "../services/events.js";
 import { propose, dispute, reject, finalize, closeExpired } from "../services/resolution.js";
 import { cancelAllInMarket } from "../services/trading.js";
-import { refreshQuotes, houseStats } from "../services/marketmaker.js";
+import { refreshQuotes, houseStats, mmStatus, setKillSwitch } from "../services/marketmaker.js";
 import { houseAccount } from "../services/house.js";
 import { listEvents } from "../services/marketdata.js";
 import { integrityReport, setExternalRef, addReferencePrice, refreshExternalPrices } from "../services/integrity.js";
@@ -208,4 +208,12 @@ export async function adminRoutes(app: FastifyInstance) {
     return { house: await houseStats(), markets };
   });
   app.post("/admin/mm/refresh", async (req) => ({ markets: await refreshQuotes((req.body as any)?.marketId) }));
+  app.get("/admin/mm/status", async () => mmStatus());
+  // Botón de pánico: { on: true } retira todas las órdenes de la casa y deja de cotizar
+  app.post("/admin/mm/kill", async (req) => {
+    const on = z.object({ on: z.boolean() }).parse(req.body ?? {}).on;
+    const r = await setKillSwitch(on, adminUser(req));
+    if (!on) await refreshQuotes();
+    return r;
+  });
 }

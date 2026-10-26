@@ -6,6 +6,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { loadCatalog, toEventInput } from "../server/src/db/catalog/index.js";
 import { CATEGORIES, SOURCES } from "../server/src/db/seed.js";
+import { createRequire } from "node:module";
 
 const root = new URL("../", import.meta.url);
 const read = (p: string) => readFileSync(new URL(p, root), "utf8");
@@ -37,12 +38,17 @@ const admin = inject(read("web/admin/index.html"), [
   ['const A = { key: store.get("pa_key"), user: store.get("pa_user"), api: qs.get("api") ?? store.get("pa_api") ?? DEFAULT_API };', 'const A = { key: "demo", user: "Demo", api: "" };'],
 ]);
 
+// La matemática del market maker es la misma del servidor: se transpila engine/quoting.ts a JS plano
+const { transformSync } = createRequire(new URL("../server/package.json", import.meta.url))("esbuild");
+const quoting = transformSync(read("server/src/engine/quoting.ts"), { loader: "ts", format: "esm" }).code
+  .replace(/^export /gm, "").replace(/^\s*const clamp = .*$/m, "");
+
 // Literal JS seguro dentro de <script>
 const js = (v: unknown) => JSON.stringify(v).replace(/<\/script/gi, "<\\/script").replace(/<!--/g, "<\\!--");
 
 const shell = read("demo/shell.html")
   .replace("/*__DATA__*/", () => `const CATALOG = ${js(catalog)};\nconst CATEGORIES = ${js(CATEGORIES)};\nconst SOURCES = ${js(SOURCES.map(({ kind, name, url, category, country }) => ({ kind, name, url, category, country })))};`)
-  .replace("/*__BACKEND__*/", () => read("demo/backend.js"))
+  .replace("/*__BACKEND__*/", () => read("demo/backend.js").replace("/*__QUOTING__*/", () => quoting))
   .replace("/*__PAGES__*/", () => `const EMBED_HTML = ${js(embed)};\nconst ADMIN_HTML = ${js(admin)};`);
 
 mkdirSync(new URL("demo/dist/", root), { recursive: true });

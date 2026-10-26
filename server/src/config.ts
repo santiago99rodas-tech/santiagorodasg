@@ -30,6 +30,22 @@ export const config = {
     levelSizeShares: num("MM_LEVEL_SIZE_SHARES", 200),
     levels: num("MM_LEVELS", 3),
     maxExposureUsd: num("MM_MAX_EXPOSURE_USD", 5000),
+    // v1: spread fijo y media móvil. v2: log-odds + LMSR + spread Avellaneda-Stoikov (ver docs/MARKET-MAKER.md)
+    strategy: str("MM_STRATEGY", "v2") as "v1" | "v2",
+    bShares: num("MM_B_SHARES", 1500),
+    minLiquidity: num("MM_MIN_LIQUIDITY", 0.15),
+    tauRefDays: num("MM_TAU_REF_DAYS", 7),
+    gamma: num("MM_GAMMA", 0.5),
+    kappa: num("MM_KAPPA", 12),
+    sigmaFloor: num("MM_SIGMA_FLOOR", 0.25),
+    holdDays: num("MM_HOLD_DAYS", 1),
+    minHalfSpreadCents: num("MM_MIN_HALF_SPREAD_CENTS", 1),
+    maxLossUsd: num("MM_MAX_LOSS_USD", 2000),
+    maxTotalLossUsd: num("MM_MAX_TOTAL_LOSS_USD", 50000),
+    // Pesos en log-odds del precio justo propio frente a la referencia externa (Polymarket u otra)
+    weightPrev: num("MM_W_PREV", 0.6),
+    weightExternal: num("MM_W_EXTERNAL", 0.5),
+    externalMaxAgeHours: num("MM_EXTERNAL_MAX_AGE_HOURS", 6),
   },
   integrity: {
     // Volumen mínimo de un mercado para entrar en los análisis de concentración y sesgo por país
