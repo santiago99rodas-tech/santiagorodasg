@@ -189,7 +189,9 @@ a.btn { text-decoration: none; display: inline-block; }
 // ---------- Estado y utilidades ----------
 const qs = new URLSearchParams(location.search);
 const store = { get: (k) => { try { return sessionStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch {} }, del: (k) => { try { sessionStorage.removeItem(k); } catch {} } };
-const A = { key: store.get("pa_key"), user: store.get("pa_user"), api: qs.get("api") ?? store.get("pa_api") ?? "" };
+// La URL de la API puede venir fijada en el HTML (<meta name="predicciones-api">) cuando el panel se aloja en otro dominio
+const DEFAULT_API = document.querySelector('meta[name="predicciones-api"]')?.content ?? "";
+const A = { key: store.get("pa_key"), user: store.get("pa_user"), api: qs.get("api") ?? store.get("pa_api") ?? DEFAULT_API };
 let CATS = [], OV = null, VIEW = "resumen", DESIGN = null;
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
