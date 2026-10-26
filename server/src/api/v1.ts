@@ -10,6 +10,7 @@ import { bus, type BusEvent } from "../lib/bus.js";
 import { config } from "../config.js";
 import { signed, oracleKeys, oracleMarkets, oracleMarket, trackRecord } from "../services/oracle.js";
 import { propose, disputeByPlayer } from "../services/resolution.js";
+import { otsFile } from "../services/chain.js";
 
 const Evidence = z.array(z.object({ url: z.string().url(), title: z.string().max(200).optional() })).max(10).optional();
 
@@ -109,6 +110,20 @@ export async function v1Routes(app: FastifyInstance) {
   app.get("/v1/oracle/markets", async (req, reply) => sendSigned(reply, await oracleMarkets(req.query as any)));
   app.get<{ Params: { id: string } }>("/v1/oracle/markets/:id", async (req, reply) => sendSigned(reply, await oracleMarket(Number(req.params.id))));
   app.get("/v1/oracle/track-record", async (_req, reply) => sendSigned(reply, await trackRecord()));
+  // Transparencia: sellos del libro contable de tesorería en Bitcoin (OpenTimestamps). Público: son solo huellas.
+  app.get("/v1/oracle/anchors", async (_req, reply) => sendSigned(reply, {
+    method: "OpenTimestamps (Bitcoin)",
+    howToVerify: "Descarga el .ots y verifícalo en opentimestamps.org o con `ots verify -d <hash> archivo.ots`: prueba que esa huella del libro existía en esa fecha.",
+    anchors: (await many(pool, "SELECT id, journal_id, head_hash, calendar, created_at FROM anchors WHERE status='submitted' ORDER BY id DESC LIMIT 200"))
+      .map((a) => ({ id: a.id, journalId: a.journal_id, hash: a.head_hash, calendar: a.calendar, at: a.created_at, ots: `/v1/oracle/anchors/${a.id}.ots` })),
+  }));
+  app.get<{ Params: { file: string } }>("/v1/oracle/anchors/:file", async (req, reply) => {
+    const id = Number(req.params.file.replace(/\.ots$/, ""));
+    const a = await one(pool, "SELECT journal_id, head_hash, proof FROM anchors WHERE id=$1 AND status='submitted'", [id]);
+    if (!a) return reply.code(404).send({ error: "not_found", message: "Sello no encontrado" });
+    return reply.header("content-type", "application/octet-stream").header("content-disposition", `attachment; filename="libro-${a.journal_id}-${String(a.head_hash).slice(0, 12)}.ots"`)
+      .send(otsFile(a.head_hash, a.proof));
+  });
 
   // ---------- Jugador ----------
   app.register(async (p) => {

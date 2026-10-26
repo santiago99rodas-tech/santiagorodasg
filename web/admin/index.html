@@ -784,15 +784,15 @@ async function viewTesoreria(el) {
   const stPill = (x) => ({ pending: `<span class="pill proposed">Pendiente</span>`, paid: `<span class="pill resolved">Pagada</span>`, overdue: `<span class="pill void">Vencida</span>`, covered: `<span class="pill resolved">Cobrada de garantía</span>`, cancelled: `<span class="pill">Anulada</span>` }[x] ?? esc(x));
   const fday2 = (d) => (d ? new Date(d).toLocaleDateString("es-EC", { day: "numeric", month: "short" }) : "—");
   el.innerHTML = `<div class="head"><div><h1>Tesorería</h1><p>Dónde está el dinero real y quién le debe a quién. La plata de los jugadores sigue en cada casino; aquí se emite la liquidación de cada uno con su estado de cuenta firmado, se controlan sus garantías en el fideicomiso, se concilia con el extracto del banco y todo queda en un libro contable que no se puede alterar sin que se note.</p></div>
-    <div class="row"><button class="btn" id="tBank">Cargar extracto</button><button class="btn" id="tReserve">Reserva de la casa</button><button class="btn primary" id="tSettle">Liquidar ahora</button></div></div>
+    <div class="row"><button class="btn" id="tBank">Cargar extracto</button>${t.usdc?.enabled ? `<button class="btn" id="tUsdc">Leer bóveda USDC</button>` : ""}<button class="btn" id="tAnchor">Sellar en Bitcoin</button><button class="btn" id="tReserve">Reserva de la casa</button><button class="btn primary" id="tSettle">Liquidar ahora</button></div></div>
     <div class="kpis" style="margin-bottom:14px">
-      <div class="kpi"><span class="k">Fideicomiso (según libro)</span><span class="v">${money(R.fiduciary)}</span><span class="d">garantías ${money(R.guarantees)} · reserva ${money(R.houseReserve)}</span></div>
+      <div class="kpi"><span class="k">Dinero (fideicomiso${t.usdc?.enabled ? " + USDC" : ""})</span><span class="v">${money(R.fiduciary)}</span><span class="d">garantías ${money(R.guarantees)} · reserva ${money(R.houseReserve)}</span></div>
       <div class="kpi ${R.ok ? "" : "alert"}"><span class="k">Cobertura</span><span class="v ${R.ok ? "ok" : "bad"}">${R.coverage == null ? "—" : Math.round(R.coverage * 100) + "%"}</span><span class="d">de ${money(R.obligations)} en obligaciones y riesgo de la casa</span></div>
       <div class="kpi ${due.length ? "alert" : ""}"><span class="k">Liquidaciones vencidas</span><span class="v">${due.length}</span><span class="d">por cobrar a casinos ${money(R.receivableFromCasinos)}</span></div>
       <div class="kpi ${J.ok ? "" : "alert"}"><span class="k">Libro contable</span><span class="v ${J.ok ? "ok" : "bad"}">${J.ok ? "Íntegro" : "ROTO"}</span><span class="d">${J.ok ? `${J.entries} asientos · ${esc((J.head ?? "").slice(0, 12))}…` : `desde el asiento #${J.brokenAt}: ${esc(J.reason)}`}</span></div>
     </div>
     <div class="tablewrap"><table><thead><tr><th>Casino</th><th class="num">Garantía</th><th class="num">Deuda</th><th class="num">Límite</th><th>Operación</th><th></th></tr></thead><tbody>
-      ${t.casinos.map((c) => `<tr><td><div class="t">${esc(c.name)}</div><span class="faint" style="font-size:11px">${esc(c.operatorId)}</span></td>
+      ${t.casinos.map((c) => `<tr><td><div class="t">${esc(c.name)}</div><span class="faint" style="font-size:11px">${esc(c.operatorId)} · ${c.rail === "usdc" ? `USDC <span style="font-family:var(--mono)">${esc((c.usdcAddress ?? "").slice(0, 6))}…${esc((c.usdcAddress ?? "").slice(-4))}</span>` : "banco"}</span></td>
         <td class="num">${money(c.guarantee)}${c.guaranteeRequired ? `<br><span class="faint" style="font-size:11px">exigida ${money(c.guaranteeRequired)}</span>` : ""}</td>
         <td class="num">${money(c.debt)}<br><span class="faint" style="font-size:11px">emitida ${money(Math.max(0, c.issuedBalance))} · en curso ${money(Math.max(0, c.accrued))}</span></td>
         <td class="num">${c.debtLimit != null ? money(c.debtLimit) : c.guaranteeRequired ? "su garantía" : "sin límite"}</td>
@@ -808,11 +808,12 @@ async function viewTesoreria(el) {
         <td><div class="row" style="flex-wrap:nowrap">${["pending", "overdue"].includes(x.status) && x.amount !== 0 ? `<button class="btn ok sm" data-pay="${x.id}">Pagada</button>` : ""}${["pending", "overdue"].includes(x.status) && x.amount > 0 ? `<button class="btn bad sm" data-col="${x.id}">Cobrar de garantía</button>` : ""}<button class="btn sm" data-stm="${x.id}">Estado firmado</button></div></td></tr>`).join("") || `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">Todavía no hay liquidaciones. Se emiten solas cada ${t.config.settlementEveryHours} h, o con "Liquidar ahora".</td></tr>`}
       </tbody></table></div></div>
     <div class="grid2">
-      <div class="panel"><h2>Extracto sin conciliar <small>${t.unmatchedBankLines.length}</small></h2>
-        ${t.unmatchedBankLines.length ? `<div class="tablewrap"><table><tbody>${t.unmatchedBankLines.map((b) => `<tr><td style="white-space:nowrap">${fday2(b.date)}</td><td style="font-size:12px">${esc(b.reference)}<div class="faint">${esc(b.description)}</div></td><td class="num ${b.amount >= 0 ? "ok" : "bad"}">${money(b.amount)}</td><td><button class="btn sm" data-ign="${b.id}">Ignorar</button></td></tr>`).join("")}</tbody></table></div>`
+      <div class="panel"><h2>Sin conciliar <small>banco y cadena · ${t.unmatchedBankLines.length}</small></h2>
+        ${t.unmatchedBankLines.length ? `<div class="tablewrap"><table><tbody>${t.unmatchedBankLines.map((b) => `<tr><td style="white-space:nowrap">${fday2(b.date)}<div class="faint" style="font-size:11px">${b.account === "usdc" ? "USDC" : "banco"}</div></td><td style="font-size:12px;word-break:break-all">${esc(b.reference.split(":")[0].slice(0, 24))}${b.reference.length > 24 ? "…" : ""}<div class="faint">${esc(b.description)}</div></td><td class="num ${b.amount >= 0 ? "ok" : "bad"}">${money(b.amount)}</td><td><div class="row" style="flex-wrap:nowrap">${b.amount > 0 ? `<button class="btn sm" data-lg="${b.id}" data-acc="${esc(b.account)}">Es garantía</button>` : ""}<button class="btn sm" data-ign="${b.id}">Ignorar</button></div></td></tr>`).join("")}</tbody></table></div>`
           : `<p class="muted" style="font-size:13px">Todo lo cargado del banco está conciliado. Para que se concilie solo, cada transferencia debe llevar la referencia LIQ-número.</p>`}</div>
       <div class="panel"><h2>Reservas</h2><div class="tablewrap"><table><tbody>
-        <tr><td>Dinero en el fideicomiso</td><td class="num"><b>${money(R.fiduciary)}</b></td></tr>
+        <tr><td>Dinero en el fideicomiso (banco)</td><td class="num"><b>${money(R.bank ?? R.fiduciary)}</b></td></tr>
+        ${R.usdc?.enabled ? `<tr><td>Bóveda USDC <span class="faint" style="font-size:11px">(${esc(R.usdc.chain)})</span><div class="faint" style="font-size:11px">${R.usdc.error ? `no se pudo leer la cadena: ${esc(R.usdc.error)}` : `en la cadena ${money(R.usdc.onChain)}${R.usdc.difference ? ` · <span class="bad">diferencia ${money(R.usdc.difference)}</span>` : " · cuadra con el libro"}`}</div></td><td class="num"><b>${money(R.usdc.book)}</b></td></tr>` : ""}
         <tr><td>Garantías que se deben devolver</td><td class="num">${money(R.guarantees)}</td></tr>
         <tr><td>Liquidaciones por pagar a casinos</td><td class="num">${money(R.payableToCasinos)}</td></tr>
         <tr><td>Pérdida de la casa en el peor escenario</td><td class="num">${money(R.houseRisk)}</td></tr>
@@ -820,6 +821,11 @@ async function viewTesoreria(el) {
         <tr><td>Custodia de market makers / valor de sus cuentas</td><td class="num ${R.marketMakers.ok ? "" : "bad"}">${money(R.marketMakers.custody)} / ${money(R.marketMakers.accounts)}</td></tr>
       </tbody></table></div><p class="faint" style="font-size:12px;margin:8px 0 0">${esc(R.note)}</p></div>
     </div>
+    <div class="panel" style="margin-top:14px"><h2>Sellos en Bitcoin <small>${t.config.anchorEnabled ? `cada ${t.config.anchorEveryHours} h con OpenTimestamps · públicos en /v1/oracle/anchors` : "anclaje desactivado"}</small></h2>
+      ${(t.anchors ?? []).length ? `<div class="tablewrap"><table><thead><tr><th>Fecha</th><th class="num">Asiento</th><th>Huella</th><th>Calendario</th><th>Estado</th></tr></thead><tbody>${t.anchors.map((a) => `<tr><td style="white-space:nowrap">${new Date(a.created_at).toLocaleString("es-EC", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td><td class="num">#${a.journal_id}</td><td style="font-family:var(--mono);font-size:11px">${esc(a.head_hash.slice(0, 16))}…</td><td style="font-size:12px">${esc(a.calendar.replace(/^https?:\/\//, ""))}</td>
+        <td>${a.status === "submitted" ? `<a class="btn sm" href="${esc(A.api.replace(/\/$/, ""))}/v1/oracle/anchors/${a.id}.ots" target="_blank" rel="noopener">Descargar .ots</a>` : `<span class="pill void" title="${esc(a.error ?? "")}">Error</span>`}</td></tr>`).join("")}</tbody></table></div>
+        <p class="faint" style="font-size:12px;margin:8px 0 0">Cada sello prueba que el libro tenía exactamente esa huella en esa fecha. Se verifica en opentimestamps.org o con <code>ots verify</code>; Bitcoin lo confirma en unas horas.</p>`
+        : `<p class="muted" style="font-size:13px">Todavía no hay sellos. Se hace uno cada ${t.config.anchorEveryHours ?? 24} h si hubo asientos nuevos, o con "Sellar en Bitcoin". No necesita billetera ni cripto: OpenTimestamps es gratis.</p>`}</div>
     <div class="panel" style="margin-top:14px"><h2>Libro contable <small>últimos asientos · cada uno guarda el hash del anterior</small></h2>
       <div class="tablewrap"><table><thead><tr><th>#</th><th>Fecha</th><th>Tipo</th><th>Referencia</th><th>Partidas</th><th>Hash</th></tr></thead><tbody>
       ${J.recent.map((j) => `<tr><td class="num">${j.id}</td><td style="white-space:nowrap">${new Date(j.ts).toLocaleString("es-EC", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td><td>${esc(j.kind.replace(/_/g, " "))}<div class="faint" style="font-size:11px">${esc(j.created_by)}</div></td><td style="font-size:12px">${esc(j.ref ?? "")}</td>
@@ -828,10 +834,20 @@ async function viewTesoreria(el) {
 
   const after = () => route();
   el.querySelector("#tSettle").onclick = (e) => run(e.target, () => api("/admin/treasury/settle", { method: "POST", body: {} }), (x) => `${x.created.length} liquidaciones emitidas`).then(after);
+  el.querySelector("#tAnchor").onclick = (e) => run(e.target, () => api("/admin/treasury/anchor", { method: "POST", body: {} }), (x) => x.anchored ? `Asiento #${x.journalId} sellado en Bitcoin` : `Sin sellar: ${x.reason ?? (x.results ?? []).map((r) => r.error).join("; ")}`).then(after);
+  const us = el.querySelector("#tUsdc");
+  if (us) us.onclick = (e) => run(e.target, () => api("/admin/treasury/usdc/sync", { method: "POST", body: {} }), (x) => `${x.transfers} transferencias leídas · ${x.matched} conciliadas`).then(after);
+  el.querySelectorAll("[data-lg]").forEach((b) => (b.onclick = async () => {
+    const rail = b.dataset.acc === "usdc" ? "usdc" : "bank";
+    const opts = t.casinos.filter((c) => c.rail === rail).map((c) => [c.operatorId, c.name]);
+    if (!opts.length) { toast(`Ningún casino liquida por ${rail === "usdc" ? "USDC" : "banco"}`); return; }
+    const f = await modal({ title: "Registrar como depósito de garantía", ok: "Registrar", fields: [{ id: "op", label: "Casino", type: "select", options: opts }] });
+    if (f) run(null, () => api(`/admin/treasury/bank-lines/${b.dataset.lg}/guarantee`, { method: "POST", body: { operatorId: f.op } }), "Garantía registrada").then(after);
+  }));
   el.querySelector("#tReserve").onclick = async () => {
     const f = await modal({ title: "Reserva de la casa", text: "Capital de la plataforma en el fideicomiso para cubrir lo que pierda la casa. Debe ser al menos su pérdida en el peor escenario.", ok: "Registrar",
-      fields: [{ id: "dir", label: "Movimiento", type: "select", options: [["deposit", "Aporte"], ["withdraw", "Retiro"]] }, { id: "amt", label: "Monto (USD)", type: "number" }, { id: "ref", label: "Referencia bancaria" }] });
-    if (f) run(null, () => api("/admin/treasury/reserve", { method: "POST", body: { direction: f.dir, amountUsd: Number(f.amt), ...(f.ref ? { bankRef: f.ref } : {}) } }), "Movimiento registrado").then(after);
+      fields: [{ id: "dir", label: "Movimiento", type: "select", options: [["deposit", "Aporte"], ["withdraw", "Retiro"]] }, ...(t.usdc?.enabled ? [{ id: "rail", label: "Dónde", type: "select", options: [["bank", "Fideicomiso (banco)"], ["usdc", "Bóveda USDC"]] }] : []), { id: "amt", label: "Monto (USD)", type: "number" }, { id: "ref", label: "Referencia (bancaria o hash de la transacción)" }] });
+    if (f) run(null, () => api("/admin/treasury/reserve", { method: "POST", body: { direction: f.dir, amountUsd: Number(f.amt), ...(f.rail ? { rail: f.rail } : {}), ...(f.ref ? { bankRef: f.ref } : {}) } }), "Movimiento registrado").then(after);
   };
   el.querySelector("#tBank").onclick = async () => {
     const f = await modal({ title: "Cargar extracto del banco", text: "Pega las líneas del extracto del fideicomiso: <code>fecha;referencia;monto;descripción</code> (o con comas). Montos positivos entran, negativos salen. Las transferencias con LIQ-número se concilian solas.", ok: "Conciliar",
@@ -848,8 +864,11 @@ async function viewTesoreria(el) {
     const f = await modal({ title: `Condiciones de ${c.name}`, text: "Si la garantía queda por debajo de lo exigido, si su deuda supera el límite o si tiene una liquidación vencida, sus jugadores no pueden abrir apuestas nuevas (sí vender y cobrar) hasta que se regularice.", ok: "Guardar",
       fields: [{ id: "req", label: "Garantía exigida (USD, 0 = sin exigir)", type: "number", value: String(c.guaranteeRequired / 1e6) },
         { id: "lim", label: "Límite de deuda (USD; vacío = su garantía)", type: "number", value: c.debtLimit == null ? "" : String(c.debtLimit / 1e6) },
+        { id: "rail", label: "Cómo liquida", type: "select", value: c.rail, options: [["bank", "Banco / fideicomiso"], ["usdc", "USDC (bóveda multifirma)"]] },
+        { id: "addr", label: "Dirección USDC del casino (si liquida en USDC)", value: c.usdcAddress ?? "", placeholder: "0x…" },
         { id: "pause", label: "Pausa manual", type: "checkbox", value: c.pausedManual, hint: "Pausar la operación hasta que la quite a mano" }] });
-    if (f) run(null, () => api(`/admin/treasury/casinos/${c.operatorId}`, { method: "PATCH", body: { guaranteeRequiredUsd: Number(f.req || 0), debtLimitUsd: f.lim === "" ? null : Number(f.lim), paused: f.pause } }), "Condiciones guardadas").then(after);
+    if (f) run(null, () => api(`/admin/treasury/casinos/${c.operatorId}`, { method: "PATCH", body: { guaranteeRequiredUsd: Number(f.req || 0), debtLimitUsd: f.lim === "" ? null : Number(f.lim), paused: f.pause,
+      ...(f.addr !== (c.usdcAddress ?? "") ? { usdcAddress: f.addr || null } : {}), ...(f.rail !== c.rail ? { rail: f.rail } : {}) } }), "Condiciones guardadas").then(after);
   }));
   el.querySelectorAll("[data-pay]").forEach((b) => (b.onclick = async () => {
     const f = await modal({ title: `Marcar LIQ-${b.dataset.pay} como pagada`, ok: "Marcar pagada", fields: [{ id: "ref", label: "Referencia de la transferencia" }] });

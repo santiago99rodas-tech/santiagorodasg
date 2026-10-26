@@ -11,7 +11,8 @@
 //   - Informe de reservas y conciliación con el extracto del banco.
 //
 // Cuentas del libro (montos en micro-dólares; positivo = a favor de la plataforma / dinero que tiene):
-//   fideicomiso            dinero en la cuenta fiduciaria (garantías, reserva, liquidaciones)
+//   fideicomiso            dinero en la cuenta fiduciaria (garantías, reserva, liquidaciones por banco)
+//   boveda_usdc            USDC en la bóveda multifirma (casinos que liquidan en USDC; ver chain.ts)
 //   custodia_mm            dinero de los market makers externos (cuenta separada)
 //   casino:<id>            lo que el casino le debe a la plataforma (> 0) o ella a él (< 0)
 //   garantia:<id>          garantía del casino (pasivo: se le debe devolver; saldo negativo)
@@ -26,6 +27,13 @@ import { bad, conflict, notFound } from "../lib/errors.js";
 import { clearingReport } from "./clearing.js";
 import { signed } from "./oracle.js";
 import { riskTotals } from "./marketmaker.js";
+import { usdcInfo, vaultBalance, assertAddress, type ChainTransfer } from "./chain.js";
+
+/** Cuenta del libro donde entra y sale el dinero de un casino según cómo liquida. */
+async function assetAccount(operatorId: string) {
+  const r = await one(pool, "SELECT settlement_rail FROM operators WHERE id=$1", [operatorId]);
+  return r?.settlement_rail === "usdc" ? "boveda_usdc" : "fideicomiso";
+}
 
 const GENESIS = "0".repeat(64);
 const usd = (micro: number) => Math.round(micro) / 1e6;
@@ -102,18 +110,18 @@ export async function moveGuarantee(operatorId: string, amountUsd: number, direc
   if (direction === "withdraw" && amount > (await guaranteeOf(operatorId))) throw conflict("insufficient_guarantee", "El retiro supera la garantía disponible");
   const sign = direction === "deposit" ? 1 : -1;
   await post({ kind: direction === "deposit" ? "garantia_deposito" : "garantia_retiro", ref: bankRef ?? null, by,
-    entries: [{ account: "fideicomiso", amount: sign * amount }, { account: `garantia:${operatorId}`, amount: -sign * amount }],
+    entries: [{ account: await assetAccount(operatorId), amount: sign * amount }, { account: `garantia:${operatorId}`, amount: -sign * amount }],
     memo: `${direction === "deposit" ? "Depósito" : "Retiro"} de garantía de ${operatorId}` });
   await evaluatePauses();
   return { operatorId, guarantee: await guaranteeOf(operatorId) };
 }
 
-export async function moveReserve(amountUsd: number, direction: "deposit" | "withdraw", by: string, bankRef?: string) {
+export async function moveReserve(amountUsd: number, direction: "deposit" | "withdraw", by: string, bankRef?: string, rail: "bank" | "usdc" = "bank") {
   const amount = Math.round(amountUsd * 1e6);
   if (!(amount > 0)) throw bad("invalid_amount", "Indica un monto positivo");
   const sign = direction === "deposit" ? 1 : -1;
-  await post({ kind: "reserva", ref: bankRef ?? null, by, memo: `${direction === "deposit" ? "Aporte a" : "Retiro de"} la reserva de la casa`,
-    entries: [{ account: "fideicomiso", amount: sign * amount }, { account: "capital:reserva_casa", amount: -sign * amount }] });
+  await post({ kind: "reserva", ref: bankRef ?? null, by, memo: `${direction === "deposit" ? "Aporte a" : "Retiro de"} la reserva de la casa${rail === "usdc" ? " (USDC)" : ""}`,
+    entries: [{ account: rail === "usdc" ? "boveda_usdc" : "fideicomiso", amount: sign * amount }, { account: "capital:reserva_casa", amount: -sign * amount }] });
   return { reserve: -(await balanceOf("capital:reserva_casa")) };
 }
 
@@ -134,7 +142,7 @@ export async function recordMmCustody(playerId: number, amount: number, directio
 export async function runSettlement(opts: { to?: Date; onlyDue?: boolean; operatorId?: string } = {}) {
   const to = opts.to ?? new Date();
   const ops = await many(pool, `
-    SELECT o.id, o.name, o.created_at, (SELECT MAX(period_to) FROM settlements s WHERE s.operator_id = o.id) AS last_to
+    SELECT o.id, o.name, o.created_at, o.settlement_rail, o.usdc_address, (SELECT MAX(period_to) FROM settlements s WHERE s.operator_id = o.id) AS last_to
     FROM operators o WHERE o.kind='casino' AND ($1::text IS NULL OR o.id=$1) ORDER BY o.id`, [opts.operatorId ?? null]);
   const created: any[] = [];
   for (const o of ops) {
@@ -151,6 +159,10 @@ export async function runSettlement(opts: { to?: Date; onlyDue?: boolean; operat
       period: { from: from.toISOString(), to: to.toISOString() },
       amountUsd: usd(amount), direction: amount > 0 ? "el casino paga a la plataforma" : amount < 0 ? "la plataforma paga al casino" : "sin saldo",
       paymentReference: `LIQ-${id}`, dueAt: dueAt.toISOString(),
+      payment: o.settlement_rail === "usdc"
+        ? { rail: "usdc", ...usdcInfo(), casinoAddress: o.usdc_address, amountUsdc: (Math.abs(amount) / 1e6).toFixed(6),
+            instructions: amount > 0 ? "Transfiere exactamente este monto de USDC desde la dirección del casino a la bóveda" : amount < 0 ? "La plataforma transfiere este monto de USDC de la bóveda a la dirección del casino" : null }
+        : { rail: "bank", instructions: amount !== 0 ? `Transferencia bancaria con la referencia LIQ-${id}` : null },
       detail: row ? { markets: row.markets, players: row.players, debitedUsd: usd(row.debited), creditedUsd: usd(row.credited), bondsNetUsd: usd(row.bondsNet),
         collectedUsd: usd(row.collected), feesUsd: usd(row.fees), revenueShareBps: row.revenueShareBps, revenueShareUsd: usd(row.revenueShare), playersResultUsd: usd(row.playersResult) } : null,
       guaranteeUsd: usd(await guaranteeOf(o.id)),
@@ -181,7 +193,7 @@ export async function markPaid(id: number, opts: { bankRef: string; by: string; 
   await tx(async (c) => {
     await c.query("UPDATE settlements SET status='paid', paid_at=$2, bank_ref=$3 WHERE id=$1", [id, opts.paidAt ?? new Date(), opts.bankRef.trim()]);
     await post({ kind: "pago_liquidacion", ref: opts.bankRef.trim(), by: opts.by, memo: `Pago de LIQ-${id} (${s.operator_id})`,
-      entries: [{ account: "fideicomiso", amount: remaining }, { account: `casino:${s.operator_id}`, amount: -remaining }] }, c);
+      entries: [{ account: await assetAccount(s.operator_id), amount: remaining }, { account: `casino:${s.operator_id}`, amount: -remaining }] }, c);
   });
   await evaluatePauses();
   return one(pool, "SELECT id, operator_id, amount, status, paid_at, bank_ref FROM settlements WHERE id=$1", [id]);
@@ -218,7 +230,7 @@ export async function markOverdue() {
 // ---------- estado de cada casino y pausa ----------
 
 export async function casinoStatus(operatorId?: string) {
-  const ops = await many(pool, `SELECT id, name, guarantee_required, debt_limit, trading_paused, paused_reason, paused_manual, revenue_share_bps
+  const ops = await many(pool, `SELECT id, name, guarantee_required, debt_limit, trading_paused, paused_reason, paused_manual, revenue_share_bps, settlement_rail, usdc_address
                                 FROM operators WHERE kind='casino' AND ($1::text IS NULL OR id=$1) ORDER BY name`, [operatorId ?? null]);
   const bal = await balances();
   const out = [];
@@ -237,7 +249,7 @@ export async function casinoStatus(operatorId?: string) {
     if (required > 0 && guarantee < required) reasons.push(`garantía incompleta (${usd(guarantee)} de ${usd(required)} USD)`);
     if (limited && debt > limit) reasons.push(`deuda de ${usd(debt)} USD sobre su límite de ${usd(limit)} USD`);
     out.push({
-      operatorId: o.id, name: o.name, guarantee, guaranteeRequired: required, debtLimit: o.debt_limit === null ? null : Number(o.debt_limit),
+      operatorId: o.id, name: o.name, rail: o.settlement_rail, usdcAddress: o.usdc_address, guarantee, guaranteeRequired: required, debtLimit: o.debt_limit === null ? null : Number(o.debt_limit),
       issuedBalance: balance, accrued, debt, overdueOwed: Number(overdue?.owed ?? 0),
       paused: o.trading_paused, pausedReason: o.paused_reason, pausedManual: o.paused_manual, shouldPause: reasons.length > 0, reasons,
     });
@@ -262,9 +274,19 @@ export async function evaluatePauses() {
   return changes;
 }
 
-export async function setOperatorTreasury(operatorId: string, patch: { guaranteeRequiredUsd?: number; debtLimitUsd?: number | null; paused?: boolean; reason?: string }) {
-  const op = await one(pool, "SELECT id FROM operators WHERE id=$1 AND kind='casino'", [operatorId]);
+export async function setOperatorTreasury(operatorId: string, patch: { guaranteeRequiredUsd?: number; debtLimitUsd?: number | null; paused?: boolean; reason?: string; rail?: "bank" | "usdc"; usdcAddress?: string | null }) {
+  const op = await one(pool, "SELECT id, usdc_address FROM operators WHERE id=$1 AND kind='casino'", [operatorId]);
   if (!op) throw notFound("Casino no encontrado");
+  if (patch.usdcAddress !== undefined) await pool.query("UPDATE operators SET usdc_address=$2 WHERE id=$1", [operatorId, patch.usdcAddress ? assertAddress(patch.usdcAddress) : null]);
+  if (patch.rail !== undefined) {
+    const addr = patch.usdcAddress !== undefined ? patch.usdcAddress : op.usdc_address;
+    if (patch.rail === "usdc" && !addr) throw bad("missing_address", "Para liquidar en USDC indica la dirección del casino");
+    // Cambiar de vía con saldo pendiente descuadraría las cuentas: primero se liquida y se paga
+    const open = await one(pool, "SELECT COUNT(*)::int AS n FROM settlements WHERE operator_id=$1 AND status IN ('pending','overdue')", [operatorId]);
+    const g = await guaranteeOf(operatorId);
+    if (open!.n > 0 || g > 0) throw conflict("rail_change_blocked", "Para cambiar la vía de liquidación el casino no puede tener liquidaciones abiertas ni garantía depositada (devuélvela y vuelve a depositarla por la vía nueva)");
+    await pool.query("UPDATE operators SET settlement_rail=$2 WHERE id=$1", [operatorId, patch.rail]);
+  }
   if (patch.guaranteeRequiredUsd !== undefined) await pool.query("UPDATE operators SET guarantee_required=$2 WHERE id=$1", [operatorId, Math.round(patch.guaranteeRequiredUsd * 1e6)]);
   if (patch.debtLimitUsd !== undefined) await pool.query("UPDATE operators SET debt_limit=$2 WHERE id=$1", [operatorId, patch.debtLimitUsd === null ? null : Math.round(patch.debtLimitUsd * 1e6)]);
   if (patch.paused !== undefined) {
@@ -280,7 +302,11 @@ export async function setOperatorTreasury(operatorId: string, patch: { guarantee
 export async function reservesReport() {
   const bal = await balances();
   const sum = (pre: string, f: (v: number) => number) => [...bal].filter(([k]) => k.startsWith(pre)).reduce((a, [, v]) => a + f(v), 0);
-  const fiduciary = bal.get("fideicomiso") ?? 0;
+  const bank = bal.get("fideicomiso") ?? 0;
+  const usdcBook = bal.get("boveda_usdc") ?? 0;
+  const fiduciary = bank + usdcBook;
+  let usdcChain: number | null = null, usdcError: string | null = null;
+  try { usdcChain = await vaultBalance(); } catch (e) { usdcError = (e as Error).message; }
   const guarantees = sum("garantia:", (v) => -v);
   const payableToCasinos = sum("casino:", (v) => Math.max(0, -v));
   const receivableFromCasinos = sum("casino:", (v) => Math.max(0, v));
@@ -294,11 +320,12 @@ export async function reservesReport() {
   const mmValue = Number(mmAccounts?.balances ?? 0) + Number(mmAccounts?.reserved ?? 0) + Number(mmAccounts?.positions ?? 0);
   const obligations = guarantees + payableToCasinos + houseRisk;
   return {
-    fiduciary, guarantees, payableToCasinos, receivableFromCasinos, houseReserve, houseRisk,
+    fiduciary, bank, usdc: { ...usdcInfo(), book: usdcBook, onChain: usdcChain, difference: usdcChain === null ? null : usdcChain - usdcBook, error: usdcError },
+    guarantees, payableToCasinos, receivableFromCasinos, houseReserve, houseRisk,
     obligations, coverage: obligations ? fiduciary / obligations : null, ok: fiduciary >= obligations,
     marketMakers: { custody, accounts: mmValue, ok: custody >= mmValue },
     journal: await journalHead(),
-    note: "Fideicomiso: dinero según el libro (concílialo con el extracto). Obligaciones: garantías que se deben devolver + liquidaciones por pagar a casinos + pérdida de la casa en el peor escenario.",
+    note: "Dinero: fideicomiso (según el libro; concílialo con el extracto) más la bóveda USDC (el saldo real se lee de la cadena). Obligaciones: garantías que se deben devolver + liquidaciones por pagar a casinos + pérdida de la casa en el peor escenario.",
   };
 }
 
@@ -339,6 +366,48 @@ export async function importBankStatement(csv: string, by: string, account = "fi
   return { lines: rows.length, imported, matched, unmatched: imported - matched };
 }
 
+// ---------- USDC: conciliación con la cadena ----------
+
+/**
+ * Recibe las transferencias de la bóveda leídas de la cadena (chain.syncUsdc), las guarda como líneas
+ * de la cuenta "usdc" y las cruza con las liquidaciones de los casinos que liquidan en USDC:
+ * lo que entra desde la dirección del casino por el monto exacto que debe, o lo que sale hacia su
+ * dirección por el monto exacto que se le debe, marca pagada la liquidación (referencia = hash de la tx).
+ */
+export async function ingestChainTransfers(transfers: ChainTransfer[]) {
+  const casinos = await many(pool, "SELECT id, usdc_address FROM operators WHERE settlement_rail='usdc' AND usdc_address IS NOT NULL");
+  const byAddr = new Map(casinos.map((c) => [String(c.usdc_address).toLowerCase(), c.id as string]));
+  let matched = 0;
+  for (const t of transfers) {
+    const counterparty = t.amount > 0 ? t.from : t.to;
+    const ins = await one(pool, `INSERT INTO bank_lines (account, date, reference, amount, description, status) VALUES ('usdc',$1,$2,$3,$4,'unmatched')
+                                 ON CONFLICT DO NOTHING RETURNING id`,
+      [t.date, `${t.txHash}:${t.logIndex}`, t.amount, `${t.amount > 0 ? "de" : "a"} ${counterparty} · bloque ${t.block}`]);
+    if (!ins) continue;
+    const op = byAddr.get(counterparty);
+    if (!op) continue;
+    const s = await one(pool, `SELECT id FROM settlements WHERE operator_id=$1 AND status IN ('pending','overdue') AND amount - covered_from_guarantee = $2
+                               ORDER BY id LIMIT 1`, [op, t.amount]);
+    if (!s) continue;
+    await markPaid(s.id, { bankRef: t.txHash, by: "cadena", paidAt: new Date(t.date) });
+    await pool.query("UPDATE bank_lines SET status='matched', settlement_id=$2 WHERE id=$1", [ins.id, s.id]);
+    matched++;
+  }
+  return { matched };
+}
+
+/** Una línea sin conciliar (del banco o de la cadena) que en realidad es un depósito de garantía. */
+export async function guaranteeFromLine(lineId: number, operatorId: string, by: string) {
+  const l = await one(pool, "SELECT * FROM bank_lines WHERE id=$1 AND status='unmatched'", [lineId]);
+  if (!l) throw notFound("Línea sin conciliar no encontrada");
+  if (Number(l.amount) <= 0) throw bad("not_a_deposit", "Solo un ingreso puede ser un depósito de garantía");
+  const expected = l.account === "usdc" ? "boveda_usdc" : "fideicomiso";
+  if ((await assetAccount(operatorId)) !== expected) throw conflict("rail_mismatch", `El casino liquida por ${expected === "boveda_usdc" ? "banco" : "USDC"}: esta línea es de la otra vía`);
+  const r = await moveGuarantee(operatorId, Number(l.amount) / 1e6, "deposit", by, String(l.reference).split(":")[0]);
+  await pool.query("UPDATE bank_lines SET status='matched' WHERE id=$1", [lineId]);
+  return r;
+}
+
 // ---------- resumen ----------
 
 export async function treasuryOverview() {
@@ -346,8 +415,10 @@ export async function treasuryOverview() {
   const settlements = await many(pool, `SELECT s.id, s.operator_id, o.name, s.period_from, s.period_to, s.amount, s.status, s.due_at, s.paid_at, s.bank_ref, s.covered_from_guarantee
                                         FROM settlements s JOIN operators o ON o.id=s.operator_id ORDER BY s.id DESC LIMIT 100`);
   const unmatched = await many(pool, "SELECT * FROM bank_lines WHERE status='unmatched' ORDER BY date DESC, id DESC LIMIT 50");
+  const anchors = await many(pool, "SELECT id, journal_id, head_hash, method, calendar, status, error, created_at FROM anchors ORDER BY id DESC LIMIT 20");
   const recent = await many(pool, "SELECT id, ts, kind, ref, entries, memo, created_by, hash FROM journal ORDER BY id DESC LIMIT 30");
-  return { casinos, reserves, journal: { ...journal, recent }, settlements, unmatchedBankLines: unmatched, config: config.treasury };
+  return { casinos, reserves, journal: { ...journal, recent }, settlements, unmatchedBankLines: unmatched, anchors, usdc: usdcInfo(),
+    config: { ...config.treasury, anchorEnabled: config.anchor.enabled, anchorEveryHours: config.anchor.everyHours } };
 }
 
 export async function statementOf(id: number, operatorId?: string) {

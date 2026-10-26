@@ -29,7 +29,7 @@ await check("salud y base de datos", async () => {
   must(r.status === 200, `HTTP ${r.status}: ${r.text.slice(0, 200)}`);
   const h = r.json();
   must(h.db === "ok", "la base no responde");
-  must(h.migrations >= 7, `solo ${h.migrations} migraciones aplicadas (se esperan 7 o más)`);
+  must(h.migrations >= 8, `solo ${h.migrations} migraciones aplicadas (se esperan 8 o más)`);
   return `${h.migrations} migraciones, ${h.openMarkets} mercados abiertos${h.version ? `, versión ${h.version}` : ""}`;
 });
 await check("catálogo", async () => {
@@ -56,6 +56,10 @@ await check("oráculo firmado", async () => {
   const ok = verify(null, Buffer.from(r.text), createPublicKey(keys.keys[0].publicKeyPem), Buffer.from(sig!, "base64"));
   must(ok, "la firma no verifica con la clave pública publicada");
   return `clave ${keys.keys[0].kid}, ${r.json().data.count} mercados`;
+});
+await check("sellos del libro en Bitcoin", async () => {
+  const a = (await get("/v1/oracle/anchors")).json().data.anchors;
+  return a.length ? `${a.length} sellos, el último ${new Date(a[0].at).toLocaleString("es")}` : "todavía ninguno (el primero se hace en la próxima hora si hay asientos)";
 });
 await check("historial del oráculo", async () => {
   const t = (await get("/v1/oracle/track-record")).json().data;
@@ -88,7 +92,9 @@ if (!adminKey) {
     const j = (await get("/admin/treasury/journal?limit=1", h)).json();
     must(j.verify.ok, `cadena rota desde el asiento #${j.verify.brokenAt}: ${j.verify.reason}`);
     const r = (await get("/admin/treasury/reserves", h)).json();
-    return `${j.verify.entries} asientos íntegros · cobertura ${r.coverage == null ? "sin obligaciones" : Math.round(r.coverage * 100) + "%"}`;
+    must(!r.usdc?.error, `no se pudo leer la bóveda USDC: ${r.usdc?.error}`);
+    const usdc = r.usdc?.enabled ? ` · bóveda USDC ${r.usdc.onChain / 1e6} en la cadena, ${r.usdc.book / 1e6} en el libro` : "";
+    return `${j.verify.entries} asientos íntegros · cobertura ${r.coverage == null ? "sin obligaciones" : Math.round(r.coverage * 100) + "%"}${usdc}`;
   });
   await check("market makers externos", async () => {
     const m = (await get("/admin/market-makers", h)).json();

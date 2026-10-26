@@ -18,6 +18,7 @@ import { listEvents } from "../services/marketdata.js";
 import { listMarketMakers, createMarketMaker, moveFunds, setMarketMaker } from "../services/marketmakers.js";
 import { clearingReport } from "../services/clearing.js";
 import * as treasury from "../services/treasury.js";
+import * as chain from "../services/chain.js";
 import { toxicityReport, setSurchargeOverride, setShock } from "../services/toxicity.js";
 import { integrityReport, setExternalRef, addReferencePrice, refreshExternalPrices } from "../services/integrity.js";
 
@@ -238,9 +239,13 @@ export async function adminRoutes(app: FastifyInstance) {
     const b = parse(Money, req.body);
     return treasury.moveGuarantee(req.params.id, b.amountUsd, b.direction, adminUser(req), b.bankRef);
   });
-  app.post("/admin/treasury/reserve", async (req) => { const b = parse(Money, req.body); return treasury.moveReserve(b.amountUsd, b.direction, adminUser(req), b.bankRef); });
+  app.post("/admin/treasury/reserve", async (req) => {
+    const b = parse(Money.extend({ rail: z.enum(["bank", "usdc"]).optional() }), req.body);
+    return treasury.moveReserve(b.amountUsd, b.direction, adminUser(req), b.bankRef, b.rail);
+  });
   app.patch<{ Params: { id: string } }>("/admin/treasury/casinos/:id", async (req) => {
-    const b = parse(z.object({ guaranteeRequiredUsd: z.number().min(0).optional(), debtLimitUsd: z.number().min(0).nullable().optional(), paused: z.boolean().optional(), reason: z.string().max(200).optional() }), req.body);
+    const b = parse(z.object({ guaranteeRequiredUsd: z.number().min(0).optional(), debtLimitUsd: z.number().min(0).nullable().optional(), paused: z.boolean().optional(), reason: z.string().max(200).optional(),
+      rail: z.enum(["bank", "usdc"]).optional(), usdcAddress: z.string().max(42).nullable().optional() }), req.body);
     return treasury.setOperatorTreasury(req.params.id, b);
   });
   app.post("/admin/treasury/bank-statements", async (req) => {
@@ -256,6 +261,13 @@ export async function adminRoutes(app: FastifyInstance) {
     entries: await many(pool, "SELECT * FROM journal ORDER BY id DESC LIMIT $1", [Math.min(Number((req.query as any).limit ?? 200), 2000)]),
   }));
   app.get("/admin/treasury/reserves", async () => treasury.reservesReport());
+  app.post<{ Params: { id: string } }>("/admin/treasury/bank-lines/:id/guarantee", async (req) => {
+    const b = parse(z.object({ operatorId: z.string() }), req.body);
+    return treasury.guaranteeFromLine(Number(req.params.id), b.operatorId, adminUser(req));
+  });
+  // Modelo mixto: anclaje en Bitcoin y bóveda USDC
+  app.post("/admin/treasury/anchor", async () => chain.anchorJournal({ force: true }));
+  app.post("/admin/treasury/usdc/sync", async () => chain.syncUsdc(treasury.ingestChainTransfers));
 
   // ---------- Calibración, sesgo e integridad ----------
   app.get("/admin/integrity", async (req) => {

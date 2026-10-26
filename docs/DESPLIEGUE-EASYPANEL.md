@@ -8,7 +8,7 @@ Easypanel publica la plataforma con Docker en tu propio servidor. Un proyecto ll
 | `api` | App (GitHub + Dockerfile) | API, módulo del jugador (`/embed/`), back-office (`/admin/`), oráculo (`/v1/oracle`) y API de market makers (`/mm/v1`) |
 | `casino` (opcional) | App (GitHub + Dockerfile) | Casino de prueba con billetera de referencia, para demos |
 
-Al primer arranque, la API crea las tablas (7 migraciones) y carga las categorías, las fuentes y los 702 mercados del catálogo. No hay que correr nada a mano.
+Al primer arranque, la API crea las tablas (8 migraciones) y carga las categorías, las fuentes y los 702 mercados del catálogo. No hay que correr nada a mano.
 
 > **¿Ya lo tenías desplegado?** Ve directo a [Actualizar un despliegue existente](#actualizar-un-despliegue-existente). Hay un cambio que puede frenar el arranque si no lo haces antes.
 
@@ -60,7 +60,7 @@ Te da tres líneas: `ADMIN_API_KEY`, `SESSION_SECRET` y `ORACLE_PRIVATE_KEY`. Gu
 ```
 migración aplicada: 001_init.sql
 …
-migración aplicada: 007_tesoreria.sql
+migración aplicada: 008_blockchain.sql
 catálogo: 702 eventos creados, 0 omitidos
 ```
 
@@ -80,7 +80,7 @@ npm run smoke -- https://predicciones.bo-sio.com <ADMIN_API_KEY>
 Revisa salud y base, catálogo, módulo, back-office, la firma del oráculo, el market maker de la casa, la protección contra informados, la liquidación y los market makers externos. Debe terminar en `Todo en orden`.
 
 A mano:
-- `https://predicciones.bo-sio.com/health` → `{"ok":true,"db":"ok","migrations":7,…}`
+- `https://predicciones.bo-sio.com/health` → `{"ok":true,"db":"ok","migrations":8,…}`
 - `https://predicciones.bo-sio.com/admin/` → back-office (entra con `ADMIN_API_KEY`)
 - `https://predicciones.bo-sio.com/v1/oracle` → índice del oráculo, con la cabecera `X-Oracle-Signature`
 
@@ -119,13 +119,13 @@ A mano:
 
 ## Actualizar un despliegue existente
 
-Las versiones nuevas (market maker v2, protección contra informados, oráculo con fianzas, P2P y tesorería) agregan 5 migraciones. Se aplican solas al arrancar y no tocan los datos existentes. Lo comprobé con una base de la versión anterior que tenía apuestas y resoluciones pendientes.
+Las versiones nuevas (market maker v2, protección contra informados, oráculo con fianzas, P2P, tesorería y modelo mixto) agregan 6 migraciones. Se aplican solas al arrancar y no tocan los datos existentes. Lo comprobé con una base de la versión anterior que tenía apuestas y resoluciones pendientes.
 
 1. **Antes de desplegar**, revisa las variables de `api`:
    - **`ADMIN_API_KEY` y `SESSION_SECRET` deben tener 24 caracteres o más.** Con menos, la versión nueva no arranca en producción. Si tu clave actual es corta, genera otra con `npm run gen:secrets`. Cambiar `SESSION_SECRET` cierra las sesiones abiertas de los jugadores: el casino les abre una nueva al volver a entrar a la pestaña.
    - Agrega `ORACLE_PRIVATE_KEY`.
    - Si usas el casino de prueba, agrégale `HEALTH_PORT=4000` y cambia su comando a `node --import tsx mock-casino/server.ts`.
-2. **Deploy**. En los registros deben aparecer las migraciones `003_market_maker.sql` a `007_tesoreria.sql`. El catálogo no se vuelve a cargar.
+2. **Deploy**. En los registros deben aparecer las migraciones `003_market_maker.sql` a `008_blockchain.sql`. El catálogo no se vuelve a cargar.
 3. Corre `npm run smoke -- https://predicciones.bo-sio.com <ADMIN_API_KEY>`.
 
 **Qué cambia para los casinos ya integrados:**
@@ -149,5 +149,5 @@ Las versiones nuevas (market maker v2, protección contra informados, oráculo c
 - **Apagado ordenado.** En cada redeploy el contenedor recibe SIGTERM: deja de aceptar peticiones, frena las tareas programadas, espera las que están en curso y cierra la base.
 - **Recursos.** Recién arrancada, con el catálogo completo, usó unos 70 MB de RAM en la prueba. Con tráfico sube; un límite de 512 MB y 1 vCPU alcanzan para empezar.
 - **Auto Deploy.** Si lo activas, cada push a la rama vuelve a desplegar. Los datos no se pierden: el catálogo solo se carga si la base está vacía (`SEED_CATALOG=false` lo desactiva siempre).
-- **Salida a internet.** El servidor debe poder leer RSS, Google Trends, GDELT y la API de Polymarket (referencias externas). Revisa en el back-office (*Fuentes*) que ninguna quede en error.
+- **Salida a internet.** El servidor debe poder leer RSS, Google Trends, GDELT, la API de Polymarket (referencias externas) y los calendarios de OpenTimestamps (sellos en Bitcoin); y el nodo de USDC si usas esa vía. Revisa en el back-office (*Fuentes*) que ninguna quede en error.
 - **Versión visible en `/health`.** En Easypanel, en *Build Args*, puedes poner `APP_VERSION=<lo que quieras>` (por ejemplo la fecha) para saber qué versión está corriendo.

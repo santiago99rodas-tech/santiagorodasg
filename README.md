@@ -7,7 +7,7 @@ Plataforma de mercados de predicción al estilo Polymarket, pensada para integra
 - **Información → preguntas**: ingesta de periódicos, revistas, Google Trends, GDELT y señales de redes sociales; detección de tendencias y preguntas generadas con IA (Claude) que pasan por moderación.
 - **Resolución con fianzas** al estilo del oráculo de UMA: la casa (IA o moderador) o un jugador propone el resultado con una fianza, cualquier jugador puede disputarlo con la suya, y quien tenía razón se queda con parte de la fianza del otro. La IA puede proponer resultados investigando en la web.
 - **P2P**: un solo libro para los jugadores de todos los casinos, con liquidación entre casinos (la plataforma compensa quién le debe a quién), API para market makers externos con saldo propio y reembolso, y la casa como respaldo ([detalle](docs/P2P.md)).
-- **Tesorería sin blockchain**: liquidación periódica por casino con estado de cuenta firmado, garantías en un fideicomiso, pausa automática del casino que no paga, libro contable encadenado con hash, informe de reservas y conciliación con el extracto del banco ([detalle](docs/TESORERIA.md)).
+- **Tesorería sin blockchain**: liquidación periódica por casino con estado de cuenta firmado, garantías en un fideicomiso, pausa automática del casino que no paga, libro contable encadenado con hash y sellado cada día en Bitcoin, informe de reservas y conciliación con el extracto del banco; vía opcional de liquidación en USDC con bóveda multifirma ([detalle](docs/TESORERIA.md)).
 - **Oráculo público**: `/v1/oracle` publica la probabilidad de cada mercado firmada con Ed25519, junto con su historial de calibración ([detalle](docs/ORACULO.md)).
 - **Market maker de la casa** para que siempre haya liquidez: precio que aprende del flujo (LMSR), spread Avellaneda-Stoikov, liquidez que baja cerca del cierre, límites de pérdida y botón de pánico. Protección contra apostadores informados: recargo según su markout, spread asimétrico y freno de emergencia. Probado con un simulador de jugadores ([detalle](docs/MARKET-MAKER.md)).
 - **Módulo embebible** (iframe) con dashboards, gráficas, libro de órdenes, apuestas en vivo y "Mis predicciones".
@@ -71,7 +71,7 @@ Sirve para mostrar el producto a casinos sin desplegar nada. Se reinicia al reca
 ```bash
 cd server
 createdb predicciones_test        # una sola vez
-npm test                          # 65 pruebas: motor, market maker, protección contra informados, trading, billetera, resolución, ingesta, IA (con cliente simulado), integridad y API
+npm test                          # 68 pruebas: motor, market maker, protección contra informados, trading, billetera, resolución, ingesta, IA (con cliente simulado), integridad y API
 npm run sim                       # simulador: market maker v1, v2 y v2 con protección en 8 escenarios
 npm run typecheck
 ```

@@ -47,6 +47,23 @@ export const config = {
     autoCollectGuarantee: str("TREASURY_AUTO_COLLECT_GUARANTEE", "false") === "true", // cobrar de la garantía al vencer
     jobEveryMin: num("TREASURY_JOB_EVERY_MIN", 30),
   },
+  // Anclaje del libro contable en Bitcoin con OpenTimestamps (gratis, sin billetera)
+  anchor: {
+    enabled: str("ANCHOR_ENABLED", "true") === "true",
+    everyHours: num("ANCHOR_EVERY_HOURS", 24),
+    calendars: str("ANCHOR_CALENDARS", "https://a.pool.opentimestamps.org,https://b.pool.opentimestamps.org").split(",").map((x) => x.trim()).filter(Boolean),
+  },
+  // Vía de liquidación en USDC (solo lectura de la cadena: no guarda llaves)
+  usdc: {
+    rpcUrl: process.env.USDC_RPC_URL || "",
+    chain: str("USDC_CHAIN", "polygon"),
+    token: process.env.USDC_TOKEN_ADDRESS || "",
+    vault: (process.env.USDC_VAULT_ADDRESS || "").toLowerCase(),
+    confirmations: num("USDC_CONFIRMATIONS", 20),
+    startBlock: process.env.USDC_START_BLOCK ? Number(process.env.USDC_START_BLOCK) : null,
+    maxRange: num("USDC_MAX_BLOCK_RANGE", 2000),
+    syncEveryMin: num("USDC_SYNC_EVERY_MIN", 5),
+  },
   oracle: {
     name: str("ORACLE_NAME", "Predicciones"),
     privateKeyPem: (process.env.ORACLE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),

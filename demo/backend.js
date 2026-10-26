@@ -968,7 +968,7 @@
       if (required > 0 && guarantee < required) reasons.push(`garantía incompleta (${guarantee / 1e6} de ${required / 1e6} USD)`);
       if (limited && debt > limit) reasons.push(`deuda de ${(debt / 1e6).toFixed(2)} USD sobre su límite de ${(limit / 1e6).toFixed(2)} USD`);
       if (!o.paused_manual) { o.trading_paused = reasons.length > 0; o.paused_reason = reasons.join("; ") || null; }
-      return { operatorId: o.id, name: o.name, guarantee, guaranteeRequired: required, debtLimit: o.debt_limit ?? null, issuedBalance: issued, accrued, debt,
+      return { operatorId: o.id, name: o.name, rail: o.settlement_rail ?? "bank", usdcAddress: o.usdc_address ?? null, guarantee, guaranteeRequired: required, debtLimit: o.debt_limit ?? null, issuedBalance: issued, accrued, debt,
         overdueOwed: overdue.reduce((a, x) => a + x.amount - x.covered_from_guarantee, 0), paused: !!o.trading_paused, pausedReason: o.paused_reason ?? null, pausedManual: !!o.paused_manual, reasons };
     });
   }
@@ -977,7 +977,7 @@
     const houseRisk = Math.round(totalWorstLoss() * 1e6), obligations = guarantees + payable + houseRisk;
     const mmAcc = [...S.players.values()].filter((x) => x.isMM).reduce((a, x) => a + x.balance + [...S.orders.values()].filter((o) => o.playerId === x.id && o.status === "open" && o.side === "BUY").reduce((b, o) => b + o.reserved, 0)
       + [...S.positions.values()].filter((p) => p.playerId === x.id).reduce((b, p) => b + p.cost, 0), 0);
-    return { fiduciary, guarantees, payableToCasinos: payable, receivableFromCasinos: jsum("casino:", (v) => Math.max(0, v)), houseReserve: -jbal("capital:reserva_casa"), houseRisk,
+    return { fiduciary, bank: fiduciary, usdc: { enabled: false }, guarantees, payableToCasinos: payable, receivableFromCasinos: jsum("casino:", (v) => Math.max(0, v)), houseReserve: -jbal("capital:reserva_casa"), houseRisk,
       obligations, coverage: obligations ? fiduciary / obligations : null, ok: fiduciary >= obligations, marketMakers: { custody: jbal("custodia_mm"), accounts: mmAcc, ok: jbal("custodia_mm") >= mmAcc },
       journal: { id: T.journal.length, hash: T.journal.at(-1)?.hash ?? "0".repeat(64) }, note: "En la demo el libro vive en tu navegador. En el servidor se guarda en la base y se concilia con el extracto del fideicomiso." };
   }
@@ -1008,7 +1008,8 @@
   setInterval(() => { for (const x of T.settlements) if (x.status === "pending" && new Date(x.due_at) < new Date(now())) x.status = "overdue"; }, 10000);
   route("GET", "/admin/treasury", () => {
     const casinos = tCasinos(), j = jverify();
-    return { casinos, reserves: tReserves(), journal: { ...j, recent: T.journal.slice(-30).reverse() }, settlements: T.settlements.slice().reverse(), unmatchedBankLines: T.bank.filter((b) => b.status === "unmatched"), config: T.cfg };
+    return { casinos, reserves: tReserves(), journal: { ...j, recent: T.journal.slice(-30).reverse() }, settlements: T.settlements.slice().reverse(),
+      unmatchedBankLines: T.bank.filter((b) => b.status === "unmatched").map((b) => ({ account: "fideicomiso", ...b })), anchors: [], usdc: { enabled: false }, config: { ...T.cfg, anchorEnabled: true, anchorEveryHours: 24 } };
   });
   route("POST", "/admin/treasury/settle", () => ({ created: tSettle() }));
   route("POST", "/admin/treasury/settlements/:id/pay", ({ p, b, user }) => { if (!b.bankRef) throw bad("missing_bank_ref", "Indica la referencia de la transferencia"); return tPay(Number(p.id), b.bankRef, user); });
@@ -1036,6 +1037,12 @@
     if (b.guaranteeRequiredUsd !== undefined) o.guarantee_required = Math.round(b.guaranteeRequiredUsd * 1e6);
     if (b.debtLimitUsd !== undefined) o.debt_limit = b.debtLimitUsd === null ? null : Math.round(b.debtLimitUsd * 1e6);
     if (b.paused !== undefined) { o.paused_manual = b.paused; o.trading_paused = b.paused; o.paused_reason = b.paused ? b.reason ?? "pausa manual" : null; }
+    if (b.usdcAddress !== undefined) { if (b.usdcAddress && !/^0x[0-9a-fA-F]{40}$/.test(b.usdcAddress)) throw bad("invalid_address", "Dirección inválida: debe ser 0x seguido de 40 caracteres hexadecimales"); o.usdc_address = b.usdcAddress ? b.usdcAddress.toLowerCase() : null; }
+    if (b.rail !== undefined) {
+      if (b.rail === "usdc" && !o.usdc_address) throw bad("missing_address", "Para liquidar en USDC indica la dirección del casino");
+      if (-jbal(`garantia:${o.id}`) > 0 || T.settlements.some((x) => x.operator_id === o.id && ["pending", "overdue"].includes(x.status))) throw conflict("rail_change_blocked", "Para cambiar la vía de liquidación el casino no puede tener liquidaciones abiertas ni garantía depositada (devuélvela y vuelve a depositarla por la vía nueva)");
+      o.settlement_rail = b.rail;
+    }
     return tCasinos().find((c) => c.operatorId === o.id);
   });
   route("POST", "/admin/treasury/bank-statements", ({ b, user }) => {
@@ -1057,6 +1064,8 @@
   route("POST", "/admin/treasury/bank-lines/:id/ignore", ({ p }) => { const l = T.bank.find((x) => x.id === Number(p.id)); if (l) l.status = "ignored"; return { ok: true }; });
   route("GET", "/admin/treasury/journal", () => ({ verify: jverify(), entries: T.journal.slice().reverse() }));
   route("GET", "/admin/treasury/reserves", () => tReserves());
+  route("POST", "/admin/treasury/anchor", () => ({ anchored: false, reason: "la demo corre en tu navegador y no se conecta a Bitcoin; en el servidor se sella cada día con OpenTimestamps" }));
+  route("GET", "/v1/oracle/anchors", () => ({ oracle: "Predicciones (demo)", keyId: "demo", issuedAt: iso(now()), data: { method: "OpenTimestamps (Bitcoin)", anchors: [] } }));
   route("POST", "/admin/operators", ({ b }) => { const tok = () => Math.random().toString(36).slice(2, 14); const creds = { apiKey: `pk_${tok()}`, apiSecret: `sk_${tok()}${tok()}`, walletSecret: `ws_${tok()}${tok()}` };
     S.operators.push({ id: b.id, name: b.name, api_key: creds.apiKey, wallet_url: b.walletUrl, webhook_url: b.webhookUrl ?? null, currency: "USD", fee_bps: b.feeBps ?? null, theme: b.theme ?? {}, active: true }); return { id: b.id, ...creds }; });
 
