@@ -7,6 +7,7 @@ Plataforma de mercados de predicción al estilo Polymarket, pensada para integra
 - **Información → preguntas**: ingesta de periódicos, revistas, Google Trends, GDELT y señales de redes sociales; detección de tendencias y preguntas generadas con IA (Claude) que pasan por moderación.
 - **Resolución con fianzas** al estilo del oráculo de UMA: la casa (IA o moderador) o un jugador propone el resultado con una fianza, cualquier jugador puede disputarlo con la suya, y quien tenía razón se queda con parte de la fianza del otro. La IA puede proponer resultados investigando en la web.
 - **P2P**: un solo libro para los jugadores de todos los casinos, con liquidación entre casinos (la plataforma compensa quién le debe a quién), API para market makers externos con saldo propio y reembolso, y la casa como respaldo ([detalle](docs/P2P.md)).
+- **Tesorería sin blockchain**: liquidación periódica por casino con estado de cuenta firmado, garantías en un fideicomiso, pausa automática del casino que no paga, libro contable encadenado con hash, informe de reservas y conciliación con el extracto del banco ([detalle](docs/TESORERIA.md)).
 - **Oráculo público**: `/v1/oracle` publica la probabilidad de cada mercado firmada con Ed25519, junto con su historial de calibración ([detalle](docs/ORACULO.md)).
 - **Market maker de la casa** para que siempre haya liquidez: precio que aprende del flujo (LMSR), spread Avellaneda-Stoikov, liquidez que baja cerca del cierre, límites de pérdida y botón de pánico. Protección contra apostadores informados: recargo según su markout, spread asimétrico y freno de emergencia. Probado con un simulador de jugadores ([detalle](docs/MARKET-MAKER.md)).
 - **Módulo embebible** (iframe) con dashboards, gráficas, libro de órdenes, apuestas en vivo y "Mis predicciones".
@@ -70,7 +71,7 @@ Sirve para mostrar el producto a casinos sin desplegar nada. Se reinicia al reca
 ```bash
 cd server
 createdb predicciones_test        # una sola vez
-npm test                          # 58 pruebas: motor, market maker, protección contra informados, trading, billetera, resolución, ingesta, IA (con cliente simulado), integridad y API
+npm test                          # 65 pruebas: motor, market maker, protección contra informados, trading, billetera, resolución, ingesta, IA (con cliente simulado), integridad y API
 npm run sim                       # simulador: market maker v1, v2 y v2 con protección en 8 escenarios
 npm run typecheck
 ```
@@ -93,6 +94,7 @@ npm run typecheck
 | Riesgo de la casa | Estado del market maker (v2), pérdida en el peor escenario por evento y total frente a sus límites, liquidez y spread por evento, inventario por mercado, recotizar y botón de pánico; apostadores con ventaja (markout, puntaje y recargo, ajustable a mano) y mercados en freno |
 | Casinos | Alta de operadores con sus credenciales (se muestran una sola vez) y su revenue share |
 | Market makers | Market makers externos: alta con credenciales, depósitos y retiros de su saldo, suspender, volumen como maker y reembolsos |
+| Tesorería | Liquidaciones con estado y estado de cuenta firmado, garantías y límites por casino (con pausa automática), reserva de la casa, conciliación con el extracto del banco y libro contable encadenado |
 | Liquidación | Cuánto le debe cada casino a la plataforma o ella a él por los mercados resueltos, y quién le compró a quién (entre casinos, con market makers, con la casa) |
 
 **Montarlo en bo-sio.com** (o en cualquier back-office existente), de tres maneras:
@@ -129,4 +131,5 @@ Las tareas programadas (ingesta, generación, cierre, resolución, market maker,
 - [Market maker v2, protección contra informados y simulador](docs/MARKET-MAKER.md)
 - [Oráculo: probabilidades públicas y resolución con fianzas](docs/ORACULO.md)
 - [P2P: libro compartido, market makers externos y liquidación](docs/P2P.md)
+- [Tesorería: dónde vive el dinero, liquidaciones, garantías y libro contable](docs/TESORERIA.md)
 - [Despliegue en Easypanel](docs/DESPLIEGUE-EASYPANEL.md): claves con `npm run gen:secrets`, variables en `deploy/easypanel.env.example` y revisión del despliegue con `npm run smoke`

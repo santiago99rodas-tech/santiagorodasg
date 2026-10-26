@@ -7,6 +7,7 @@ import { aiEnabled } from "./ai/claude.js";
 import { closeExpired, finalizeDue } from "./services/resolution.js";
 import { refreshQuotes, updateFairPrices } from "./services/marketmaker.js";
 import { scoreMarkouts } from "./services/toxicity.js";
+import { runSettlement, markOverdue, evaluatePauses } from "./services/treasury.js";
 import { retryCredits } from "./services/wallet.js";
 import { deliverWebhooks } from "./services/webhooks.js";
 import { pool } from "./db/pool.js";
@@ -33,6 +34,8 @@ export function startJobs() {
   every("webhooks", 15_000, deliverWebhooks);
   every("market-maker", config.jobs.mmRefreshEverySec * 1000, async () => { await updateFairPrices(); await refreshQuotes(); });
   if (config.toxicity.enabled) every("markouts", 5 * 60_000, () => scoreMarkouts());
+  // Tesorería: emite las liquidaciones que tocan, marca vencidas y pausa o reanuda casinos
+  every("tesoreria", config.treasury.jobEveryMin * 60_000, async () => { await runSettlement({ onlyDue: true }); await markOverdue(); await evaluatePauses(); });
   every("snapshot-precios", 15 * 60_000, () => pool.query("INSERT INTO price_history (market_id, ts, price, fair) SELECT id, date_trunc('minute', now()), last_price, COALESCE(fair_exact * 100, fair_price) FROM markets WHERE status='open' ON CONFLICT DO NOTHING"));
   every("referencias-externas", 30 * 60_000, () => refreshExternalPrices());
   every("ingesta", config.jobs.ingestEveryMin * 60_000, () => runIngest());

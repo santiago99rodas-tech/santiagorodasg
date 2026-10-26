@@ -57,9 +57,9 @@ export interface OrderResult {
 }
 
 async function feeBpsFor(playerId: number) {
-  const r = await one(pool, "SELECT p.is_house, o.fee_bps, o.kind FROM players p LEFT JOIN operators o ON o.id=p.operator_id WHERE p.id=$1", [playerId]);
+  const r = await one(pool, "SELECT p.is_house, o.fee_bps, o.kind, o.trading_paused FROM players p LEFT JOIN operators o ON o.id=p.operator_id WHERE p.id=$1", [playerId]);
   if (!r) throw notFound("Jugador no encontrado");
-  return { feeBps: r.is_house ? 0 : r.fee_bps ?? config.takerFeeBps, internal: r.kind === "internal" };
+  return { feeBps: r.is_house ? 0 : r.fee_bps ?? config.takerFeeBps, internal: r.kind === "internal", paused: !!r.trading_paused };
 }
 
 export function placeOrder(playerId: number, input: PlaceOrderInput): Promise<OrderResult> {
@@ -78,7 +78,10 @@ async function placeLocked(playerId: number, input: PlaceOrderInput): Promise<Or
   const book = bookOf(market.id);
   const kind: Kind = kindOf(input.side, input.outcome);
   const buy = isBuy(kind);
-  const { feeBps, internal } = await feeBpsFor(playerId);
+  const { feeBps, internal, paused } = await feeBpsFor(playerId);
+  // Casino con la operación pausada por tesorería (liquidación vencida, garantía o deuda): sus jugadores
+  // pueden vender y cobrar, pero no abrir apuestas nuevas
+  if (paused && isBuy(kindOf(input.side, input.outcome))) throw conflict("operator_paused", "Las apuestas nuevas están pausadas temporalmente en este casino. Puedes vender tus posiciones y cobrar tus premios.");
   // Recargo por apostar con información (services/toxicity.ts): solo en lo que se le compra a la casa
   const house = await houseAccount();
   const surcharge = feeBps > 0 ? await playerSurchargeBps(playerId) : 0;

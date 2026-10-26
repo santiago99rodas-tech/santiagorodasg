@@ -40,6 +40,13 @@ export const config = {
     backstopMinShares: num("HOUSE_BACKSTOP_MIN_SHARES", 200),
     backstopSpreadMult: num("HOUSE_BACKSTOP_SPREAD_MULT", 2),
   },
+  // Tesorería (docs/TESORERIA.md)
+  treasury: {
+    settlementEveryHours: num("SETTLEMENT_EVERY_HOURS", 24), // cada cuánto se emite la liquidación de cada casino
+    paymentTermHours: num("SETTLEMENT_PAYMENT_TERM_HOURS", 48), // plazo para pagarla
+    autoCollectGuarantee: str("TREASURY_AUTO_COLLECT_GUARANTEE", "false") === "true", // cobrar de la garantía al vencer
+    jobEveryMin: num("TREASURY_JOB_EVERY_MIN", 30),
+  },
   oracle: {
     name: str("ORACLE_NAME", "Predicciones"),
     privateKeyPem: (process.env.ORACLE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),

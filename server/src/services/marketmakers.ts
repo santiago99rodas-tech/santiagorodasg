@@ -9,6 +9,7 @@ import { bad, conflict, notFound } from "../lib/errors.js";
 import { randomToken } from "../lib/crypto.js";
 import { placeOrder, cancelOrder, cancelAllOf, type PlaceOrderInput } from "./trading.js";
 import * as wallet from "./wallet.js";
+import { recordMmCustody } from "./treasury.js";
 
 export async function createMarketMaker(input: { name: string; rebateBps?: number | null }) {
   const slug = input.name.toLowerCase().normalize("NFD").replace(/[^\w]+/g, "-").replace(/^-|-$/g, "").slice(0, 30) || "mm";
@@ -30,6 +31,7 @@ export async function moveFunds(playerId: number, usd: number, direction: "depos
   const txId = `mm_${direction}_${playerId}_${Date.now()}`;
   if (direction === "deposit") await wallet.credit(playerId, amount, { reason: `mm_deposit:${by}`, txId });
   else await wallet.debit(playerId, amount, { reason: `mm_withdrawal:${by}`, txId });
+  await recordMmCustody(playerId, amount, direction, by); // asiento en el libro de tesorería (cuenta de custodia)
   return { playerId, balance: await wallet.balance(playerId) };
 }
 

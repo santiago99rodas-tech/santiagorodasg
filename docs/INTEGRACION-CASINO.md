@@ -233,6 +233,8 @@ El libro de órdenes es compartido por todos los casinos integrados: tus jugador
 
 | Ruta | Descripción |
 |---|---|
+| `GET /operator/v1/treasury` | Tu garantía, deuda, si tu operación está pausada (y por qué) y tus liquidaciones con su referencia de pago `LIQ-<número>` |
+| `GET /operator/v1/treasury/statements/:id` | Estado de cuenta de una liquidación, firmado con Ed25519 (cabecera `X-Oracle-Signature`; clave pública en `/v1/oracle/keys`) |
 | `GET /operator/v1/clearing?from=&to=` | Debitado, acreditado, recaudado neto, comisiones, tu revenue share, resultado de tus jugadores y `due` (> 0: transfieres a la plataforma; < 0: la plataforma te paga) |
 
 ## 9. Errores
@@ -245,5 +247,5 @@ Formato: `{ "error": "codigo", "message": "texto legible en español" }`
 | 401 | `unauthorized`, `bad_signature`, `stale_request`, `session_expired` | Autenticación |
 | 402 | `insufficient_funds` | El casino rechazó el débito por saldo |
 | 404 | `not_found` | No existe |
-| 409 | `market_closed`, `no_liquidity`, `fok_not_filled`, `insufficient_shares`, `duplicate_order`, `stake_limit`, `would_cross` | Estado del mercado o de la orden; `stake_limit` = el jugador superó el máximo comprometido por mercado |
+| 409 | `market_closed`, `no_liquidity`, `fok_not_filled`, `insufficient_shares`, `duplicate_order`, `stake_limit`, `would_cross`, `operator_paused` | Estado del mercado o de la orden; `stake_limit` = el jugador superó el máximo comprometido por mercado; `operator_paused` = tu operación está pausada por tesorería (liquidación vencida, garantía o deuda): tus jugadores pueden vender y cobrar, no abrir apuestas nuevas |
 | 502 | `wallet_error` | La billetera del casino falló |

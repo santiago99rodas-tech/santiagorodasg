@@ -250,7 +250,7 @@ export async function refreshQuotes(marketId?: number) {
 
 // ---------- estado y riesgo ----------
 
-async function riskTotals() {
+export async function riskTotals() {
   const house = await houseAccount();
   const rows = await many(pool, `
     SELECT m.id, m.event_id, e.kind,

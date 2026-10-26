@@ -29,7 +29,7 @@ await check("salud y base de datos", async () => {
   must(r.status === 200, `HTTP ${r.status}: ${r.text.slice(0, 200)}`);
   const h = r.json();
   must(h.db === "ok", "la base no responde");
-  must(h.migrations >= 6, `solo ${h.migrations} migraciones aplicadas (se esperan 6 o más)`);
+  must(h.migrations >= 7, `solo ${h.migrations} migraciones aplicadas (se esperan 7 o más)`);
   return `${h.migrations} migraciones, ${h.openMarkets} mercados abiertos${h.version ? `, versión ${h.version}` : ""}`;
 });
 await check("catálogo", async () => {
@@ -83,6 +83,12 @@ if (!adminKey) {
   await check("liquidación entre casinos", async () => {
     const c = (await get("/admin/clearing", h)).json();
     return `${c.casinos.length} casinos`;
+  });
+  await check("libro contable de tesorería", async () => {
+    const j = (await get("/admin/treasury/journal?limit=1", h)).json();
+    must(j.verify.ok, `cadena rota desde el asiento #${j.verify.brokenAt}: ${j.verify.reason}`);
+    const r = (await get("/admin/treasury/reserves", h)).json();
+    return `${j.verify.entries} asientos íntegros · cobertura ${r.coverage == null ? "sin obligaciones" : Math.round(r.coverage * 100) + "%"}`;
   });
   await check("market makers externos", async () => {
     const m = (await get("/admin/market-makers", h)).json();

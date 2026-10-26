@@ -17,6 +17,7 @@ import { houseAccount } from "../services/house.js";
 import { listEvents } from "../services/marketdata.js";
 import { listMarketMakers, createMarketMaker, moveFunds, setMarketMaker } from "../services/marketmakers.js";
 import { clearingReport } from "../services/clearing.js";
+import * as treasury from "../services/treasury.js";
 import { toxicityReport, setSurchargeOverride, setShock } from "../services/toxicity.js";
 import { integrityReport, setExternalRef, addReferencePrice, refreshExternalPrices } from "../services/integrity.js";
 
@@ -219,6 +220,42 @@ export async function adminRoutes(app: FastifyInstance) {
     return setMarketMaker(Number(req.params.id), b);
   });
   app.get("/admin/clearing", async (req) => clearingReport(req.query as any));
+
+  // ---------- Tesorería ----------
+  const Money = z.object({ direction: z.enum(["deposit", "withdraw"]), amountUsd: z.number().positive(), bankRef: z.string().max(120).optional() });
+  app.get("/admin/treasury", async () => treasury.treasuryOverview());
+  app.post("/admin/treasury/settle", async (req) => ({ created: await treasury.runSettlement({ operatorId: (req.body as any)?.operatorId }) }));
+  app.post<{ Params: { id: string } }>("/admin/treasury/settlements/:id/pay", async (req) => {
+    const b = parse(z.object({ bankRef: z.string().min(1).max(120), paidAt: z.string().optional() }), req.body);
+    return treasury.markPaid(Number(req.params.id), { bankRef: b.bankRef, by: adminUser(req), paidAt: b.paidAt ? new Date(b.paidAt) : undefined });
+  });
+  app.post<{ Params: { id: string } }>("/admin/treasury/settlements/:id/collect", async (req) => treasury.collectFromGuarantee(Number(req.params.id), adminUser(req)));
+  app.get<{ Params: { id: string } }>("/admin/treasury/settlements/:id/statement", async (req, reply) => {
+    const s = await treasury.statementOf(Number(req.params.id));
+    return reply.header("content-type", "application/json; charset=utf-8").header("x-oracle-key-id", s.key_id).header("x-oracle-signature", s.signature).send(s.statement);
+  });
+  app.post<{ Params: { id: string } }>("/admin/treasury/guarantees/:id", async (req) => {
+    const b = parse(Money, req.body);
+    return treasury.moveGuarantee(req.params.id, b.amountUsd, b.direction, adminUser(req), b.bankRef);
+  });
+  app.post("/admin/treasury/reserve", async (req) => { const b = parse(Money, req.body); return treasury.moveReserve(b.amountUsd, b.direction, adminUser(req), b.bankRef); });
+  app.patch<{ Params: { id: string } }>("/admin/treasury/casinos/:id", async (req) => {
+    const b = parse(z.object({ guaranteeRequiredUsd: z.number().min(0).optional(), debtLimitUsd: z.number().min(0).nullable().optional(), paused: z.boolean().optional(), reason: z.string().max(200).optional() }), req.body);
+    return treasury.setOperatorTreasury(req.params.id, b);
+  });
+  app.post("/admin/treasury/bank-statements", async (req) => {
+    const b = parse(z.object({ csv: z.string().min(5).max(2_000_000), account: z.string().max(40).optional() }), req.body);
+    return treasury.importBankStatement(b.csv, adminUser(req), b.account);
+  });
+  app.post<{ Params: { id: string } }>("/admin/treasury/bank-lines/:id/ignore", async (req) => {
+    await pool.query("UPDATE bank_lines SET status='ignored' WHERE id=$1 AND status='unmatched'", [Number(req.params.id)]);
+    return { ok: true };
+  });
+  app.get("/admin/treasury/journal", async (req) => ({
+    verify: await treasury.verifyJournal(),
+    entries: await many(pool, "SELECT * FROM journal ORDER BY id DESC LIMIT $1", [Math.min(Number((req.query as any).limit ?? 200), 2000)]),
+  }));
+  app.get("/admin/treasury/reserves", async () => treasury.reservesReport());
 
   // ---------- Calibración, sesgo e integridad ----------
   app.get("/admin/integrity", async (req) => {

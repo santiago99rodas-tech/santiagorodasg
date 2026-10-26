@@ -1,5 +1,6 @@
 // API servidor-a-servidor para el casino (firmada con HMAC).
 import { clearingReport } from "../services/clearing.js";
+import { casinoStatus, statementOf } from "../services/treasury.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { pool, one, many } from "../db/pool.js";
@@ -52,6 +53,18 @@ export async function operatorRoutes(app: FastifyInstance) {
     const q = req.query as any;
     const r = await clearingReport({ from: q.from, to: q.to, operatorId: req.operator!.id });
     return { from: r.from, to: r.to, ...(r.casinos[0] ?? {}), liquidity: { volume: r.liquidity.volume, betweenCasinos: r.liquidity.betweenCasinos } };
+  });
+
+  // Tesorería del casino: garantía, deuda, estado de la operación y liquidaciones con su estado de cuenta firmado
+  app.get("/operator/v1/treasury", async (req) => {
+    const [status] = await casinoStatus(req.operator!.id);
+    const settlements = await many(pool, `SELECT id, period_from, period_to, amount, status, due_at, paid_at, bank_ref, covered_from_guarantee
+                                          FROM settlements WHERE operator_id=$1 ORDER BY id DESC LIMIT 100`, [req.operator!.id]);
+    return { ...status, settlements: settlements.map((s) => ({ ...s, paymentReference: `LIQ-${s.id}` })) };
+  });
+  app.get<{ Params: { id: string } }>("/operator/v1/treasury/statements/:id", async (req, reply) => {
+    const s = await statementOf(Number(req.params.id), req.operator!.id);
+    return reply.header("content-type", "application/json; charset=utf-8").header("x-oracle-key-id", s.key_id).header("x-oracle-signature", s.signature).send(s.statement);
   });
 
   app.get("/operator/v1/reports/summary", async (req) => {

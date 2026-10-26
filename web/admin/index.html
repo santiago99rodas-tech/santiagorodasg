@@ -191,6 +191,7 @@ a.btn { text-decoration: none; display: inline-block; }
       <a href="#operadores" data-v="operadores">Casinos</a>
       <a href="#mms" data-v="mms">Market makers</a>
       <a href="#liquidacion" data-v="liquidacion">Liquidación</a>
+      <a href="#tesoreria" data-v="tesoreria">Tesorería</a>
     </nav>
     <div class="foot"><span id="whoami"></span><span id="apiInfo"></span><button class="btn sm" id="logout" type="button">Salir</button></div>
   </aside>
@@ -287,7 +288,7 @@ async function refreshCounts() {
 }
 setInterval(() => { if (A.key) refreshCounts(); }, 30000);
 
-const VIEWS = { resumen: viewResumen, disenar: viewDisenar, moderacion: viewModeracion, mercados: viewMercados, resoluciones: viewResoluciones, tendencias: viewTendencias, fuentes: viewFuentes, riesgo: viewRiesgo, operadores: viewOperadores, calibracion: viewCalibracion, oraculo: viewOraculo, mms: viewMms, liquidacion: viewLiquidacion };
+const VIEWS = { resumen: viewResumen, disenar: viewDisenar, moderacion: viewModeracion, mercados: viewMercados, resoluciones: viewResoluciones, tendencias: viewTendencias, fuentes: viewFuentes, riesgo: viewRiesgo, operadores: viewOperadores, calibracion: viewCalibracion, oraculo: viewOraculo, mms: viewMms, liquidacion: viewLiquidacion, tesoreria: viewTesoreria };
 function route() {
   VIEW = (location.hash.slice(1) || "resumen"); if (!VIEWS[VIEW]) VIEW = "resumen";
   document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("on", a.dataset.v === VIEW));
@@ -773,6 +774,99 @@ async function viewMms(el) {
     if (f) run(null, () => api(`/admin/market-makers/${b.dataset.fund}/funds`, { method: "POST", body: { direction: f.dir, amountUsd: Number(f.amt) } }), "Fondos registrados").then(() => route());
   }));
   el.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => run(b, () => api(`/admin/market-makers/${b.dataset.act}`, { method: "PATCH", body: { active: b.dataset.on === "1" } }), b.dataset.on === "1" ? "Market maker activado" : "Market maker suspendido: sus órdenes salieron del libro").then(() => route())));
+}
+
+// ---------- Tesorería ----------
+async function viewTesoreria(el) {
+  const t = await api("/admin/treasury");
+  const R = t.reserves, J = t.journal;
+  const due = t.settlements.filter((x) => x.status === "overdue");
+  const stPill = (x) => ({ pending: `<span class="pill proposed">Pendiente</span>`, paid: `<span class="pill resolved">Pagada</span>`, overdue: `<span class="pill void">Vencida</span>`, covered: `<span class="pill resolved">Cobrada de garantía</span>`, cancelled: `<span class="pill">Anulada</span>` }[x] ?? esc(x));
+  const fday2 = (d) => (d ? new Date(d).toLocaleDateString("es-EC", { day: "numeric", month: "short" }) : "—");
+  el.innerHTML = `<div class="head"><div><h1>Tesorería</h1><p>Dónde está el dinero real y quién le debe a quién. La plata de los jugadores sigue en cada casino; aquí se emite la liquidación de cada uno con su estado de cuenta firmado, se controlan sus garantías en el fideicomiso, se concilia con el extracto del banco y todo queda en un libro contable que no se puede alterar sin que se note.</p></div>
+    <div class="row"><button class="btn" id="tBank">Cargar extracto</button><button class="btn" id="tReserve">Reserva de la casa</button><button class="btn primary" id="tSettle">Liquidar ahora</button></div></div>
+    <div class="kpis" style="margin-bottom:14px">
+      <div class="kpi"><span class="k">Fideicomiso (según libro)</span><span class="v">${money(R.fiduciary)}</span><span class="d">garantías ${money(R.guarantees)} · reserva ${money(R.houseReserve)}</span></div>
+      <div class="kpi ${R.ok ? "" : "alert"}"><span class="k">Cobertura</span><span class="v ${R.ok ? "ok" : "bad"}">${R.coverage == null ? "—" : Math.round(R.coverage * 100) + "%"}</span><span class="d">de ${money(R.obligations)} en obligaciones y riesgo de la casa</span></div>
+      <div class="kpi ${due.length ? "alert" : ""}"><span class="k">Liquidaciones vencidas</span><span class="v">${due.length}</span><span class="d">por cobrar a casinos ${money(R.receivableFromCasinos)}</span></div>
+      <div class="kpi ${J.ok ? "" : "alert"}"><span class="k">Libro contable</span><span class="v ${J.ok ? "ok" : "bad"}">${J.ok ? "Íntegro" : "ROTO"}</span><span class="d">${J.ok ? `${J.entries} asientos · ${esc((J.head ?? "").slice(0, 12))}…` : `desde el asiento #${J.brokenAt}: ${esc(J.reason)}`}</span></div>
+    </div>
+    <div class="tablewrap"><table><thead><tr><th>Casino</th><th class="num">Garantía</th><th class="num">Deuda</th><th class="num">Límite</th><th>Operación</th><th></th></tr></thead><tbody>
+      ${t.casinos.map((c) => `<tr><td><div class="t">${esc(c.name)}</div><span class="faint" style="font-size:11px">${esc(c.operatorId)}</span></td>
+        <td class="num">${money(c.guarantee)}${c.guaranteeRequired ? `<br><span class="faint" style="font-size:11px">exigida ${money(c.guaranteeRequired)}</span>` : ""}</td>
+        <td class="num">${money(c.debt)}<br><span class="faint" style="font-size:11px">emitida ${money(Math.max(0, c.issuedBalance))} · en curso ${money(Math.max(0, c.accrued))}</span></td>
+        <td class="num">${c.debtLimit != null ? money(c.debtLimit) : c.guaranteeRequired ? "su garantía" : "sin límite"}</td>
+        <td>${c.paused ? `<span class="pill void">Pausada${c.pausedManual ? " (manual)" : ""}</span><div class="faint" style="font-size:11px;max-width:260px">${esc(c.pausedReason ?? "")}</div>` : `<span class="pill open">Operando</span>`}</td>
+        <td><div class="row" style="flex-wrap:nowrap"><button class="btn sm" data-gar="${esc(c.operatorId)}">Garantía</button><button class="btn sm" data-cfg="${esc(c.operatorId)}">Configurar</button></div></td></tr>`).join("") || `<tr><td colspan="6" class="muted" style="text-align:center;padding:24px">Sin casinos.</td></tr>`}
+    </tbody></table></div>
+    <div class="panel" style="margin-top:14px"><h2>Liquidaciones <small>cada ${t.config.settlementEveryHours} h · plazo de pago ${t.config.paymentTermHours} h${t.config.autoCollectGuarantee ? " · se cobran solas de la garantía al vencer" : ""}</small></h2>
+      <div class="tablewrap"><table><thead><tr><th>Referencia</th><th>Casino</th><th>Período</th><th class="num">Monto</th><th>Estado</th><th>Vence</th><th>Transferencia</th><th></th></tr></thead><tbody>
+      ${t.settlements.map((x) => `<tr><td style="font-family:var(--mono);font-size:12px">LIQ-${x.id}</td><td>${esc(x.name)}</td><td style="white-space:nowrap">${fday2(x.period_from)} → ${fday2(x.period_to)}</td>
+        <td class="num"><b>${money(Math.abs(x.amount))}</b><br><span class="faint" style="font-size:11px">${x.amount > 0 ? "el casino paga" : x.amount < 0 ? "pagamos al casino" : "sin saldo"}</span></td>
+        <td>${stPill(x.status)}${x.covered_from_guarantee > 0 && x.status !== "covered" ? `<div class="faint" style="font-size:11px">${money(x.covered_from_guarantee)} de garantía</div>` : ""}</td><td style="white-space:nowrap">${fday2(x.due_at)}</td>
+        <td style="font-size:12px">${esc(x.bank_ref ?? "—")}</td>
+        <td><div class="row" style="flex-wrap:nowrap">${["pending", "overdue"].includes(x.status) && x.amount !== 0 ? `<button class="btn ok sm" data-pay="${x.id}">Pagada</button>` : ""}${["pending", "overdue"].includes(x.status) && x.amount > 0 ? `<button class="btn bad sm" data-col="${x.id}">Cobrar de garantía</button>` : ""}<button class="btn sm" data-stm="${x.id}">Estado firmado</button></div></td></tr>`).join("") || `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">Todavía no hay liquidaciones. Se emiten solas cada ${t.config.settlementEveryHours} h, o con "Liquidar ahora".</td></tr>`}
+      </tbody></table></div></div>
+    <div class="grid2">
+      <div class="panel"><h2>Extracto sin conciliar <small>${t.unmatchedBankLines.length}</small></h2>
+        ${t.unmatchedBankLines.length ? `<div class="tablewrap"><table><tbody>${t.unmatchedBankLines.map((b) => `<tr><td style="white-space:nowrap">${fday2(b.date)}</td><td style="font-size:12px">${esc(b.reference)}<div class="faint">${esc(b.description)}</div></td><td class="num ${b.amount >= 0 ? "ok" : "bad"}">${money(b.amount)}</td><td><button class="btn sm" data-ign="${b.id}">Ignorar</button></td></tr>`).join("")}</tbody></table></div>`
+          : `<p class="muted" style="font-size:13px">Todo lo cargado del banco está conciliado. Para que se concilie solo, cada transferencia debe llevar la referencia LIQ-número.</p>`}</div>
+      <div class="panel"><h2>Reservas</h2><div class="tablewrap"><table><tbody>
+        <tr><td>Dinero en el fideicomiso</td><td class="num"><b>${money(R.fiduciary)}</b></td></tr>
+        <tr><td>Garantías que se deben devolver</td><td class="num">${money(R.guarantees)}</td></tr>
+        <tr><td>Liquidaciones por pagar a casinos</td><td class="num">${money(R.payableToCasinos)}</td></tr>
+        <tr><td>Pérdida de la casa en el peor escenario</td><td class="num">${money(R.houseRisk)}</td></tr>
+        <tr><td><b>Sobra (o falta)</b></td><td class="num ${R.ok ? "ok" : "bad"}"><b>${money(R.fiduciary - R.obligations)}</b></td></tr>
+        <tr><td>Custodia de market makers / valor de sus cuentas</td><td class="num ${R.marketMakers.ok ? "" : "bad"}">${money(R.marketMakers.custody)} / ${money(R.marketMakers.accounts)}</td></tr>
+      </tbody></table></div><p class="faint" style="font-size:12px;margin:8px 0 0">${esc(R.note)}</p></div>
+    </div>
+    <div class="panel" style="margin-top:14px"><h2>Libro contable <small>últimos asientos · cada uno guarda el hash del anterior</small></h2>
+      <div class="tablewrap"><table><thead><tr><th>#</th><th>Fecha</th><th>Tipo</th><th>Referencia</th><th>Partidas</th><th>Hash</th></tr></thead><tbody>
+      ${J.recent.map((j) => `<tr><td class="num">${j.id}</td><td style="white-space:nowrap">${new Date(j.ts).toLocaleString("es-EC", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td><td>${esc(j.kind.replace(/_/g, " "))}<div class="faint" style="font-size:11px">${esc(j.created_by)}</div></td><td style="font-size:12px">${esc(j.ref ?? "")}</td>
+        <td style="font-size:12px">${j.entries.map((e) => `${esc(e.account)} <b class="${e.amount >= 0 ? "ok" : "bad"}">${e.amount >= 0 ? "+" : ""}${money(e.amount)}</b>`).join("<br>")}</td><td style="font-family:var(--mono);font-size:11px">${esc(j.hash.slice(0, 10))}…</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Sin asientos todavía.</td></tr>`}
+      </tbody></table></div></div>`;
+
+  const after = () => route();
+  el.querySelector("#tSettle").onclick = (e) => run(e.target, () => api("/admin/treasury/settle", { method: "POST", body: {} }), (x) => `${x.created.length} liquidaciones emitidas`).then(after);
+  el.querySelector("#tReserve").onclick = async () => {
+    const f = await modal({ title: "Reserva de la casa", text: "Capital de la plataforma en el fideicomiso para cubrir lo que pierda la casa. Debe ser al menos su pérdida en el peor escenario.", ok: "Registrar",
+      fields: [{ id: "dir", label: "Movimiento", type: "select", options: [["deposit", "Aporte"], ["withdraw", "Retiro"]] }, { id: "amt", label: "Monto (USD)", type: "number" }, { id: "ref", label: "Referencia bancaria" }] });
+    if (f) run(null, () => api("/admin/treasury/reserve", { method: "POST", body: { direction: f.dir, amountUsd: Number(f.amt), ...(f.ref ? { bankRef: f.ref } : {}) } }), "Movimiento registrado").then(after);
+  };
+  el.querySelector("#tBank").onclick = async () => {
+    const f = await modal({ title: "Cargar extracto del banco", text: "Pega las líneas del extracto del fideicomiso: <code>fecha;referencia;monto;descripción</code> (o con comas). Montos positivos entran, negativos salen. Las transferencias con LIQ-número se concilian solas.", ok: "Conciliar",
+      fields: [{ id: "csv", label: "Extracto", type: "textarea", placeholder: "2026-10-27;TRX-9001;60,60;Pago LIQ-12 Casino Dos" }] });
+    if (f) run(null, () => api("/admin/treasury/bank-statements", { method: "POST", body: { csv: f.csv } }), (x) => `${x.imported} líneas nuevas · ${x.matched} conciliadas · ${x.unmatched} sin conciliar`).then(after);
+  };
+  el.querySelectorAll("[data-gar]").forEach((b) => (b.onclick = async () => {
+    const f = await modal({ title: `Garantía de ${b.dataset.gar}`, text: "Registra el depósito o el retiro en el fideicomiso (la transferencia real se hace por el banco).", ok: "Registrar",
+      fields: [{ id: "dir", label: "Movimiento", type: "select", options: [["deposit", "Depósito"], ["withdraw", "Devolución"]] }, { id: "amt", label: "Monto (USD)", type: "number" }, { id: "ref", label: "Referencia bancaria" }] });
+    if (f) run(null, () => api(`/admin/treasury/guarantees/${b.dataset.gar}`, { method: "POST", body: { direction: f.dir, amountUsd: Number(f.amt), ...(f.ref ? { bankRef: f.ref } : {}) } }), "Garantía actualizada").then(after);
+  }));
+  el.querySelectorAll("[data-cfg]").forEach((b) => (b.onclick = async () => {
+    const c = t.casinos.find((x) => x.operatorId === b.dataset.cfg);
+    const f = await modal({ title: `Condiciones de ${c.name}`, text: "Si la garantía queda por debajo de lo exigido, si su deuda supera el límite o si tiene una liquidación vencida, sus jugadores no pueden abrir apuestas nuevas (sí vender y cobrar) hasta que se regularice.", ok: "Guardar",
+      fields: [{ id: "req", label: "Garantía exigida (USD, 0 = sin exigir)", type: "number", value: String(c.guaranteeRequired / 1e6) },
+        { id: "lim", label: "Límite de deuda (USD; vacío = su garantía)", type: "number", value: c.debtLimit == null ? "" : String(c.debtLimit / 1e6) },
+        { id: "pause", label: "Pausa manual", type: "checkbox", value: c.pausedManual, hint: "Pausar la operación hasta que la quite a mano" }] });
+    if (f) run(null, () => api(`/admin/treasury/casinos/${c.operatorId}`, { method: "PATCH", body: { guaranteeRequiredUsd: Number(f.req || 0), debtLimitUsd: f.lim === "" ? null : Number(f.lim), paused: f.pause } }), "Condiciones guardadas").then(after);
+  }));
+  el.querySelectorAll("[data-pay]").forEach((b) => (b.onclick = async () => {
+    const f = await modal({ title: `Marcar LIQ-${b.dataset.pay} como pagada`, ok: "Marcar pagada", fields: [{ id: "ref", label: "Referencia de la transferencia" }] });
+    if (f) run(null, () => api(`/admin/treasury/settlements/${b.dataset.pay}/pay`, { method: "POST", body: { bankRef: f.ref } }), "Liquidación pagada").then(after);
+  }));
+  el.querySelectorAll("[data-col]").forEach((b) => (b.onclick = async () => {
+    if (!(await modal({ title: `Cobrar LIQ-${b.dataset.col} de la garantía`, text: "Se descuenta de la garantía del casino lo que adeuda (o lo que alcance). Después tendrá que reponerla.", ok: "Cobrar", danger: true }))) return;
+    run(b, () => api(`/admin/treasury/settlements/${b.dataset.col}/collect`, { method: "POST", body: {} }), (x) => `Cobrados ${money(x.collected)}${x.remaining > 0 ? ` · faltan ${money(x.remaining)}` : ""}`).then(after);
+  }));
+  el.querySelectorAll("[data-ign]").forEach((b) => (b.onclick = () => run(b, () => api(`/admin/treasury/bank-lines/${b.dataset.ign}/ignore`, { method: "POST", body: {} }), "Línea ignorada").then(after)));
+  el.querySelectorAll("[data-stm]").forEach((b) => (b.onclick = async () => {
+    const r = await fetch(A.api.replace(/\/$/, "") + `/admin/treasury/settlements/${b.dataset.stm}/statement`, { headers: { "x-admin-key": A.key ?? "", "x-admin-user": A.user ?? "" } });
+    const text = await r.text();
+    const sig = r.headers.get("x-oracle-signature");
+    const blob = new Blob([JSON.stringify({ statement: text, signature: sig, keyId: r.headers.get("x-oracle-key-id"), howToVerify: "Ed25519 (base64) sobre el texto exacto de 'statement', con la clave pública de /v1/oracle/keys", readable: JSON.parse(text) }, null, 2)], { type: "application/json" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `estado-LIQ-${b.dataset.stm}.json`; a.click();
+  }));
 }
 
 // ---------- Liquidación entre casinos ----------

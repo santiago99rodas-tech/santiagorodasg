@@ -8,7 +8,7 @@ Easypanel publica la plataforma con Docker en tu propio servidor. Un proyecto ll
 | `api` | App (GitHub + Dockerfile) | API, módulo del jugador (`/embed/`), back-office (`/admin/`), oráculo (`/v1/oracle`) y API de market makers (`/mm/v1`) |
 | `casino` (opcional) | App (GitHub + Dockerfile) | Casino de prueba con billetera de referencia, para demos |
 
-Al primer arranque, la API crea las tablas (6 migraciones) y carga las categorías, las fuentes y los 702 mercados del catálogo. No hay que correr nada a mano.
+Al primer arranque, la API crea las tablas (7 migraciones) y carga las categorías, las fuentes y los 702 mercados del catálogo. No hay que correr nada a mano.
 
 > **¿Ya lo tenías desplegado?** Ve directo a [Actualizar un despliegue existente](#actualizar-un-despliegue-existente). Hay un cambio que puede frenar el arranque si no lo haces antes.
 
@@ -60,7 +60,7 @@ Te da tres líneas: `ADMIN_API_KEY`, `SESSION_SECRET` y `ORACLE_PRIVATE_KEY`. Gu
 ```
 migración aplicada: 001_init.sql
 …
-migración aplicada: 006_p2p.sql
+migración aplicada: 007_tesoreria.sql
 catálogo: 702 eventos creados, 0 omitidos
 ```
 
@@ -80,7 +80,7 @@ npm run smoke -- https://predicciones.bo-sio.com <ADMIN_API_KEY>
 Revisa salud y base, catálogo, módulo, back-office, la firma del oráculo, el market maker de la casa, la protección contra informados, la liquidación y los market makers externos. Debe terminar en `Todo en orden`.
 
 A mano:
-- `https://predicciones.bo-sio.com/health` → `{"ok":true,"db":"ok","migrations":6,…}`
+- `https://predicciones.bo-sio.com/health` → `{"ok":true,"db":"ok","migrations":7,…}`
 - `https://predicciones.bo-sio.com/admin/` → back-office (entra con `ADMIN_API_KEY`)
 - `https://predicciones.bo-sio.com/v1/oracle` → índice del oráculo, con la cabecera `X-Oracle-Signature`
 
@@ -107,7 +107,7 @@ A mano:
 | Dar de alta los casinos reales, con su revenue share | Back-office → Casinos ([INTEGRACION-CASINO.md](INTEGRACION-CASINO.md)) |
 | Revisar el market maker y sus límites; el botón de pánico está ahí | Back-office → Riesgo de la casa ([MARKET-MAKER.md](MARKET-MAKER.md)) |
 | Dar de alta market makers externos y registrar sus depósitos | Back-office → Market makers ([P2P.md](P2P.md)) |
-| Liquidar con cada casino | Back-office → Liquidación |
+| Liquidar con cada casino, sus garantías, la reserva de la casa y la conciliación con el banco | Back-office → Tesorería ([TESORERIA.md](TESORERIA.md)). Antes: abre el fideicomiso y registra ahí las garantías y la reserva |
 | Publicar el oráculo | Pon `/v1/oracle` detrás de una CDN o de un límite por IP antes de anunciarlo ([ORACULO.md](ORACULO.md)) |
 | Restringir el back-office | Limita `/admin` por IP en el proxy, o sirve el panel desde bo-sio.com (abajo) |
 
@@ -119,13 +119,13 @@ A mano:
 
 ## Actualizar un despliegue existente
 
-Las versiones nuevas (market maker v2, protección contra informados, oráculo con fianzas, P2P) agregan 4 migraciones. Se aplican solas al arrancar y no tocan los datos existentes. Lo comprobé con una base de la versión anterior que tenía apuestas y resoluciones pendientes.
+Las versiones nuevas (market maker v2, protección contra informados, oráculo con fianzas, P2P y tesorería) agregan 5 migraciones. Se aplican solas al arrancar y no tocan los datos existentes. Lo comprobé con una base de la versión anterior que tenía apuestas y resoluciones pendientes.
 
 1. **Antes de desplegar**, revisa las variables de `api`:
    - **`ADMIN_API_KEY` y `SESSION_SECRET` deben tener 24 caracteres o más.** Con menos, la versión nueva no arranca en producción. Si tu clave actual es corta, genera otra con `npm run gen:secrets`. Cambiar `SESSION_SECRET` cierra las sesiones abiertas de los jugadores: el casino les abre una nueva al volver a entrar a la pestaña.
    - Agrega `ORACLE_PRIVATE_KEY`.
    - Si usas el casino de prueba, agrégale `HEALTH_PORT=4000` y cambia su comando a `node --import tsx mock-casino/server.ts`.
-2. **Deploy**. En los registros deben aparecer las migraciones `003_market_maker.sql` a `006_p2p.sql`. El catálogo no se vuelve a cargar.
+2. **Deploy**. En los registros deben aparecer las migraciones `003_market_maker.sql` a `007_tesoreria.sql`. El catálogo no se vuelve a cargar.
 3. Corre `npm run smoke -- https://predicciones.bo-sio.com <ADMIN_API_KEY>`.
 
 **Qué cambia para los casinos ya integrados:**
