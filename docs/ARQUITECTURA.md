@@ -87,6 +87,10 @@ Si la transacción falla después del débito, se reembolsa con un `txId` determ
   - Recargo de hasta 3% en lo que le compra a la casa a quien gana de forma estadísticamente significativa.
   - Spread asimétrico cuando el flujo reciente va todo a un lado.
   - Freno de emergencia si el precio salta 12¢ en 10 minutos, y spread más ancho cuando llega una noticia sobre un mercado abierto.
+- **P2P** ([P2P.md](P2P.md)):
+  - Un solo libro para todos los casinos; la plataforma liquida entre ellos (`services/clearing.ts`).
+  - Market makers externos con API firmada (`/mm/v1`), saldo custodiado en una billetera interna (operador `mm`), órdenes post-only y reembolso de `MAKER_REBATE_BPS`.
+  - La casa abre su spread y queda de respaldo cuando ya hay liquidez externa cerca del precio.
 - **Simulador** (`npm run sim`): jugadores casuales, informados, hinchada y ballenas contra v1, v2 y v2 con protección, con el mismo motor de órdenes.
 - **Ingresos de la casa**: comisión de taker (`TAKER_FEE_BPS`), spread y redondeos. `GET /admin/exposure` y `GET /admin/mm/status` muestran el riesgo.
 - `MM_STRATEGY=v1` vuelve a la versión anterior (media móvil, spread fijo, corrimiento simple por inventario).

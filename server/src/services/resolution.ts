@@ -198,7 +198,7 @@ export async function finalize(resolutionId: number, opts: { force?: boolean } =
     // Aviso a cada casino con los premios de sus jugadores
     await c.query(
       `INSERT INTO webhook_outbox (operator_id, type, payload)
-       SELECT id, 'event.resolved', $1::jsonb FROM operators WHERE active`,
+       SELECT id, 'event.resolved', $1::jsonb FROM operators WHERE active AND kind='casino'`,
       [JSON.stringify({ eventId: e.id, title: e.title, outcome: r.outcome, winningMarketId: r.winning_market_id })]);
   });
 

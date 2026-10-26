@@ -10,6 +10,7 @@ declare module "fastify" {
     rawBody?: string;
     operator?: { id: string; name: string; currency: string; theme: any };
     player?: { id: number; operatorId: string; externalId: string; displayName: string | null };
+    mm?: { playerId: number; name: string };
   }
 }
 
@@ -32,6 +33,20 @@ export async function requireOperator(req: FastifyRequest) {
   const expected = signRequest(op.api_secret, ts, req.method, path, req.rawBody ?? "");
   if (!safeEqual(sig, expected)) throw new AppError(401, "bad_signature", "Firma inválida");
   req.operator = { id: op.id, name: op.name, currency: op.currency, theme: op.theme };
+}
+
+/** Market maker externo -> plataforma: X-MM-Key + X-Timestamp + X-Signature (mismo esquema HMAC que los casinos). */
+export async function requireMarketMaker(req: FastifyRequest) {
+  const key = req.headers["x-mm-key"] as string | undefined;
+  const ts = req.headers["x-timestamp"] as string | undefined;
+  const sig = req.headers["x-signature"] as string | undefined;
+  if (!key || !ts || !sig) throw new AppError(401, "unauthorized", "Faltan X-MM-Key, X-Timestamp o X-Signature");
+  if (Math.abs(Date.now() - Number(ts)) > 5 * 60_000) throw new AppError(401, "stale_request", "X-Timestamp fuera de la ventana de 5 minutos");
+  const mm = await one(pool, "SELECT player_id, name, api_secret, active FROM mm_accounts WHERE api_key=$1", [key]);
+  if (!mm) throw new AppError(401, "unauthorized", "Market maker desconocido");
+  if (!safeEqual(sig, signRequest(mm.api_secret, ts, req.method, req.url, req.rawBody ?? ""))) throw new AppError(401, "bad_signature", "Firma inválida");
+  if (!mm.active) throw new AppError(403, "mm_suspended", "La cuenta de market maker está suspendida");
+  req.mm = { playerId: Number(mm.player_id), name: mm.name };
 }
 
 interface SessionClaims { pid: number; op: string; ext: string; name: string | null; exp: number }

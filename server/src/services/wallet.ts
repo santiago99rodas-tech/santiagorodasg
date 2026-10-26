@@ -9,7 +9,7 @@
 //   {wallet_url}/rollback  { txId, originalTxId, playerId, amount, currency }
 // Respuesta esperada: { ok: true, balance: "123.45", operatorTxId: "..." } o { ok: false, error: "insufficient_funds" }
 
-import { pool, one, type Db } from "../db/pool.js";
+import { pool, one, tx, type Db } from "../db/pool.js";
 import { signRequest, randomToken } from "../lib/crypto.js";
 import { ceilCent, floorCent, toDecimal, fromDecimal } from "../lib/money.js";
 import { AppError } from "../lib/errors.js";
@@ -38,7 +38,36 @@ async function ctx(playerId: number) {
   return { p, op };
 }
 
+/**
+ * Billetera interna (operador con wallet_url "internal:"): el saldo de los market makers externos lo
+ * custodia la plataforma. Responde igual que un casino, con la misma idempotencia por txId.
+ */
+async function internalCall(op: OperatorRow, action: string, payload: any): Promise<WalletResponse> {
+  const p = await one(pool, "SELECT id FROM players WHERE operator_id=$1 AND external_id=$2", [op.id, payload.playerId]);
+  if (!p) return { ok: false, error: "unknown_player" };
+  const bal = async (c: Db) => toDecimal(Number((await one(c, "SELECT balance FROM internal_balances WHERE player_id=$1", [p.id]))?.balance ?? 0));
+  if (action === "balance") return { ok: true, balance: await bal(pool) };
+  const amount = fromDecimal(payload.amount);
+  return tx(async (c) => {
+    const fresh = await c.query("INSERT INTO internal_txs (tx_id, player_id, action, amount) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING", [payload.txId, p.id, action, amount]);
+    if (fresh.rowCount === 0) return { ok: true, balance: await bal(c), operatorTxId: payload.txId }; // ya aplicado
+    await c.query("INSERT INTO internal_balances (player_id) VALUES ($1) ON CONFLICT DO NOTHING", [p.id]);
+    if (action === "debit") {
+      const r = await c.query("UPDATE internal_balances SET balance = balance - $2 WHERE player_id=$1 AND balance >= $2", [p.id, amount]);
+      if (r.rowCount === 0) { await c.query("DELETE FROM internal_txs WHERE tx_id=$1", [payload.txId]); return { ok: false, error: "insufficient_funds" }; }
+    } else if (action === "credit") {
+      await c.query("UPDATE internal_balances SET balance = balance + $2 WHERE player_id=$1", [p.id, amount]);
+    } else if (action === "rollback") {
+      // Devuelve un débito solo si de verdad se aplicó
+      const orig = await one(c, "SELECT amount FROM internal_txs WHERE tx_id=$1 AND action='debit'", [payload.originalTxId]);
+      if (orig) await c.query("UPDATE internal_balances SET balance = balance + $2 WHERE player_id=$1", [p.id, orig.amount]);
+    }
+    return { ok: true, balance: await bal(c), operatorTxId: payload.txId };
+  });
+}
+
 async function call(op: OperatorRow, action: string, payload: object) {
+  if (op.wallet_url === "internal:") return internalCall(op, action, payload);
   const path = `/${action}`;
   const body = JSON.stringify(payload);
   const ts = String(Date.now());

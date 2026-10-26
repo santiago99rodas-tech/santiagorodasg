@@ -227,6 +227,14 @@ Respuesta:
 | `GET /operator/v1/players/:playerId/ledger` | Todos los movimientos de un jugador, con `txId` y `operatorTxId` |
 | `GET /operator/v1/players/:playerId/positions` | Posiciones de un jugador |
 
+## 8b. Liquidación con la plataforma
+
+El libro de órdenes es compartido por todos los casinos integrados: tus jugadores pueden ganarle (o perder) a jugadores de otros casinos y a market makers externos. Por eso, por los mercados ya resueltos, la plataforma calcula cuánto debe transferir cada casino o cuánto se le paga ([P2P.md](P2P.md)):
+
+| Ruta | Descripción |
+|---|---|
+| `GET /operator/v1/clearing?from=&to=` | Debitado, acreditado, recaudado neto, comisiones, tu revenue share, resultado de tus jugadores y `due` (> 0: transfieres a la plataforma; < 0: la plataforma te paga) |
+
 ## 9. Errores
 
 Formato: `{ "error": "codigo", "message": "texto legible en español" }`
@@ -237,5 +245,5 @@ Formato: `{ "error": "codigo", "message": "texto legible en español" }`
 | 401 | `unauthorized`, `bad_signature`, `stale_request`, `session_expired` | Autenticación |
 | 402 | `insufficient_funds` | El casino rechazó el débito por saldo |
 | 404 | `not_found` | No existe |
-| 409 | `market_closed`, `no_liquidity`, `fok_not_filled`, `insufficient_shares`, `duplicate_order`, `stake_limit` | Estado del mercado o de la orden; `stake_limit` = el jugador superó el máximo comprometido por mercado |
+| 409 | `market_closed`, `no_liquidity`, `fok_not_filled`, `insufficient_shares`, `duplicate_order`, `stake_limit`, `would_cross` | Estado del mercado o de la orden; `stake_limit` = el jugador superó el máximo comprometido por mercado |
 | 502 | `wallet_error` | La billetera del casino falló |

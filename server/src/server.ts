@@ -5,6 +5,7 @@ import { AppError } from "./lib/errors.js";
 import { v1Routes } from "./api/v1.js";
 import { operatorRoutes } from "./api/operator.js";
 import { adminRoutes } from "./api/admin.js";
+import { mmRoutes } from "./api/mm.js";
 
 export async function buildServer() {
   const app = Fastify({ logger: process.env.NODE_ENV === "test" ? false : { level: process.env.LOG_LEVEL ?? "info" } });
@@ -59,5 +60,6 @@ export async function buildServer() {
   await app.register(v1Routes);
   await app.register(operatorRoutes);
   await app.register(adminRoutes);
+  await app.register(mmRoutes);
   return app;
 }

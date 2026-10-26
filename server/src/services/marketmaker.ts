@@ -38,7 +38,15 @@ export async function setKillSwitch(on: boolean, by = "admin") {
   return { killed: on, marketsCleared: cancelled };
 }
 
+/** ¿Ya hay liquidez de otros (market makers externos o jugadores) cerca del precio, a ambos lados? */
+function hasExternalDepth(marketId: number, house: number, fairCents: number) {
+  const d = bookOf(marketId).depthNear(house, Math.round(fairCents), config.p2p.backstopCents);
+  const min = config.p2p.backstopMinShares * 100;
+  return d.bids >= min && d.asks >= min;
+}
+
 export const v2Params = (): QuoteParamsV2 => ({
+  backstopSpreadMult: config.p2p.backstopSpreadMult,
   ...(config.toxicity.enabled ? {
     imbalanceSpread: config.toxicity.imbalanceSpread, shockSpreadMult: config.toxicity.shockSpreadMult, shockSizeFactor: config.toxicity.shockSizeFactor,
   } : {}),
@@ -171,7 +179,7 @@ export async function planQuotes(marketId?: number): Promise<EventQuotes[]> {
         tauDays: Math.max(0, Number(g[0].tau)),
         outcomes: g.map((m) => ({
           fair: Number(m.fair), yesShares: Number(m.yes), noShares: Number(m.no), costUsd: Number(m.cost), sigma: sigmas.get(m.id),
-          imbalance: imbalances.get(m.id), shock: m.shock,
+          imbalance: imbalances.get(m.id), shock: m.shock, backstop: hasExternalDepth(m.id, house, Number(m.fair)),
         })),
       };
       plans.push({ eventId, marketIds: g.map((m) => m.id), state, quotes: [], paused: g.some((m) => m.paused) });
@@ -282,7 +290,7 @@ export async function mmStatus() {
         prices: p.diag!.prices,
         worstCaseLossUsd: Math.round(p.diag!.worstCaseLossUsd),
         lmsrMaxLossUsd: Math.round(p.diag!.lmsrMaxLossUsd),
-        limited: p.diag!.limited, quotes: p.quotes.length, paused: !!p.paused, shock: p.diag!.shock,
+        limited: p.diag!.limited, quotes: p.quotes.length, paused: !!p.paused, shock: p.diag!.shock, backstop: p.state.outcomes.some((o) => o.backstop),
         imbalance: Math.round(Math.max(...p.state.outcomes.map((o) => Math.abs(o.imbalance ?? 0))) * 100) / 100,
       };
     })

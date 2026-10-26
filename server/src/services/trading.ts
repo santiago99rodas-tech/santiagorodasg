@@ -4,10 +4,10 @@
 import type pg from "pg";
 import { pool, tx, one, many } from "../db/pool.js";
 import { config } from "../config.js";
-import { OrderBook, kindOf, toYesPrice, ownPrice, notional, isBuy, type Fill, type Kind } from "../engine/orderbook.js";
+import { OrderBook, kindOf, toYesPrice, ownPrice, notional, isBuy, isBid, type Fill, type Kind } from "../engine/orderbook.js";
 import { withLock } from "../lib/mutex.js";
 import { bad, conflict, notFound, AppError } from "../lib/errors.js";
-import { feeOf, fromDecimal } from "../lib/money.js";
+import { feeOf, fromDecimal, floorCent } from "../lib/money.js";
 import { bus } from "../lib/bus.js";
 import * as wallet from "./wallet.js";
 import { houseAccount } from "./house.js";
@@ -42,6 +42,7 @@ export interface PlaceOrderInput {
   amount?: number; // USD a gastar en compras de mercado
   tif?: "GTC" | "FOK" | "FAK";
   clientRef?: string;
+  postOnly?: boolean; // solo agrega liquidez: se rechaza si cruzaría con el libro (market makers)
 }
 
 export interface OrderResult {
@@ -56,9 +57,9 @@ export interface OrderResult {
 }
 
 async function feeBpsFor(playerId: number) {
-  const r = await one(pool, "SELECT p.is_house, o.fee_bps FROM players p LEFT JOIN operators o ON o.id=p.operator_id WHERE p.id=$1", [playerId]);
+  const r = await one(pool, "SELECT p.is_house, o.fee_bps, o.kind FROM players p LEFT JOIN operators o ON o.id=p.operator_id WHERE p.id=$1", [playerId]);
   if (!r) throw notFound("Jugador no encontrado");
-  return r.is_house ? 0 : r.fee_bps ?? config.takerFeeBps;
+  return { feeBps: r.is_house ? 0 : r.fee_bps ?? config.takerFeeBps, internal: r.kind === "internal" };
 }
 
 export function placeOrder(playerId: number, input: PlaceOrderInput): Promise<OrderResult> {
@@ -77,7 +78,7 @@ async function placeLocked(playerId: number, input: PlaceOrderInput): Promise<Or
   const book = bookOf(market.id);
   const kind: Kind = kindOf(input.side, input.outcome);
   const buy = isBuy(kind);
-  const feeBps = await feeBpsFor(playerId);
+  const { feeBps, internal } = await feeBpsFor(playerId);
   // Recargo por apostar con información (services/toxicity.ts): solo en lo que se le compra a la casa
   const house = await houseAccount();
   const surcharge = feeBps > 0 ? await playerSurchargeBps(playerId) : 0;
@@ -120,6 +121,11 @@ async function placeLocked(playerId: number, input: PlaceOrderInput): Promise<Or
   const dry = book.match({ id: -1, ownerId: playerId, kind, yesLimit, qty, budget }, { dryRun: true });
   if (tif === "FOK" && dry.filled < qty) throw conflict("fok_not_filled", "La orden no se puede llenar completa al precio indicado");
   if (tif !== "GTC" && dry.filled === 0) throw conflict("no_liquidity", "No hay liquidez al precio indicado");
+  if (input.postOnly) {
+    // Post-only: no puede tocar el mejor precio del otro lado, ni siquiera si esa orden es propia
+    const opp = isBid(kind) ? book.bestAsk() : book.bestBid();
+    if (dry.filled > 0 || (opp !== undefined && (isBid(kind) ? yesLimit >= opp : yesLimit <= opp))) throw conflict("would_cross", "La orden post-only cruzaría con el libro");
+  }
 
   const restQty = tif === "GTC" ? qty - dry.filled : 0;
   const fillFees = dry.fills.map((f) => feeOf(notional(ownPrice(kind, f.yesPrice), f.qty), feeBps + (f.makerOwnerId === house ? surcharge : 0)));
@@ -127,7 +133,7 @@ async function placeLocked(playerId: number, input: PlaceOrderInput): Promise<Or
   const restReserve = buy ? notional(limitOwn, restQty) : restQty;
 
   // Límite de exposición por jugador y mercado (mitiga manipulación y ballenas). La casa no tiene límite.
-  if (buy && feeBps > 0 && config.integrity.maxStakePerMarketUsd > 0) {
+  if (buy && feeBps > 0 && !internal && config.integrity.maxStakePerMarketUsd > 0) {
     const cur = await one(pool,
       `SELECT COALESCE((SELECT SUM(cost) FROM positions WHERE player_id=$1 AND market_id=$2),0)::bigint
             + COALESCE((SELECT SUM(reserved) FROM orders WHERE player_id=$1 AND market_id=$2 AND status='open' AND side='BUY'),0)::bigint AS exposure`,
@@ -182,6 +188,7 @@ async function placeLocked(playerId: number, input: PlaceOrderInput): Promise<Or
   for (const [makerOrderId, mc] of makerCredits) {
     await wallet.credit(mc.playerId, mc.amount, { reason: "sell_proceeds", marketId: market.id, orderId: makerOrderId, txId: `f_${makerOrderId}_${orderId}` });
   }
+  await payRebates(market.id, orderId, kind, dry.fills, fillFees);
 
   publishAfterTrade(market, orderId, playerId, input, dry.fills, kind);
 
@@ -197,6 +204,29 @@ async function placeLocked(playerId: number, input: PlaceOrderInput): Promise<Or
     restingShares: restQty / 100,
     fills: dry.fills.map((f) => ({ price: ownPrice(kind, f.yesPrice), shares: f.qty / 100 })),
   };
+}
+
+/**
+ * Reembolso a los market makers externos por la liquidez que les tomaron: MAKER_REBATE_BPS (o el de
+ * su cuenta) sobre lo que pagó el taker, sin pasar de la comisión que pagó. Se acredita a su saldo interno.
+ */
+async function payRebates(marketId: number, takerOrderId: number, takerKind: Kind, fills: Fill[], fillFees: number[]) {
+  const makers = [...new Set(fills.map((f) => f.makerOwnerId))];
+  const mms = new Map((await many(pool, "SELECT player_id, rebate_bps FROM mm_accounts WHERE player_id = ANY($1) AND active", [makers]))
+    .map((r) => [Number(r.player_id), r.rebate_bps ?? config.p2p.makerRebateBps]));
+  if (!mms.size) return;
+  for (const [i, f] of fills.entries()) {
+    const bps = mms.get(f.makerOwnerId);
+    if (bps === undefined || fillFees[i] <= 0) continue;
+    // Al centavo hacia abajo, como cualquier crédito
+    const amount = floorCent(Math.min(fillFees[i], Math.floor((notional(ownPrice(takerKind, f.yesPrice), f.qty) * bps) / 10_000)));
+    if (amount <= 0) continue;
+    const ins = await pool.query(
+      `INSERT INTO rebates (market_id, maker_order_id, taker_order_id, player_id, amount) VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (maker_order_id, taker_order_id) DO UPDATE SET amount = rebates.amount + EXCLUDED.amount RETURNING id`,
+      [marketId, f.makerId, takerOrderId, f.makerOwnerId, amount]);
+    await wallet.credit(f.makerOwnerId, amount, { reason: "maker_rebate", marketId, orderId: f.makerId, txId: `rb_${ins.rows[0].id}_${i}` });
+  }
 }
 
 /** Persiste un cruce. Devuelve lo que recibe el taker si vende (neto de comisión). */

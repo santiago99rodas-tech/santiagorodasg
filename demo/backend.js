@@ -43,6 +43,10 @@
       for (const list of [this.bids, this.asks]) { const i = list.findIndex((o) => o.id === id); if (i >= 0) return list.splice(i, 1)[0]; }
     }
     ordersOf(owner) { return [...this.bids, ...this.asks].filter((o) => o.ownerId === owner); }
+    depthNear(exclude, price, cents) {
+      const sum = (list, ok) => list.filter((o) => o.ownerId !== exclude && ok(o)).reduce((a, o) => a + o.remaining, 0);
+      return { bids: sum(this.bids, (o) => o.yesPrice >= price - cents), asks: sum(this.asks, (o) => o.yesPrice <= price + cents) };
+    }
     bestBid() { return this.bids[0]?.yesPrice; }
     bestAsk() { return this.asks[0]?.yesPrice; }
     levels(depth = 10) {
@@ -100,11 +104,15 @@
 
   // Jugadores: el usuario de la demo, bots y la casa
   const USER = 1, HOUSE = 99;
-  S.players.set(USER, { id: USER, name: "Santiago Rodas", balance: 500e6, isHouse: false, lastSeen: now(), country: "EC", since: now() - 400 * 864e5 });
+  S.players.set(USER, { id: USER, name: "Santiago Rodas", balance: 500e6, isHouse: false, lastSeen: now(), country: "EC", since: now() - 400 * 864e5, operator: "demo-casino" });
+  // Market maker externo de demostración: da liquidez con su propio saldo y cobra reembolso (server/src/services/marketmakers.ts)
+  const MMBOT = 98, REBATE_BPS = 50;
+  S.players.set(MMBOT, { id: MMBOT, name: "Liquidez Andina (demo)", balance: 25000e6, isHouse: false, isMM: true, active: true, rebateBps: REBATE_BPS, deposits: 25000e6, operator: "mm" });
+  S.rebates = [];
   S.players.set(HOUSE, { id: HOUSE, name: "Casa", balance: Infinity, isHouse: true });
   const BOT_NAMES = ["Carlos Mendoza", "Andrea Paredes", "Luis Guerrero", "María Fernanda", "Jorge Ruiz", "Daniela Vera", "Kevin Andrade", "Sofía León", "Diego Torres", "Valeria Cevallos"];
   const BOT_COUNTRIES = ["CO", "EC", "CO", "VE", "EC", "CO", "EC", "MX", "PE", "EC"];
-  BOT_NAMES.forEach((n, i) => S.players.set(10 + i, { id: 10 + i, name: n, balance: 1e12, isHouse: false, lastSeen: now(), country: BOT_COUNTRIES[i], since: now() - (30 + i * 20) * 864e5 }));
+  BOT_NAMES.forEach((n, i) => S.players.set(10 + i, { id: 10 + i, name: n, balance: 1e12, isHouse: false, lastSeen: now(), country: BOT_COUNTRIES[i], since: now() - (30 + i * 20) * 864e5, operator: i % 2 ? "casino-aliado" : "demo-casino" }));
   const mask = (pid) => { const p = S.players.get(pid); if (!p) return "Jugador"; const [a, b] = p.name.split(" "); return b ? `${a} ${b[0]}.` : a; };
 
   // Generador pseudoaleatorio estable
@@ -188,6 +196,10 @@
     }
     if (!buy) { const p = pos(pid, m.id, input.outcome); if (p.qty - p.reserved < qty) throw conflict("insufficient_shares", "No tienes suficientes acciones disponibles para vender"); }
     const dry = book.match({ ownerId: pid, kind, yesLimit, qty, budget }, true);
+    if (input.postOnly) {
+      const opp = isBid(kind) ? book.bestAsk() : book.bestBid();
+      if (dry.filled > 0 || (opp !== undefined && (isBid(kind) ? yesLimit >= opp : yesLimit <= opp))) throw conflict("would_cross", "La orden post-only cruzaría con el libro");
+    }
     if (tif === "FOK" && dry.filled < qty) throw conflict("fok_not_filled", "La orden no se puede llenar completa al precio indicado");
     if (tif !== "GTC" && dry.filled === 0) throw conflict("no_liquidity", "No hay liquidez al precio indicado");
     const restQty = tif === "GTC" ? qty - dry.filled : 0;
@@ -195,7 +207,7 @@
     const fillFees = dry.fills.map((f) => feeOf(notional(ownPrice(kind, f.yesPrice), f.qty), feeBps + (f.makerOwnerId === HOUSE ? sur : 0)));
     const totalFee = fillFees.reduce((a, b) => a + b, 0);
     const restReserve = buy ? notional(limitOwn, restQty) : restQty;
-    if (buy && !player.isHouse) {
+    if (buy && !player.isHouse && !player.isMM) {
       // Límite por jugador y mercado, igual que el servidor (MAX_STAKE_PER_MARKET_USD = 1000)
       let exposure = pos(pid, m.id, "YES").cost + pos(pid, m.id, "NO").cost;
       for (const o of S.orders.values()) if (o.playerId === pid && o.marketId === m.id && o.status === "open" && o.side === "BUY") exposure += o.reserved;
@@ -239,7 +251,12 @@
     const tn = notional(ownPrice(takerKind, f.yesPrice), f.qty), mn = notional(ownPrice(f.makerKind, f.yesPrice), f.qty);
     S.trades.push({ id: ++S.seq.trade, marketId: m.id, makerOrderId: f.makerId, takerOrderId, takerId, yesPrice: f.yesPrice, qty: f.qty, kind: f.kind, fee, at: now() });
     if (takerId !== HOUSE) tradeLog.push({ pid: takerId, mid: m.id, yesPrice: f.yesPrice, yes: takerKind === "BUY_YES" || takerKind === "SELL_NO", usd: tn / 1e6, at: now(), short: false });
-    if (fee > 0) S.fees.push({ amount: fee, at: now() });
+    if (fee > 0) S.fees.push({ amount: fee, at: now(), pid: takerId, mid: m.id });
+    const mk = S.players.get(f.makerOwnerId);
+    if (mk?.isMM && fee > 0) {
+      const rebate = Math.floor(Math.min(fee, Math.floor((tn * mk.rebateBps) / 10000)) / 10000) * 10000;
+      if (rebate > 0) { mk.balance += rebate; S.rebates.push({ pid: mk.id, amount: rebate, mid: m.id, at: now() }); }
+    }
     const mo = S.orders.get(f.makerId);
     const makerBuy = isBuy(f.makerKind);
     if (mo) { mo.filled += f.qty; mo.reserved = Math.max(0, mo.reserved - (makerBuy ? mn : f.qty)); if (mo.filled >= mo.qty) mo.status = "filled"; }
@@ -311,11 +328,16 @@
     }
   }
   setInterval(scoreMarkouts, 15e3);
+  // La casa queda de respaldo si otros ya dan liquidez cerca del precio a ambos lados (HOUSE_BACKSTOP_*)
+  function externalDepth(x) {
+    const d = bookOf(x.id).depthNear(HOUSE, Math.round(x.fairExact != null ? x.fairExact * 100 : x.fair), 2);
+    return d.bids >= 200 * 100 && d.asks >= 200 * 100;
+  }
   function eventState(m) {
     const ms = eventMarkets(m);
     return { ms, state: { kind: ms.length > 1 ? "multi" : "binary", tauDays: tauOf(m),
       outcomes: ms.map((x) => { const y = pos(HOUSE, x.id, "YES"), n = pos(HOUSE, x.id, "NO"); return { fair: x.fairExact != null ? x.fairExact * 100 : x.fair, yesShares: y.qty / 100, noShares: n.qty / 100, costUsd: (y.cost + n.cost) / 1e6,
-        imbalance: imbalanceOf(x.id), shock: (x.shockUntil ?? 0) > now() }; }) } };
+        imbalance: imbalanceOf(x.id), shock: (x.shockUntil ?? 0) > now(), backstop: externalDepth(x) }; }) } };
   }
   function totalWorstLoss() {
     const seen = new Set(); let t = 0;
@@ -340,7 +362,7 @@
     ms.forEach((x) => clearHouse(x.id));
     if (mmControl.killed) return;
     if (ms.some((x) => (x.pausedUntil ?? 0) > now())) return; // freno de emergencia
-    const { quotes } = quoteV2(state, { ...MM, ...TOX, riskOff: totalWorstLoss() > MM.maxTotalLossUsd });
+    const { quotes } = quoteV2(state, { ...MM, ...TOX, backstopSpreadMult: 2, riskOff: totalWorstLoss() > MM.maxTotalLossUsd });
     for (const q of quotes) quote(ms[q.outcome].id, q.kind, q.yesPrice, q.shares);
   }
   function mmStatus() {
@@ -354,7 +376,7 @@
       events.push({ eventId: e.id, marketIds: ms.map((x) => x.id), title: e.title, kind: state.kind, tauDays: Math.round(state.tauDays * 10) / 10,
         liquidity: Math.round(diag.liquidity * 100) / 100, b: Math.round(diag.b), halfSpreadCents: Math.round(diag.halfSpreadCents * 10) / 10, prices: diag.prices,
         worstCaseLossUsd: Math.round(diag.worstCaseLossUsd), lmsrMaxLossUsd: Math.round(diag.lmsrMaxLossUsd), limited: diag.limited, quotes: quotes.length,
-        paused: ms.some((x) => (x.pausedUntil ?? 0) > now()), shock: diag.shock, imbalance: Math.round(Math.max(...state.outcomes.map((o) => Math.abs(o.imbalance))) * 100) / 100 });
+        paused: ms.some((x) => (x.pausedUntil ?? 0) > now()), shock: diag.shock, backstop: state.outcomes.some((o) => o.backstop), imbalance: Math.round(Math.max(...state.outcomes.map((o) => Math.abs(o.imbalance))) * 100) / 100 });
     }
     events.sort((a, b) => b.worstCaseLossUsd - a.worstCaseLossUsd);
     const worst = events.reduce((a, e) => a + e.worstCaseLossUsd, 0);
@@ -821,6 +843,68 @@
     return { killed: mmControl.killed, marketsCleared: n };
   });
   route("GET", "/admin/operators", () => S.operators);
+  route("PATCH", "/admin/operators/:id", ({ p, b }) => { const o = S.operators.find((x) => x.id === p.id); if (!o) throw notFound("Casino no encontrado"); if (b.revenueShareBps != null) o.revenue_share_bps = b.revenueShareBps; return o; });
+  // P2P: market makers externos y liquidación (server/src/services/marketmakers.ts y clearing.ts)
+  const mmSummary = (pl) => {
+    const orders = [...S.orders.values()].filter((o) => o.playerId === pl.id && o.status === "open");
+    const ps = [...S.positions.values()].filter((x) => x.playerId === pl.id);
+    const makerVolume = S.trades.filter((t) => S.orders.get(t.makerOrderId)?.playerId === pl.id).reduce((a, t) => { const o = S.orders.get(t.makerOrderId); return a + notional(ownPrice(`${o.side}_${o.outcome}`, t.yesPrice), t.qty); }, 0);
+    return { playerId: pl.id, name: pl.name, active: pl.active, rebateBps: pl.rebateBps, balance: pl.balance, reservedInOrders: orders.filter((o) => o.side === "BUY").reduce((a, o) => a + o.reserved, 0), openOrders: orders.length,
+      positionsCost: ps.reduce((a, x) => a + x.cost, 0), realizedPnl: ps.reduce((a, x) => a + x.realized, 0), rebates: S.rebates.filter((r) => r.pid === pl.id).reduce((a, r) => a + r.amount, 0), makerVolume, deposits: pl.deposits ?? 0, withdrawals: pl.withdrawals ?? 0 };
+  };
+  route("GET", "/admin/market-makers", () => [...S.players.values()].filter((x) => x.isMM).map(mmSummary));
+  route("POST", "/admin/market-makers", ({ b }) => {
+    const id = 200 + [...S.players.values()].filter((x) => x.isMM).length, tok = () => Math.random().toString(36).slice(2, 14);
+    S.players.set(id, { id, name: b.name, balance: 0, isHouse: false, isMM: true, active: true, rebateBps: b.rebateBps ?? REBATE_BPS, operator: "mm", deposits: 0 });
+    return { playerId: id, name: b.name, apiKey: `mk_${tok()}`, apiSecret: `ms_${tok()}${tok()}`, note: "En la demo la API de market makers no está disponible: corre en el servidor." };
+  });
+  route("POST", "/admin/market-makers/:id/funds", ({ p, b }) => {
+    const pl = S.players.get(Number(p.id)), amt = Math.round(b.amountUsd * 1e6);
+    if (!pl?.isMM) throw notFound("Market maker no encontrado");
+    if (b.direction === "withdraw") { if (amt > pl.balance) throw new ApiError(402, "insufficient_funds", "Saldo insuficiente"); pl.balance -= amt; pl.withdrawals = (pl.withdrawals ?? 0) + amt; }
+    else { pl.balance += amt; pl.deposits = (pl.deposits ?? 0) + amt; }
+    return { playerId: pl.id, balance: pl.balance };
+  });
+  route("PATCH", "/admin/market-makers/:id", ({ p, b }) => {
+    const pl = S.players.get(Number(p.id)); if (!pl?.isMM) throw notFound("Market maker no encontrado");
+    if (b.active != null) { pl.active = b.active; if (!b.active) for (const o of [...S.orders.values()]) if (o.playerId === pl.id && o.status === "open") try { cancelOrder(pl.id, o.id); } catch {} }
+    if (b.rebateBps !== undefined) pl.rebateBps = b.rebateBps ?? REBATE_BPS;
+    return mmSummary(pl);
+  });
+  route("GET", "/admin/clearing", ({ q }) => {
+    const from = q.from ? new Date(q.from).getTime() : now() - 7 * 864e5;
+    const group = (pid) => { const pl = S.players.get(pid); return pl.isHouse ? "casa" : pl.isMM ? "market makers" : S.operators.find((o) => o.id === pl.operator)?.name ?? pl.operator; };
+    const resolved = new Set([...S.markets.values()].filter((m) => ["resolved", "void"].includes(m.status)).map((m) => m.id));
+    const casinos = S.operators.map((o) => {
+      const players = [...S.players.values()].filter((x) => x.operator === o.id).map((x) => x.id);
+      let debited = 0, markets = new Set();
+      for (const t of S.trades) {
+        if (!resolved.has(t.marketId)) continue;
+        for (const oid of [t.makerOrderId, t.takerOrderId]) {
+          const od = S.orders.get(oid); if (!od || !players.includes(od.playerId) || od.side !== "BUY") continue;
+          debited += notional(ownPrice(`${od.side}_${od.outcome}`, t.yesPrice), t.qty) + (oid === t.takerOrderId ? t.fee : 0); markets.add(t.marketId);
+        }
+      }
+      const realized = [...S.positions.values()].filter((x) => players.includes(x.playerId) && resolved.has(x.marketId)).reduce((a, x) => a + x.realized, 0);
+      const fees = S.fees.filter((f) => players.includes(f.pid) && resolved.has(f.mid)).reduce((a, f) => a + f.amount, 0);
+      const collected = -realized + fees, rs = o.revenue_share_bps ?? 0, revenueShare = Math.floor((fees * rs) / 10000);
+      return { operatorId: o.id, name: o.name, markets: markets.size, players: players.length, debited, credited: debited - collected, bondsNet: 0, collected, fees, revenueShareBps: rs, revenueShare, playersResult: -(collected - fees), due: collected - revenueShare };
+    });
+    const pairs = new Map();
+    for (const t of S.trades) {
+      if (t.at < from) continue;
+      const mo = S.orders.get(t.makerOrderId), to = S.orders.get(t.takerOrderId); if (!mo || !to) continue;
+      const k = `${group(to.playerId)}|${group(mo.playerId)}`, v = notional(ownPrice(`${to.side}_${to.outcome}`, t.yesPrice), t.qty);
+      const cur = pairs.get(k) ?? { volume: 0, trades: 0 }; cur.volume += v; cur.trades++; pairs.set(k, cur);
+    }
+    const matrix = [...pairs].map(([k, v]) => { const [taker, maker] = k.split("|"); return { taker, maker, ...v }; }).sort((a, b) => b.volume - a.volume);
+    const special = (g) => g === "casa" || g === "market makers";
+    const sum = (f) => matrix.filter(f).reduce((a, r) => a + r.volume, 0);
+    const houseRes = [...S.positions.values()].filter((x) => x.playerId === HOUSE && resolved.has(x.marketId)).reduce((a, x) => a + x.realized, 0);
+    return { from: iso(from), to: iso(now()), casinos, totals: { due: casinos.reduce((a, c) => a + c.due, 0) },
+      platform: { houseResult: houseRes, marketMakersResult: 0, rebatesPaid: S.rebates.filter((r) => r.at >= from).reduce((a, r) => a + r.amount, 0) },
+      liquidity: { volume: sum(() => true), betweenCasinos: sum((r) => r.taker !== r.maker && !special(r.taker) && !special(r.maker)), fromMarketMakers: sum((r) => r.maker === "market makers"), fromHouse: sum((r) => r.maker === "casa"), matrix } };
+  });
   route("POST", "/admin/operators", ({ b }) => { const tok = () => Math.random().toString(36).slice(2, 14); const creds = { apiKey: `pk_${tok()}`, apiSecret: `sk_${tok()}${tok()}`, walletSecret: `ws_${tok()}${tok()}` };
     S.operators.push({ id: b.id, name: b.name, api_key: creds.apiKey, wallet_url: b.walletUrl, webhook_url: b.webhookUrl ?? null, currency: "USD", fee_bps: b.feeBps ?? null, theme: b.theme ?? {}, active: true }); return { id: b.id, ...creds }; });
 
@@ -873,7 +957,35 @@
     const m = S.markets.get(mid);
     const yes = rnd() < displayPrice(m) / 100 + (rnd() - 0.5) * 0.2;
     const pid = 10 + Math.floor(rnd() * BOT_NAMES.length);
+    if (rnd() < 0.4) {
+      // A veces dejan una orden límite en un mercado con movimiento: otro jugador (de este u otro casino) la puede tomar.
+      // Así hay juego jugador contra jugador.
+      const hot = [...S.markets.values()].filter((x) => x.status === "open").sort((a, b) => b.volume - a.volume).slice(0, 12);
+      const m = hot[Math.floor(rnd() * hot.length)], mid = m.id;
+      const yes = rnd() < 0.5;
+      const mine = [...S.orders.values()].filter((o) => o.playerId === pid && o.status === "open");
+      if (mine.length >= 3) try { cancelOrder(pid, mine[0].id); } catch {}
+      const book = bookOf(mid), fair = Math.round(m.fairExact != null ? m.fairExact * 100 : m.fair);
+      const yesP = yes ? Math.min(98, Math.max(2, (book.bestBid() ?? fair - 2) + 1)) : Math.max(2, Math.min(98, (book.bestAsk() ?? fair + 2) - 1));
+      try { placeOrder(pid, { marketId: mid, side: "BUY", outcome: yes ? "YES" : "NO", type: "LIMIT", price: yes ? yesP : 100 - yesP, shares: 20 + Math.floor(rnd() * 60), postOnly: true }); } catch {}
+      return;
+    }
     try { placeOrder(pid, { marketId: mid, side: "BUY", outcome: yes ? "YES" : "NO", type: "MARKET", amount: [1, 2, 5, 5, 10, 10, 20, 25, 50][Math.floor(rnd() * 9)] }); } catch {}
+  }
+  // El market maker externo de demostración recotiza los 20 mercados con más volumen, 1¢ por dentro de la casa
+  function mmBotQuote() {
+    const bot = S.players.get(MMBOT);
+    if (!bot.active) return;
+    const top = [...S.markets.values()].filter((m) => m.status === "open").sort((a, b) => b.volume - a.volume).slice(0, 20);
+    for (const m of top) {
+      const book = bookOf(m.id);
+      for (const o of book.ordersOf(MMBOT)) try { cancelOrder(MMBOT, o.id); } catch {}
+      const fair = m.fairExact != null ? m.fairExact * 100 : m.fair;
+      const bid = Math.max(1, Math.floor(fair) - 1), ask = Math.min(99, Math.ceil(fair) + 1);
+      try { placeOrder(MMBOT, { marketId: m.id, side: "BUY", outcome: "YES", type: "LIMIT", price: bid, shares: 250, postOnly: true }); } catch {}
+      try { placeOrder(MMBOT, { marketId: m.id, side: "BUY", outcome: "NO", type: "LIMIT", price: 100 - ask, shares: 250, postOnly: true }); } catch {}
+      refreshQuotes(m.id);
+    }
   }
 
   function seedAll() {
@@ -890,6 +1002,7 @@
       ev.marketIds.forEach((mid) => backfill(mid, S.markets.get(mid).initial));
     }
     for (const m of S.markets.values()) refreshQuotes(m.id);
+    mmBotQuote();
     // Historial de markout de los mercados de demostración ya resueltos: dos jugadores le ganan a la
     // casa de forma sostenida (Kevin Andrade y Diego Torres); el resto apuesta como casual
     BOT_NAMES.forEach((_, i) => {
@@ -923,12 +1036,14 @@
       ["Spotify Wrapped 2026", ["spotify", "wrapped", "bad bunny", "taylor swift"], "musica", 7.9, 8, 4, 2], ["Informe OVNI del Pentágono", ["ovni", "uap", "aaro", "congreso"], "ovnis", 6.2, 6, 3, 2]];
     T.forEach(([label, keywords, category, score, a, s, so], i) => S.trends.push({ id: ++S.seq.trend, label, keywords, category, score, article_count: a, source_count: s, social_count: so, last_seen: iso(now() - i * 1800e3), status: i < 2 ? "used" : "active" }));
     SOURCES.forEach((s, i) => S.sources.push({ id: ++S.seq.source, enabled: true, last_fetched_at: iso(now() - (5 + i) * 60e3), last_status: `ok: ${20 + ((i * 7) % 30)} ítems (datos de la demo)`, ...s }));
-    S.operators.push({ id: "demo-casino", name: "Casino Demo", api_key: "pk_demo_casino", wallet_url: "https://casino-demo.example/wallet", webhook_url: "https://casino-demo.example/webhooks", currency: "USD", fee_bps: null, theme: { brandName: "TuCasino", primary: "#ffd400" }, active: true });
+    S.operators.push({ id: "demo-casino", name: "Casino Demo", api_key: "pk_demo_casino", wallet_url: "https://casino-demo.example/wallet", webhook_url: "https://casino-demo.example/webhooks", currency: "USD", fee_bps: null, revenue_share_bps: 3000, theme: { brandName: "TuCasino", primary: "#ffd400" }, active: true });
+    S.operators.push({ id: "casino-aliado", name: "Casino Aliado (demo)", api_key: "pk_demo_aliado", wallet_url: "https://casino-aliado.example/wallet", webhook_url: null, currency: "USD", fee_bps: null, revenue_share_bps: 5000, theme: { brandName: "Aliado", primary: "#22c55e" }, active: true });
     console.info(`demo lista en ${Math.round(performance.now() - t0)} ms: ${S.events.length} eventos, ${S.markets.size} mercados`);
   }
 
   let botsOn = true;
   setInterval(() => { if (botsOn) botBet(); }, 2600);
+  setInterval(() => { if (botsOn) mmBotQuote(); }, 8000);
 
   seedAll();
   window.DEMO = {

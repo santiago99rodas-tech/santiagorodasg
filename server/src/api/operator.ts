@@ -1,4 +1,5 @@
 // API servidor-a-servidor para el casino (firmada con HMAC).
+import { clearingReport } from "../services/clearing.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { pool, one, many } from "../db/pool.js";
@@ -46,6 +47,13 @@ export async function operatorRoutes(app: FastifyInstance) {
   });
 
   /** Resumen financiero del casino en un rango de fechas (montos en micro-dólares). */
+  // Liquidación del casino con la plataforma (cámara de compensación del libro compartido)
+  app.get("/operator/v1/clearing", async (req) => {
+    const q = req.query as any;
+    const r = await clearingReport({ from: q.from, to: q.to, operatorId: req.operator!.id });
+    return { from: r.from, to: r.to, ...(r.casinos[0] ?? {}), liquidity: { volume: r.liquidity.volume, betweenCasinos: r.liquidity.betweenCasinos } };
+  });
+
   app.get("/operator/v1/reports/summary", async (req) => {
     const q = parse(z.object({ from: z.string().optional(), to: z.string().optional() }), req.query);
     const from = q.from ?? new Date(Date.now() - 30 * 864e5).toISOString();

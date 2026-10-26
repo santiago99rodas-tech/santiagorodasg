@@ -100,6 +100,12 @@ export class OrderBook {
     return [...this.bids, ...this.asks].filter((o) => o.ownerId === ownerId);
   }
 
+  /** Centésimas de acción que ofrecen otros (no `exclude`) a `cents` o menos de `price`, de cada lado. */
+  depthNear(exclude: number, price: number, cents: number) {
+    const sum = (list: BookOrder[], ok: (o: BookOrder) => boolean) => list.filter((o) => o.ownerId !== exclude && ok(o)).reduce((a, o) => a + o.remaining, 0);
+    return { bids: sum(this.bids, (o) => o.yesPrice >= price - cents), asks: sum(this.asks, (o) => o.yesPrice <= price + cents) };
+  }
+
   bestBid() { return this.bids[0]?.yesPrice; }
   bestAsk() { return this.asks[0]?.yesPrice; }
 

@@ -31,6 +31,15 @@ export const config = {
     rewardShare: num("BOND_REWARD_SHARE", 0.5), // parte de la fianza del que perdió que se lleva el que tenía razón
     playerProposeAfterHours: num("PLAYER_PROPOSE_AFTER_HOURS", 2), // horas después del cierre en que un jugador puede proponer
   },
+  // P2P: market makers externos y liquidación entre casinos (docs/P2P.md)
+  p2p: {
+    makerRebateBps: num("MAKER_REBATE_BPS", 50), // reembolso al market maker externo sobre lo que le toman (sale de la comisión del taker)
+    maxBatch: num("MM_API_MAX_BATCH", 50),
+    // La casa queda de respaldo: si hay liquidez externa cerca del precio a ambos lados, abre su spread
+    backstopCents: num("HOUSE_BACKSTOP_CENTS", 2),
+    backstopMinShares: num("HOUSE_BACKSTOP_MIN_SHARES", 200),
+    backstopSpreadMult: num("HOUSE_BACKSTOP_SPREAD_MULT", 2),
+  },
   oracle: {
     name: str("ORACLE_NAME", "Predicciones"),
     privateKeyPem: (process.env.ORACLE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),

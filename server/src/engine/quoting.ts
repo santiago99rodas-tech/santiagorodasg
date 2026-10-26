@@ -28,6 +28,7 @@ export interface OutcomeState {
   sigma?: number; // volatilidad observada del log-odds por √día (opcional)
   imbalance?: number; // desequilibrio del flujo reciente de jugadores, −1 (todo No) a 1 (todo Sí)
   shock?: boolean; // freno de emergencia o noticia reciente: más spread y menos tamaño
+  backstop?: boolean; // ya hay liquidez externa cerca del precio a ambos lados: la casa queda de respaldo
 }
 
 export interface EventState {
@@ -60,6 +61,7 @@ export interface QuoteParamsV2 {
   imbalanceSpread?: number; // log-odds extra de medio spread, del lado golpeado, con todo el flujo a un lado
   shockSpreadMult?: number;
   shockSizeFactor?: number;
+  backstopSpreadMult?: number; // multiplicador del medio spread cuando la casa queda de respaldo
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -225,7 +227,8 @@ export function quoteV2(ev: EventState, p: QuoteParamsV2): { quotes: Quote[]; di
   let halfL = 0;
 
   for (const i of markets) {
-    const hl = Math.max(halfSpreadLogit(ev.tauDays, sigmaOf(i), p), 0) * (shocked ? p.shockSpreadMult ?? 1 : 1);
+    const hl = Math.max(halfSpreadLogit(ev.tauDays, sigmaOf(i), p), 0) * (shocked ? p.shockSpreadMult ?? 1 : 1)
+      * (ev.outcomes[i]?.backstop ? p.backstopSpreadMult ?? 1 : 1);
     halfL = Math.max(halfL, hl);
     // Glosten-Milgrom: si el flujo reciente va todo a un lado, ese lado probablemente trae información
     const imb = ev.outcomes[i]?.imbalance ?? 0;

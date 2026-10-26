@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { pool, one, many } from "../db/pool.js";
 import { parse, requireAdmin, adminUser } from "./auth.js";
-import { notFound } from "../lib/errors.js";
+import { notFound, AppError } from "../lib/errors.js";
 import { randomToken } from "../lib/crypto.js";
 import { runIngest, addSocialSignal, detectTrends } from "../ingest/pipeline.js";
 import { generateForTrend, generateForTopTrends, generateForCategory, categoryCoverage, refillCategories } from "../ai/questions.js";
@@ -15,6 +15,8 @@ import { cancelAllInMarket } from "../services/trading.js";
 import { refreshQuotes, houseStats, mmStatus, setKillSwitch } from "../services/marketmaker.js";
 import { houseAccount } from "../services/house.js";
 import { listEvents } from "../services/marketdata.js";
+import { listMarketMakers, createMarketMaker, moveFunds, setMarketMaker } from "../services/marketmakers.js";
+import { clearingReport } from "../services/clearing.js";
 import { toxicityReport, setSurchargeOverride, setShock } from "../services/toxicity.js";
 import { integrityReport, setExternalRef, addReferencePrice, refreshExternalPrices } from "../services/integrity.js";
 
@@ -178,18 +180,45 @@ export async function adminRoutes(app: FastifyInstance) {
   app.post("/admin/jobs/close-expired", async () => ({ closed: await closeExpired() }));
 
   // ---------- Operadores (casinos) ----------
-  app.get("/admin/operators", async () => many(pool, "SELECT id, name, api_key, wallet_url, webhook_url, currency, fee_bps, theme, active, created_at FROM operators ORDER BY created_at"));
+  app.get("/admin/operators", async () => many(pool, "SELECT id, name, api_key, wallet_url, webhook_url, currency, fee_bps, revenue_share_bps, theme, active, created_at FROM operators WHERE kind='casino' ORDER BY created_at"));
   app.post("/admin/operators", async (req) => {
     const b = parse(z.object({
       id: z.string().regex(/^[a-z0-9-]{3,40}$/), name: z.string().min(2), walletUrl: z.string().url(), webhookUrl: z.string().url().optional(),
       currency: z.string().length(3).optional(), feeBps: z.number().int().min(0).max(2000).optional(), theme: z.record(z.string(), z.any()).optional(),
+      revenueShareBps: z.number().int().min(0).max(10000).optional(),
     }), req.body);
+    if (b.id === "mm") throw new AppError(400, "reserved_id", "El identificador 'mm' está reservado");
     const creds = { apiKey: `pk_${randomToken(16)}`, apiSecret: `sk_${randomToken(24)}`, walletSecret: `ws_${randomToken(24)}` };
     await pool.query(
-      "INSERT INTO operators (id, name, api_key, api_secret, wallet_url, wallet_secret, webhook_url, currency, fee_bps, theme) VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8,'USD'),$9,$10)",
-      [b.id, b.name, creds.apiKey, creds.apiSecret, b.walletUrl, creds.walletSecret, b.webhookUrl ?? null, b.currency, b.feeBps ?? null, JSON.stringify(b.theme ?? {})]);
+      "INSERT INTO operators (id, name, api_key, api_secret, wallet_url, wallet_secret, webhook_url, currency, fee_bps, theme, revenue_share_bps) VALUES ($1,$2,$3,$4,$5,$6,$7,COALESCE($8,'USD'),$9,$10,$11)",
+      [b.id, b.name, creds.apiKey, creds.apiSecret, b.walletUrl, creds.walletSecret, b.webhookUrl ?? null, b.currency, b.feeBps ?? null, JSON.stringify(b.theme ?? {}), b.revenueShareBps ?? 0]);
     return { id: b.id, ...creds, note: "Guarda los secretos ahora: no se vuelven a mostrar completos." };
   });
+
+  app.patch<{ Params: { id: string } }>("/admin/operators/:id", async (req) => {
+    const b = parse(z.object({ revenueShareBps: z.number().int().min(0).max(10000).optional(), feeBps: z.number().int().min(0).max(2000).nullable().optional(), active: z.boolean().optional() }), req.body);
+    const r = await one(pool, `UPDATE operators SET revenue_share_bps = COALESCE($2, revenue_share_bps), active = COALESCE($3, active),
+        fee_bps = CASE WHEN $5 THEN $4 ELSE fee_bps END WHERE id=$1 AND kind='casino' RETURNING id, revenue_share_bps, fee_bps, active`,
+      [req.params.id, b.revenueShareBps ?? null, b.active ?? null, b.feeBps ?? null, "feeBps" in b]);
+    if (!r) throw notFound("Casino no encontrado");
+    return r;
+  });
+
+  // ---------- P2P: market makers externos y liquidación entre casinos ----------
+  app.get("/admin/market-makers", async () => listMarketMakers());
+  app.post("/admin/market-makers", async (req) => {
+    const b = parse(z.object({ name: z.string().min(2).max(80), rebateBps: z.number().int().min(0).max(1000).nullable().optional() }), req.body);
+    return createMarketMaker(b);
+  });
+  app.post<{ Params: { id: string } }>("/admin/market-makers/:id/funds", async (req) => {
+    const b = parse(z.object({ direction: z.enum(["deposit", "withdraw"]), amountUsd: z.number().positive() }), req.body);
+    return moveFunds(Number(req.params.id), b.amountUsd, b.direction, adminUser(req));
+  });
+  app.patch<{ Params: { id: string } }>("/admin/market-makers/:id", async (req) => {
+    const b = parse(z.object({ active: z.boolean().optional(), rebateBps: z.number().int().min(0).max(1000).nullable().optional() }), req.body);
+    return setMarketMaker(Number(req.params.id), b);
+  });
+  app.get("/admin/clearing", async (req) => clearingReport(req.query as any));
 
   // ---------- Calibración, sesgo e integridad ----------
   app.get("/admin/integrity", async (req) => {

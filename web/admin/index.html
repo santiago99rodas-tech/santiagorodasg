@@ -189,6 +189,8 @@ a.btn { text-decoration: none; display: inline-block; }
       <a href="#oraculo" data-v="oraculo">Oráculo</a>
       <a href="#riesgo" data-v="riesgo">Riesgo de la casa</a>
       <a href="#operadores" data-v="operadores">Casinos</a>
+      <a href="#mms" data-v="mms">Market makers</a>
+      <a href="#liquidacion" data-v="liquidacion">Liquidación</a>
     </nav>
     <div class="foot"><span id="whoami"></span><span id="apiInfo"></span><button class="btn sm" id="logout" type="button">Salir</button></div>
   </aside>
@@ -285,7 +287,7 @@ async function refreshCounts() {
 }
 setInterval(() => { if (A.key) refreshCounts(); }, 30000);
 
-const VIEWS = { resumen: viewResumen, disenar: viewDisenar, moderacion: viewModeracion, mercados: viewMercados, resoluciones: viewResoluciones, tendencias: viewTendencias, fuentes: viewFuentes, riesgo: viewRiesgo, operadores: viewOperadores, calibracion: viewCalibracion, oraculo: viewOraculo };
+const VIEWS = { resumen: viewResumen, disenar: viewDisenar, moderacion: viewModeracion, mercados: viewMercados, resoluciones: viewResoluciones, tendencias: viewTendencias, fuentes: viewFuentes, riesgo: viewRiesgo, operadores: viewOperadores, calibracion: viewCalibracion, oraculo: viewOraculo, mms: viewMms, liquidacion: viewLiquidacion };
 function route() {
   VIEW = (location.hash.slice(1) || "resumen"); if (!VIEWS[VIEW]) VIEW = "resumen";
   document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("on", a.dataset.v === VIEW));
@@ -686,7 +688,7 @@ function mmPanel(mm) {
       <div class="kpi"><span class="k">Parámetros</span><span class="v" style="font-size:15px">b ${p.bShares ?? "—"} · γ ${p.gamma ?? "—"} · κ ${p.kappa ?? "—"}</span><span class="d">Liquidez completa con más de ${p.tauRefDays ?? "—"} días al cierre</span></div>
     </div>
     ${mm.events?.length ? `<div class="panel" style="margin-bottom:14px"><h2>Riesgo por evento <small>v2 · ordenado por pérdida en el peor escenario</small></h2><div class="tablewrap"><table><thead><tr><th>Evento</th><th class="num">Días al cierre</th><th class="num">Liquidez</th><th class="num">Medio spread</th><th class="num">Peor escenario</th><th class="num">Techo LMSR</th><th>Estado</th></tr></thead><tbody>
-      ${mm.events.slice(0, 15).map((e) => `<tr><td><div class="t">${esc(e.title)}</div><span class="faint" style="font-size:11px">${e.kind === "multi" ? `${e.marketIds.length} opciones` : "Sí / No"} · b ${e.b.toLocaleString("es-EC")}</span></td><td class="num">${e.tauDays}</td><td class="num">${Math.round(e.liquidity * 100)}%</td><td class="num">${e.halfSpreadCents}¢</td><td class="num ${e.worstCaseLossUsd > mm.limits.maxLossUsd * 0.8 ? "bad" : ""}">${usd(e.worstCaseLossUsd)}</td><td class="num">${usd(e.lmsrMaxLossUsd)}</td><td>${e.paused ? `<span class="pill void">Freno</span>` : e.limited ? `<span class="pill void">Solo reduce riesgo</span>` : e.shock ? `<span class="pill proposed">Spread ancho</span>` : e.imbalance >= 0.5 ? `<span class="pill proposed">Flujo a un lado</span>` : `<span class="pill open">Normal</span>`}</td></tr>`).join("")}
+      ${mm.events.slice(0, 15).map((e) => `<tr><td><div class="t">${esc(e.title)}</div><span class="faint" style="font-size:11px">${e.kind === "multi" ? `${e.marketIds.length} opciones` : "Sí / No"} · b ${e.b.toLocaleString("es-EC")}</span></td><td class="num">${e.tauDays}</td><td class="num">${Math.round(e.liquidity * 100)}%</td><td class="num">${e.halfSpreadCents}¢</td><td class="num ${e.worstCaseLossUsd > mm.limits.maxLossUsd * 0.8 ? "bad" : ""}">${usd(e.worstCaseLossUsd)}</td><td class="num">${usd(e.lmsrMaxLossUsd)}</td><td>${e.paused ? `<span class="pill void">Freno</span>` : e.limited ? `<span class="pill void">Solo reduce riesgo</span>` : e.shock ? `<span class="pill proposed">Spread ancho</span>` : e.backstop ? `<span class="pill resolved">Respaldo</span>` : e.imbalance >= 0.5 ? `<span class="pill proposed">Flujo a un lado</span>` : `<span class="pill open">Normal</span>`}</td></tr>`).join("")}
       </tbody></table></div><p class="faint" style="font-size:12px;margin:10px 0 0">Peor escenario: lo que perdería la casa si gana la opción que más le cuesta. Techo LMSR: lo máximo que puede perder desde ahora siguiendo la curva, aunque todos los que compren tengan razón. Con menos de ${p.tauRefDays ?? 7} días al cierre la liquidez baja con la raíz del tiempo que falta.</p></div>` : ""}`;
 }
 
@@ -695,16 +697,21 @@ async function viewOperadores(el) {
   const ops = await api("/admin/operators");
   el.innerHTML = `<div class="head"><div><h1>Casinos</h1><p>Operadores integrados por API. Cada uno usa su propia billetera, marca y comisión.</p></div><button class="btn primary" id="oAdd">+ Agregar casino</button></div>
     <div id="oCreds"></div>
-    <div class="tablewrap"><table><thead><tr><th>Casino</th><th>Clave pública</th><th>Billetera</th><th>Webhook</th><th class="num">Comisión</th><th>Moneda</th><th>Estado</th></tr></thead><tbody>
-    ${ops.length ? ops.map((o) => `<tr><td><div class="t">${esc(o.theme?.brandName ?? o.name)}</div><span class="faint" style="font-size:11px">${esc(o.id)}</span></td><td class="num" style="font-size:12px">${esc(o.api_key)}</td><td style="font-size:12px;word-break:break-all">${esc(o.wallet_url)}</td><td style="font-size:12px;word-break:break-all">${esc(o.webhook_url ?? "—")}</td><td class="num">${o.fee_bps == null ? "Global" : (o.fee_bps / 100).toFixed(2) + "%"}</td><td>${esc(o.currency)}</td><td>${o.active ? `<span class="pill open">Activo</span>` : `<span class="pill void">Inactivo</span>`}</td></tr>`).join("") : `<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">Aún no hay casinos.</td></tr>`}
+    <div class="tablewrap"><table><thead><tr><th>Casino</th><th>Clave pública</th><th>Billetera</th><th>Webhook</th><th class="num">Comisión</th><th class="num">Revenue share</th><th>Moneda</th><th>Estado</th></tr></thead><tbody>
+    ${ops.length ? ops.map((o) => `<tr><td><div class="t">${esc(o.theme?.brandName ?? o.name)}</div><span class="faint" style="font-size:11px">${esc(o.id)}</span></td><td class="num" style="font-size:12px">${esc(o.api_key)}</td><td style="font-size:12px;word-break:break-all">${esc(o.wallet_url)}</td><td style="font-size:12px;word-break:break-all">${esc(o.webhook_url ?? "—")}</td><td class="num">${o.fee_bps == null ? "Global" : (o.fee_bps / 100).toFixed(2) + "%"}</td><td class="num"><button class="btn sm" data-rs="${esc(o.id)}" data-v="${o.revenue_share_bps ?? 0}">${((o.revenue_share_bps ?? 0) / 100).toFixed(0)}%</button></td><td>${esc(o.currency)}</td><td>${o.active ? `<span class="pill open">Activo</span>` : `<span class="pill void">Inactivo</span>`}</td></tr>`).join("") : `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">Aún no hay casinos.</td></tr>`}
     </tbody></table></div>`;
+  el.querySelectorAll("[data-rs]").forEach((b) => (b.onclick = async () => {
+    const f = await modal({ title: "Revenue share", text: "Parte de las comisiones que generan los jugadores de este casino y que se le devuelve en la liquidación.", ok: "Guardar",
+      fields: [{ id: "pct", label: "Porcentaje (0 a 100)", type: "number", value: String(Number(b.dataset.v) / 100) }] });
+    if (f) run(null, () => api(`/admin/operators/${b.dataset.rs}`, { method: "PATCH", body: { revenueShareBps: Math.round(Number(f.pct) * 100) } }), "Revenue share actualizado").then(() => route());
+  }));
   el.querySelector("#oAdd").onclick = async () => {
     const r = await modal({ title: "Agregar casino", ok: "Crear credenciales", fields: [
       { id: "id", label: "Identificador (minúsculas y guiones)", placeholder: "ecuabet" }, { id: "name", label: "Nombre", placeholder: "Ecuabet" },
       { id: "walletUrl", label: "URL de la billetera", type: "url", placeholder: "https://api.casino.com/predicciones/wallet" }, { id: "webhookUrl", label: "URL de webhooks (opcional)", type: "url" },
-      { id: "feeBps", label: "Comisión en puntos básicos (200 = 2%, vacío = global)", type: "number" }, { id: "primary", label: "Color de marca", type: "color", value: "#ffd400" }] });
+      { id: "feeBps", label: "Comisión en puntos básicos (200 = 2%, vacío = global)", type: "number" }, { id: "revenueShare", label: "Revenue share: % de las comisiones de sus jugadores que se le devuelve", type: "number", value: "0" }, { id: "primary", label: "Color de marca", type: "color", value: "#ffd400" }] });
     if (!r) return;
-    const out = await run(null, () => api("/admin/operators", { method: "POST", body: { id: r.id, name: r.name, walletUrl: r.walletUrl, ...(r.webhookUrl ? { webhookUrl: r.webhookUrl } : {}), ...(r.feeBps ? { feeBps: Number(r.feeBps) } : {}), theme: { brandName: r.name, primary: r.primary } } }), "Casino creado");
+    const out = await run(null, () => api("/admin/operators", { method: "POST", body: { id: r.id, name: r.name, walletUrl: r.walletUrl, ...(r.webhookUrl ? { webhookUrl: r.webhookUrl } : {}), ...(r.feeBps ? { feeBps: Number(r.feeBps) } : {}), revenueShareBps: Math.round(Number(r.revenueShare || 0) * 100), theme: { brandName: r.name, primary: r.primary } } }), "Casino creado");
     if (!out) return;
     await viewOperadores(el);
     el.querySelector("#oCreds").innerHTML = `<div class="panel" style="margin-bottom:14px;border-color:var(--brand)"><h2>Credenciales de ${esc(out.id)} <small>se muestran una sola vez</small></h2>
@@ -727,6 +734,79 @@ async function referenceDialog(e, btn) {
   const mid = Number(r.market ?? e.markets[0].id);
   if (r.type === "polymarket") run(btn, async () => { await api(`/admin/markets/${mid}`, { method: "PATCH", body: { externalRef: `polymarket:${r.value.trim()}` } }); return api("/admin/references/refresh", { method: "POST", body: {} }); }, "Referencia de Polymarket guardada");
   else run(btn, () => api(`/admin/markets/${mid}/reference`, { method: "POST", body: { source: r.source || "Manual", price: Number(r.value) } }), "Precio de referencia guardado");
+}
+
+// ---------- Market makers externos ----------
+async function viewMms(el) {
+  const list = await api("/admin/market-makers");
+  const usd = (m) => money(m);
+  el.innerHTML = `<div class="head"><div><h1>Market makers externos</h1><p>Empresas o traders que dan liquidez en el mismo libro que los jugadores de todos los casinos. Operan por API con un saldo que custodia la plataforma y cobran un reembolso cuando un jugador toma sus órdenes. Si ya dan buen precio, la casa queda de respaldo y abre su spread.</p></div><button class="btn primary" id="mAdd">+ Agregar market maker</button></div>
+    <div id="mCreds"></div>
+    <div class="tablewrap"><table><thead><tr><th>Market maker</th><th class="num">Saldo</th><th class="num">En órdenes / posiciones</th><th class="num">Volumen maker</th><th class="num">Reembolsos</th><th class="num">Resultado</th><th>Estado</th><th></th></tr></thead><tbody>
+    ${list.length ? list.map((m) => `<tr><td><div class="t">${esc(m.name)}</div><span class="faint" style="font-size:11px">${m.openOrders} órdenes abiertas · reembolso ${(m.rebateBps / 100).toFixed(2)}%</span></td>
+      <td class="num">${usd(m.balance)}</td><td class="num">${usd(m.reservedInOrders)}<br><span class="faint" style="font-size:11px">${usd(m.positionsCost)}</span></td><td class="num">${kmoney(m.makerVolume)}</td><td class="num">${usd(m.rebates)}</td>
+      <td class="num ${m.realizedPnl >= 0 ? "ok" : "bad"}">${usd(m.realizedPnl)}</td><td>${m.active ? `<span class="pill open">Activo</span>` : `<span class="pill void">Suspendido</span>`}</td>
+      <td><div class="row" style="flex-wrap:nowrap"><button class="btn sm" data-fund="${m.playerId}">Fondos</button><button class="btn sm ${m.active ? "bad" : "ok"}" data-act="${m.playerId}" data-on="${m.active ? 0 : 1}">${m.active ? "Suspender" : "Activar"}</button></div></td></tr>`).join("")
+      : `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">Aún no hay market makers externos. La casa da toda la liquidez.</td></tr>`}
+    </tbody></table></div>
+    <div class="panel" style="margin-top:14px"><h2>API para market makers <small>firmada con HMAC, igual que la de casinos</small></h2>
+      <div class="tablewrap"><table><tbody>
+        <tr><td><code>GET /mm/v1/account</code></td><td>Saldo, órdenes, posiciones, volumen como maker y reembolsos</td></tr>
+        <tr><td><code>POST /mm/v1/orders</code></td><td>Orden límite (<code>postOnly: true</code> para solo agregar liquidez)</td></tr>
+        <tr><td><code>POST /mm/v1/orders/batch</code></td><td>Hasta 50 operaciones: <code>place</code>, <code>cancel</code>, <code>cancelAll</code></td></tr>
+        <tr><td><code>DELETE /mm/v1/orders?marketId=</code></td><td>Retirar todo (de un mercado o de todos)</td></tr>
+        <tr><td><code>GET /mm/v1/orders</code> · <code>/positions</code> · <code>/fills</code></td><td>Estado, con rol maker o taker, comisión y reembolso de cada cruce</td></tr>
+      </tbody></table></div>
+      <p class="faint" style="font-size:12px;margin:10px 0 0">Cabeceras: <code>X-MM-Key</code>, <code>X-Timestamp</code> y <code>X-Signature</code> = HMAC-SHA256 de "timestamp\nMÉTODO\nruta\ncuerpo" con el secreto. Los precios y el libro salen de la API pública (<code>/v1/markets/:id/book</code> y <code>/v1/stream</code>). Todo va 100% garantizado con su saldo: no hay crédito.</p></div>`;
+  el.querySelector("#mAdd").onclick = async () => {
+    const f = await modal({ title: "Agregar market maker", ok: "Crear credenciales", fields: [{ id: "name", label: "Nombre", placeholder: "Liquidez Andina S.A." }, { id: "rebate", label: "Reembolso en puntos básicos (vacío = global; 50 = 0,5%)", type: "number" }] });
+    if (!f) return;
+    const r = await run(null, () => api("/admin/market-makers", { method: "POST", body: { name: f.name, ...(f.rebate ? { rebateBps: Number(f.rebate) } : {}) } }), "Market maker creado");
+    if (!r) return;
+    await route();
+    document.getElementById("mCreds").innerHTML = `<div class="panel" style="margin-bottom:14px;border-color:color-mix(in srgb,var(--brand) 45%,var(--line))"><h2>Credenciales de ${esc(r.name)} <small>se muestran una sola vez</small></h2>
+      <div style="font-family:var(--mono);font-size:12px;word-break:break-all">X-MM-Key: ${esc(r.apiKey)}<br>Secreto: ${esc(r.apiSecret)}</div><p class="muted" style="font-size:12px;margin:8px 0 0">Después deposita su saldo con "Fondos" (la transferencia real se hace por fuera: banco o USDC).</p></div>`;
+  };
+  el.querySelectorAll("[data-fund]").forEach((b) => (b.onclick = async () => {
+    const f = await modal({ title: "Mover fondos", text: "Registra el depósito o retiro del saldo que custodia la plataforma. La transferencia real se hace por fuera.", ok: "Registrar",
+      fields: [{ id: "dir", label: "Movimiento", type: "select", options: [["deposit", "Depósito"], ["withdraw", "Retiro"]] }, { id: "amt", label: "Monto (USD)", type: "number" }] });
+    if (f) run(null, () => api(`/admin/market-makers/${b.dataset.fund}/funds`, { method: "POST", body: { direction: f.dir, amountUsd: Number(f.amt) } }), "Fondos registrados").then(() => route());
+  }));
+  el.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => run(b, () => api(`/admin/market-makers/${b.dataset.act}`, { method: "PATCH", body: { active: b.dataset.on === "1" } }), b.dataset.on === "1" ? "Market maker activado" : "Market maker suspendido: sus órdenes salieron del libro").then(() => route())));
+}
+
+// ---------- Liquidación entre casinos ----------
+async function viewLiquidacion(el) {
+  const days = viewLiquidacion.days ?? 7;
+  const r = await api(`/admin/clearing?from=${new Date(Date.now() - days * 864e5).toISOString()}`);
+  const L = r.liquidity, pctOf = (v) => (L.volume ? Math.round((v / L.volume) * 100) : 0);
+  const sameCasino = L.volume - L.betweenCasinos - L.fromMarketMakers - L.fromHouse;
+  el.innerHTML = `<div class="head"><div><h1>Liquidación entre casinos</h1><p>El libro es uno solo: el jugador de un casino le puede ganar al de otro. Cada casino cobra y paga a sus jugadores, así que la plataforma compensa: el casino cuyos jugadores perdieron le transfiere el neto, y ella le paga al casino cuyos jugadores ganaron. Solo entran los mercados ya resueltos (lo demás sigue en garantía en cada casino).</p></div>
+    <span class="seg" id="lDays">${[[7, "7 días"], [30, "30 días"], [90, "90 días"]].map(([d, l]) => `<button type="button" data-d="${d}" class="${d === days ? "on" : ""}">${l}</button>`).join("")}</span></div>
+    <div class="kpis" style="margin-bottom:14px">
+      <div class="kpi"><span class="k">Volumen del período</span><span class="v">${kmoney(L.volume)}</span><span class="d">todos los cruces</span></div>
+      <div class="kpi"><span class="k">Entre casinos distintos</span><span class="v">${pctOf(L.betweenCasinos)}%</span><span class="d">${kmoney(L.betweenCasinos)} · jugador contra jugador</span></div>
+      <div class="kpi"><span class="k">Con market makers externos</span><span class="v">${pctOf(L.fromMarketMakers)}%</span><span class="d">reembolsos pagados ${money(r.platform.rebatesPaid)}</span></div>
+      <div class="kpi"><span class="k">Con la casa</span><span class="v">${pctOf(L.fromHouse)}%</span><span class="d">resultado de la casa ${money(r.platform.houseResult)}</span></div>
+    </div>
+    <div class="tablewrap"><table><thead><tr><th>Casino</th><th class="num">Mercados</th><th class="num">Recaudado neto</th><th class="num">Comisiones</th><th class="num">Revenue share</th><th class="num">Resultado de sus jugadores</th><th class="num">A liquidar</th></tr></thead><tbody>
+      ${r.casinos.map((c) => `<tr><td><div class="t">${esc(c.name)}</div><span class="faint" style="font-size:11px">${c.players} jugadores</span></td><td class="num">${c.markets}</td><td class="num">${money(c.collected)}<br><span class="faint" style="font-size:11px">−${money(c.credited)} de ${money(c.debited)}</span></td><td class="num">${money(c.fees)}</td>
+        <td class="num">${money(c.revenueShare)} <span class="faint">(${(c.revenueShareBps / 100).toFixed(0)}%)</span></td><td class="num ${c.playersResult >= 0 ? "ok" : "bad"}">${money(c.playersResult)}</td>
+        <td class="num"><b>${money(Math.abs(c.due))}</b><br><span class="faint" style="font-size:11px">${c.due > 0 ? "el casino paga" : c.due < 0 ? "se le paga al casino" : "sin saldo"}</span></td></tr>`).join("") || `<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">Sin casinos.</td></tr>`}
+    </tbody></table></div>
+    ${r.casinos.every((c) => !c.markets) ? `<p class="faint" style="font-size:12px;margin:8px 0 0">Todavía no hay mercados resueltos en el período: la liquidación se calcula cuando se pagan. Resuelve uno en Resoluciones para verla.</p>` : ""}
+    <div class="grid2">
+      <div class="panel"><h2>Quién le compró a quién <small>volumen por par</small></h2>
+        <div class="tablewrap"><table><thead><tr><th>Toma (taker)</th><th>Da liquidez (maker)</th><th class="num">Volumen</th><th class="num">Cruces</th></tr></thead><tbody>
+        ${L.matrix.slice(0, 15).map((m) => `<tr><td>${esc(m.taker)}</td><td>${esc(m.maker)}</td><td class="num">${kmoney(m.volume)}</td><td class="num">${m.trades}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">Sin cruces en el período.</td></tr>`}
+        </tbody></table></div></div>
+      <div class="panel"><h2>Cómo se calcula</h2><p class="muted" style="font-size:13px;line-height:1.55;margin:0">
+        <b>Recaudado neto</b> = lo que el casino debitó a sus jugadores en los mercados resueltos del período − lo que les acreditó (premios, ventas y devoluciones), más las fianzas de resolución.<br>
+        <b>A liquidar</b> = recaudado − su revenue share. Si es positivo, el casino le transfiere ese monto a la plataforma; si es negativo, la plataforma se lo paga.<br>
+        La plataforma queda con las comisiones (menos revenue share y reembolsos a market makers) y con el resultado de la casa. Mismo casino entre sus jugadores: ${kmoney(Math.max(0, sameCasino))}.<br>
+        Cada casino ve su propia liquidación en <code>GET /operator/v1/clearing</code>.</p></div>
+    </div>`;
+  el.querySelectorAll("#lDays button").forEach((b) => (b.onclick = () => { viewLiquidacion.days = Number(b.dataset.d); route(); }));
 }
 
 // ---------- Oráculo ----------
