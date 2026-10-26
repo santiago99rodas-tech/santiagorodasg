@@ -10,6 +10,8 @@ import { bad, conflict, notFound, AppError } from "../lib/errors.js";
 import { feeOf, fromDecimal } from "../lib/money.js";
 import { bus } from "../lib/bus.js";
 import * as wallet from "./wallet.js";
+import { houseAccount } from "./house.js";
+import { playerSurchargeBps } from "./toxicity.js";
 
 const books = new Map<number, OrderBook>();
 export const MARKET_SLIPPAGE_CENTS = 10;
@@ -76,6 +78,9 @@ async function placeLocked(playerId: number, input: PlaceOrderInput): Promise<Or
   const kind: Kind = kindOf(input.side, input.outcome);
   const buy = isBuy(kind);
   const feeBps = await feeBpsFor(playerId);
+  // Recargo por apostar con información (services/toxicity.ts): solo en lo que se le compra a la casa
+  const house = await houseAccount();
+  const surcharge = feeBps > 0 ? await playerSurchargeBps(playerId) : 0;
 
   // Precio límite en el resultado elegido
   let limitOwn: number;
@@ -99,7 +104,7 @@ async function placeLocked(playerId: number, input: PlaceOrderInput): Promise<Or
   if (input.type === "MARKET" && buy) {
     if (!(input.amount && input.amount > 0)) throw bad("invalid_amount", "Indica el monto (amount) en USD");
     qty = Number.MAX_SAFE_INTEGER;
-    budget = Math.floor((fromDecimal(input.amount) * 10_000) / (10_000 + feeBps));
+    budget = Math.floor((fromDecimal(input.amount) * 10_000) / (10_000 + feeBps + surcharge));
   } else {
     if (!(input.shares && input.shares > 0)) throw bad("invalid_shares", "Indica la cantidad de acciones (shares)");
     qty = Math.round(input.shares * 100);
@@ -117,7 +122,7 @@ async function placeLocked(playerId: number, input: PlaceOrderInput): Promise<Or
   if (tif !== "GTC" && dry.filled === 0) throw conflict("no_liquidity", "No hay liquidez al precio indicado");
 
   const restQty = tif === "GTC" ? qty - dry.filled : 0;
-  const fillFees = dry.fills.map((f) => feeOf(notional(ownPrice(kind, f.yesPrice), f.qty), feeBps));
+  const fillFees = dry.fills.map((f) => feeOf(notional(ownPrice(kind, f.yesPrice), f.qty), feeBps + (f.makerOwnerId === house ? surcharge : 0)));
   const totalFee = fillFees.reduce((a, b) => a + b, 0);
   const restReserve = buy ? notional(limitOwn, restQty) : restQty;
 

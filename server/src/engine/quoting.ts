@@ -26,6 +26,8 @@ export interface OutcomeState {
   noShares: number; // acciones No que tiene la casa
   costUsd: number; // lo que la casa pagó por esas acciones (sin contar lo ya realizado)
   sigma?: number; // volatilidad observada del log-odds por √día (opcional)
+  imbalance?: number; // desequilibrio del flujo reciente de jugadores, −1 (todo No) a 1 (todo Sí)
+  shock?: boolean; // freno de emergencia o noticia reciente: más spread y menos tamaño
 }
 
 export interface EventState {
@@ -54,6 +56,10 @@ export interface QuoteParamsV2 {
   minHalfSpreadCents: number;
   maxLossUsd: number; // pérdida máxima en el peor escenario por evento
   riskOff?: boolean; // límite total superado: solo cotiza lo que reduce el riesgo
+  // Protección contra informados (engine/toxicity.ts); sin esto no hay ajuste
+  imbalanceSpread?: number; // log-odds extra de medio spread, del lado golpeado, con todo el flujo a un lado
+  shockSpreadMult?: number;
+  shockSizeFactor?: number;
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -171,6 +177,7 @@ export interface V2Diagnostics {
   lmsrMaxLossUsd: number; // techo de pérdida del tramo LMSR desde el estado actual
   worstCaseLossUsd: number; // pérdida actual de la casa en el peor escenario
   limited: boolean; // superó un límite: solo cotiza lo que reduce el riesgo
+  shock: boolean; // freno de emergencia activo
 }
 
 /** Fracción de liquidez según el tiempo al cierre: √(τ/τref), con un mínimo. */
@@ -192,7 +199,8 @@ export function halfSpreadLogit(tauDays: number, sigma: number | undefined, p: Q
 export function quoteV2(ev: EventState, p: QuoteParamsV2): { quotes: Quote[]; diag: V2Diagnostics } {
   const liq = liquidityFactor(ev.tauDays, p);
   const b = p.bShares * liq;
-  const size = Math.max(1, Math.round(p.levelSizeShares * liq));
+  const shocked = ev.outcomes.some((o) => o.shock);
+  const size = Math.max(1, Math.round(p.levelSizeShares * liq * (shocked ? p.shockSizeFactor ?? 1 : 1)));
 
   // Curva LMSR anclada en el precio justo actual. Lo que ya compraron los jugadores está dentro del
   // precio justo (flowUpdate), así que aquí la curva arranca en s = 0 y solo define los niveles.
@@ -217,8 +225,12 @@ export function quoteV2(ev: EventState, p: QuoteParamsV2): { quotes: Quote[]; di
   let halfL = 0;
 
   for (const i of markets) {
-    const hl = Math.max(halfSpreadLogit(ev.tauDays, sigmaOf(i), p), 0);
+    const hl = Math.max(halfSpreadLogit(ev.tauDays, sigmaOf(i), p), 0) * (shocked ? p.shockSpreadMult ?? 1 : 1);
     halfL = Math.max(halfL, hl);
+    // Glosten-Milgrom: si el flujo reciente va todo a un lado, ese lado probablemente trae información
+    const imb = ev.outcomes[i]?.imbalance ?? 0;
+    const hlAsk = hl + (p.imbalanceSpread ?? 0) * Math.max(0, imb);
+    const hlBid = hl + (p.imbalanceSpread ?? 0) * Math.max(0, -imb);
     const minHalf = p.minHalfSpreadCents / 100;
     const bids: number[] = [], asks: number[] = [];
     for (let k = 0; k < p.levels; k++) {
@@ -228,8 +240,8 @@ export function quoteV2(ev: EventState, p: QuoteParamsV2): { quotes: Quote[]; di
       const down = s.slice(); down[i] -= k * size;
       const buyAt = lmsrPrices(up, logPrior, b)[i];
       const sellAt = lmsrPrices(down, logPrior, b)[i];
-      const ask = Math.max(sigmoid(logit(clamp(buyAt, 0.001, 0.999)) + hl), prices[i] + minHalf);
-      const bid = Math.min(sigmoid(logit(clamp(sellAt, 0.001, 0.999)) - hl), prices[i] - minHalf);
+      const ask = Math.max(sigmoid(logit(clamp(buyAt, 0.001, 0.999)) + hlAsk), prices[i] + minHalf);
+      const bid = Math.min(sigmoid(logit(clamp(sellAt, 0.001, 0.999)) - hlBid), prices[i] - minHalf);
       asks.push(clamp(Math.ceil(ask * 100 - 1e-9), 2, 99));
       bids.push(clamp(Math.floor(bid * 100 + 1e-9), 1, 98));
     }
@@ -262,6 +274,7 @@ export function quoteV2(ev: EventState, p: QuoteParamsV2): { quotes: Quote[]; di
       lmsrMaxLossUsd: lmsrMaxLoss(prices.map((x) => Math.max(x, 1e-6)), b),
       worstCaseLossUsd: worst,
       limited,
+      shock: shocked,
     },
   };
 }

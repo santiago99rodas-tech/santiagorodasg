@@ -1,4 +1,5 @@
 // Ingesta: trae noticias de todas las fuentes activas, las guarda sin duplicados y detecta tendencias.
+import { flagNewsShocks } from "../services/toxicity.js";
 import { pool, many, one } from "../db/pool.js";
 import { fetchSource, type Fetcher, type SourceRow } from "./sources/index.js";
 import { keywords, classify, normalize } from "./text.js";
@@ -125,5 +126,7 @@ export async function detectTrends(windowHours = 48) {
     if (socialIds.length) await pool.query("UPDATE social_signals SET trend_id=$1 WHERE id = ANY($2)", [row.id, socialIds]);
   }
   await pool.query("UPDATE trends SET status='expired' WHERE status='active' AND NOT (id = ANY($1)) AND last_seen < now() - interval '48 hours'", [touched]);
+  // Noticia de último momento sobre un mercado abierto: la casa abre el spread un rato
+  await flagNewsShocks(scored).catch((e) => console.error("[protección] noticias:", e.message));
   return scored;
 }

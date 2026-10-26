@@ -47,6 +47,25 @@ export const config = {
     weightExternal: num("MM_W_EXTERNAL", 0.5),
     externalMaxAgeHours: num("MM_EXTERNAL_MAX_AGE_HOURS", 6),
   },
+  // Protección contra apostadores informados (engine/toxicity.ts, docs/MARKET-MAKER.md)
+  toxicity: {
+    enabled: str("TOX_ENABLED", "true") === "true",
+    markoutMinutes: num("TOX_MARKOUT_MIN", 60),
+    flowWindowMinutes: num("TOX_FLOW_WINDOW_MIN", 360),
+    minTrades: num("TOX_MIN_TRADES", 10),
+    confidenceZ: num("TOX_CONFIDENCE_Z", 2),
+    startCents: num("TOX_START_CENTS", 0.5),
+    fullCents: num("TOX_FULL_CENTS", 3),
+    maxSurchargeBps: num("TOX_MAX_SURCHARGE_BPS", 300),
+    imbalanceSpread: num("TOX_IMBALANCE_SPREAD", 0.12),
+    imbalanceMinUsd: num("TOX_IMBALANCE_MIN_USD", 150),
+    breakerCents: num("TOX_BREAKER_CENTS", 12),
+    breakerWindowMinutes: num("TOX_BREAKER_WINDOW_MIN", 10),
+    pauseMinutes: num("TOX_PAUSE_MIN", 5),
+    shockMinutes: num("TOX_SHOCK_MIN", 30),
+    shockSpreadMult: num("TOX_SHOCK_SPREAD_MULT", 2),
+    shockSizeFactor: num("TOX_SHOCK_SIZE_FACTOR", 0.5),
+  },
   integrity: {
     // Volumen mínimo de un mercado para entrar en los análisis de concentración y sesgo por país
     minVolumeUsd: num("INTEGRITY_MIN_VOLUME_USD", 200),

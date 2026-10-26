@@ -8,6 +8,10 @@
 
 import { OrderBook, type Kind } from "../engine/orderbook.js";
 import {
+  markoutCents, addMarkout, emptyStats, toxicityScore, surchargeBps, flowImbalance, breakerTripped,
+  type FlowStats, type ToxicityParams,
+} from "../engine/toxicity.js";
+import {
   quoteV1, quoteV2, poolLogOdds, worstCaseLoss, logit, sigmoid, flowUpdate, liquidityFactor,
   type EventState, type QuoteParamsV1, type QuoteParamsV2,
 } from "../engine/quoting.js";
@@ -20,7 +24,7 @@ export interface Scenario {
   stepHours: number;
   info: number; // intensidad de la información (señales)
   noise: { rate: number; meanUsd: number }; // apostadores casuales (por hora)
-  informed: { rate: number; noise: number; edgeCents: number; maxUsd: number; lateBoost: number };
+  informed: { rate: number; noise: number; edgeCents: number; maxUsd: number; lateBoost: number; accounts?: number }; // accounts: cuentas distintas (6 por defecto)
   fans: { rate: number; meanUsd: number }; // siempre al Sí de la opción 0 ("su" país o equipo)
   whales: { rate: number; usd: number; informedShare: number };
   externalRef: boolean; // hay una referencia externa (p. ej. Polymarket) con ruido
@@ -28,7 +32,8 @@ export interface Scenario {
 }
 
 export interface Strategy {
-  name: "v1" | "v2";
+  name: "v1" | "v2" | "v2+"; // v2+ = v2 con protección contra informados
+  tox?: ToxicityParams; // solo v2+
   v1: QuoteParamsV1;
   v2: QuoteParamsV2;
   weights: { prev: number; external: number };
@@ -68,9 +73,23 @@ export function rng(seed: number) {
   return { next, normal, poisson, exp };
 }
 
+// ---------- jugadores con identidad ----------
+// Cada tipo tiene un grupo de jugadores que se repite entre mercados, así la casa puede aprender
+// quién es quién con el markout (como en la plataforma real, donde el puntaje es por jugador).
+const POOL: Record<Agent, [number, number]> = { ruido: [1000, 300], informado: [100000, 6], hinchada: [3000, 50], ballena: [4000, 5] };
+export const agentOf = (id: number): Agent => (id >= 100000 ? "informado" : AGENTS.find((a) => id >= POOL[a][0] && id < POOL[a][0] + POOL[a][1]) ?? "ruido");
+
+/** Lo que la casa recuerda entre mercados: el historial de markout de cada jugador. */
+export interface SimMemory { stats: Map<number, FlowStats> }
+export const newMemory = (): SimMemory => ({ stats: new Map() });
+
+const MARKOUT_STEPS = 3; // horas hasta medir el markout
+const FLOW_WINDOW = 6; // horas de flujo para el desequilibrio
+const SHOCK_STEPS = 3; // horas de spread ancho después del freno
+
 // ---------- una corrida ----------
 
-export function runMarket(sc: Scenario, st: Strategy, seed: number, trace?: (row: Record<string, unknown>) => void): RunResult {
+export function runMarket(sc: Scenario, st: Strategy, seed: number, trace?: (row: Record<string, unknown>) => void, memory: SimMemory = newMemory()): RunResult {
   const world = rng(seed * 7919 + 1), act = rng(seed * 104729 + 7);
   const n = sc.options;
   const binary = n === 2;
@@ -104,6 +123,14 @@ export function runMarket(sc: Scenario, st: Strategy, seed: number, trace?: (row
     : pr.reduce((a, p, i) => a + (p - (i === winner ? 1 : 0)) ** 2, 0) / n);
   const brierOpen = brierOf(openYes);
 
+  const tox = st.name === "v2+" ? st.tox : undefined;
+  const pending: { step: number; player: number; i: number; fairAt: number; buyYes: boolean; usd: number }[] = []; // fairAt = precio pagado (espacio Sí)
+  const all: typeof pending = []; // para el markout final
+  const flowHist: { yes: number[]; no: number[] }[] = Array.from({ length: books }, () => ({ yes: [], no: [] }));
+  const shockUntil = new Array(books).fill(-1);
+  const scoreOf = (id: number) => (tox ? toxicityScore(memory.stats.get(id) ?? emptyStats(), tox) : 0);
+  const record = (id: number, m: number, usd: number) => memory.stats.set(id, addMarkout(memory.stats.get(id) ?? emptyStats(), m, usd));
+
   const steps = Math.round((sc.days * 24) / sc.stepHours);
   const dt = sc.stepHours / 24;
   let oid = 0;
@@ -124,10 +151,14 @@ export function runMarket(sc: Scenario, st: Strategy, seed: number, trace?: (row
     const ev: EventState = {
       kind: binary ? "binary" : "multi",
       tauDays: tau,
-      outcomes: fair.map((f, i) => ({ fair: f, yesShares: house.yes[i], noShares: house.no[i], costUsd: house.cost[i], sigma: sigmaOf(hist[i], sc.stepHours) })),
+      outcomes: fair.map((f, i) => ({
+        fair: f, yesShares: house.yes[i], noShares: house.no[i], costUsd: house.cost[i], sigma: sigmaOf(hist[i], sc.stepHours),
+        imbalance: tox ? flowImbalance(sum(flowHist[i].yes), sum(flowHist[i].no), tox) : undefined,
+        shock: tox ? step <= shockUntil[i] : undefined,
+      })),
     };
     peakWorst = Math.max(peakWorst, worstCaseLoss(ev));
-    const quotes = st.name === "v1" ? quoteV1(ev, st.v1) : quoteV2(ev, st.v2).quotes;
+    const quotes = st.name === "v1" ? quoteV1(ev, st.v1) : quoteV2(ev, tox ? { ...st.v2, ...tox } : st.v2).quotes;
     const book = Array.from({ length: books }, () => new OrderBook());
     for (const q of quotes) book[q.outcome].add({ id: ++oid, ownerId: HOUSE, kind: q.kind as Kind, yesPrice: q.yesPrice, remaining: q.shares * 100 });
 
@@ -136,15 +167,22 @@ export function runMarket(sc: Scenario, st: Strategy, seed: number, trace?: (row
     // 3. Llegan los jugadores
     const last: (number | undefined)[] = new Array(books).fill(undefined);
     const flow: number[] = new Array(books).fill(0);
+    const stepYes = new Array(books).fill(0), stepNo = new Array(books).fill(0);
     const take = (agent: Agent, i: number, buyYes: boolean, usd: number, yesLimit: number) => {
       if (usd < 1) return;
-      const budget = Math.floor((usd * 1e6) / (1 + st.feeBps / 1e4));
+      const player = POOL[agent][0] + Math.floor(act.next() * (agent === "informado" ? sc.informed.accounts ?? POOL.informado[1] : POOL[agent][1]));
+      // Recargo por markout: solo en lo que le compra a la casa (aquí la casa es el único maker)
+      const feeBps = st.feeBps + (tox ? surchargeBps(scoreOf(player), tox) : 0);
+      const budget = Math.floor((usd * 1e6) / (1 + feeBps / 1e4));
       const r = book[i].match({ id: ++oid, ownerId: 1, kind: buyYes ? "BUY_YES" : "BUY_NO", yesLimit, qty: 1e9, budget });
       for (const f of r.fills) {
         const sh = f.qty / 100;
         const agentPrice = (buyYes ? f.yesPrice : 100 - f.yesPrice) / 100;
         const housePrice = 1 - agentPrice;
-        const fee = (sh * agentPrice * st.feeBps) / 1e4;
+        const fee = (sh * agentPrice * feeBps) / 1e4;
+        const t = { step, player, i, fairAt: f.yesPrice, buyYes, usd: sh * agentPrice };
+        pending.push(t); all.push(t);
+        if (buyYes) stepYes[i] += sh * agentPrice; else stepNo[i] += sh * agentPrice;
         agentCash[agent] -= sh * agentPrice + fee;
         fees += fee;
         volume += sh * agentPrice;
@@ -202,6 +240,18 @@ export function runMarket(sc: Scenario, st: Strategy, seed: number, trace?: (row
     }
     for (let i = 0; i < books; i++) hist[i].push(logit(fair[i] / 100));
 
+    // 4b. Protección: markouts vencidos, ventana de flujo y freno de emergencia
+    for (let i = 0; i < books; i++) {
+      flowHist[i].yes.push(stepYes[i]); flowHist[i].no.push(stepNo[i]);
+      if (flowHist[i].yes.length > FLOW_WINDOW) { flowHist[i].yes.shift(); flowHist[i].no.shift(); }
+      const h = hist[i];
+      if (tox && h.length >= 2 && breakerTripped(sigmoid(h[h.length - 2]) * 100, sigmoid(h[h.length - 1]) * 100, tox)) shockUntil[i] = step + SHOCK_STEPS;
+    }
+    while (pending.length && pending[0].step <= step - MARKOUT_STEPS) {
+      const t = pending.shift()!;
+      record(t.player, markoutCents(t.fairAt, fair[t.i], t.buyYes), t.usd);
+    }
+
     // 5. Métricas con la probabilidad verdadera
     const ty = truthYes();
     for (let i = 0; i < books; i++) { errSum += Math.abs(fair[i] - ty[i] * 100); errN++; }
@@ -215,6 +265,8 @@ export function runMarket(sc: Scenario, st: Strategy, seed: number, trace?: (row
 
   // Resolución: $1 por acción ganadora
   const pays = (i: number) => (binary ? winner === 0 : winner === i);
+  // Markout final: contra el resultado ($1 o $0 por acción)
+  for (const t of all) record(t.player, markoutCents(t.fairAt, pays(t.i) ? 100 : 0, t.buyYes), t.usd);
   let pnl = fees;
   for (let i = 0; i < books; i++) pnl += (pays(i) ? house.yes[i] : house.no[i]) - house.cost[i];
   const agents = {} as Record<Agent, number>;
@@ -225,6 +277,8 @@ export function runMarket(sc: Scenario, st: Strategy, seed: number, trace?: (row
   }
   return { pnl, fees, volume, peakWorstLoss: peakWorst, drawdown, brierOpen, brier1d, errorCents: errSum / Math.max(1, errN), halfSpread: spreadSum / Math.max(1, spreadN), agents };
 }
+
+const sum = (xs: number[]) => xs.reduce((a, x) => a + x, 0);
 
 /** Volatilidad del log-odds por √día con las últimas 24 h de precios. */
 function sigmaOf(h: number[], stepHours: number) {
@@ -246,11 +300,18 @@ export interface Summary {
   peakWorstMean: number; peakWorstMax: number; drawdownMean: number;
   brierOpen: number; brier1d: number; errorCents: number; halfSpread: number;
   agents: Record<Agent, number>;
+  flagged: Record<Agent, number>; // fracción de jugadores de cada tipo con recargo al final
 }
 
 export function runMany(sc: Scenario, st: Strategy, runs: number, seed = 1): Summary {
   const rs: RunResult[] = [];
-  for (let r = 0; r < runs; r++) rs.push(runMarket(sc, st, seed + r));
+  const memory = newMemory();
+  for (let r = 0; r < runs; r++) rs.push(runMarket(sc, st, seed + r, undefined, memory));
+  const flagged = Object.fromEntries(AGENTS.map((a) => {
+    const ids = [...memory.stats.keys()].filter((id) => agentOf(id) === a);
+    const hit = st.tox ? ids.filter((id) => surchargeBps(toxicityScore(memory.stats.get(id)!, st.tox!), st.tox!) > 0).length : 0;
+    return [a, ids.length ? hit / ids.length : 0];
+  })) as Record<Agent, number>;
   const mean = (f: (r: RunResult) => number) => rs.reduce((a, r) => a + f(r), 0) / rs.length;
   const pnls = rs.map((r) => r.pnl).sort((a, b) => a - b);
   const vol = mean((r) => r.volume);
@@ -271,6 +332,7 @@ export function runMany(sc: Scenario, st: Strategy, runs: number, seed = 1): Sum
     errorCents: mean((r) => r.errorCents),
     halfSpread: mean((r) => r.halfSpread),
     agents: Object.fromEntries(AGENTS.map((a) => [a, mean((r) => r.agents[a])])) as Record<Agent, number>,
+    flagged,
   };
 }
 
@@ -292,5 +354,6 @@ export const SCENARIOS: Scenario[] = [
   { ...base, name: "hinchada", label: "Hinchada (todo al Sí)", fans: { rate: 2, meanUsd: 25 }, informed: { ...base.informed, rate: 0.8 } },
   { ...base, name: "ballenas", label: "Ballenas", whales: { rate: 0.06, usd: 1500, informedShare: 0.6 } },
   { ...base, name: "multi5", label: "Múltiple, 5 opciones", options: 5, noise: { rate: 5, meanUsd: 15 }, informed: { ...base.informed, rate: 1 }, fans: { rate: 0.8, meanUsd: 25 } },
+  { ...base, name: "cuentas", label: "Informados con cuentas nuevas", informed: { ...base.informed, rate: 1, accounts: 5000 } },
   { ...base, name: "referencia", label: "Con referencia externa", externalRef: true, informed: { ...base.informed, rate: 1 } },
 ];

@@ -6,7 +6,7 @@ Plataforma de mercados de predicción al estilo Polymarket, pensada para integra
 - **Billetera seamless**: el dinero sigue en el casino; la plataforma pide débitos y créditos firmados con HMAC.
 - **Información → preguntas**: ingesta de periódicos, revistas, Google Trends, GDELT y señales de redes sociales; detección de tendencias y preguntas generadas con IA (Claude) que pasan por moderación.
 - **Resolución** con propuesta, ventana de disputa y pago automático; la IA puede proponer resultados investigando en la web.
-- **Market maker de la casa** para que siempre haya liquidez: precio que aprende del flujo (LMSR), spread Avellaneda-Stoikov, liquidez que baja cerca del cierre, límites de pérdida y botón de pánico. Probado con un simulador de jugadores ([detalle](docs/MARKET-MAKER.md)).
+- **Market maker de la casa** para que siempre haya liquidez: precio que aprende del flujo (LMSR), spread Avellaneda-Stoikov, liquidez que baja cerca del cierre, límites de pérdida y botón de pánico. Protección contra apostadores informados: recargo según su markout, spread asimétrico y freno de emergencia. Probado con un simulador de jugadores ([detalle](docs/MARKET-MAKER.md)).
 - **Módulo embebible** (iframe) con dashboards, gráficas, libro de órdenes, apuestas en vivo y "Mis predicciones".
 
 ## Estructura
@@ -68,8 +68,8 @@ Sirve para mostrar el producto a casinos sin desplegar nada. Se reinicia al reca
 ```bash
 cd server
 createdb predicciones_test        # una sola vez
-npm test                          # 43 pruebas: motor, market maker, trading, billetera, resolución, ingesta, IA (con cliente simulado), integridad y API
-npm run sim                       # simulador: market maker v1 contra v2 en 7 escenarios
+npm test                          # 50 pruebas: motor, market maker, protección contra informados, trading, billetera, resolución, ingesta, IA (con cliente simulado), integridad y API
+npm run sim                       # simulador: market maker v1, v2 y v2 con protección en 8 escenarios
 npm run typecheck
 ```
 
@@ -87,7 +87,7 @@ npm run typecheck
 | Tendencias y señales | Tendencias detectadas, generar preguntas desde una tendencia, cargar señales de Instagram/TikTok |
 | Fuentes | Estado de cada fuente, activar o desactivar, agregar nuevas y leer ahora |
 | Calibración y sesgo | Si los precios predicen bien (gráfico de calibración y puntaje de Brier por categoría y volumen), sesgo favorito-batacazo, proporción Sí/No, precisión de la apertura (IA vs. catálogo), concentración del dinero, sesgo de hinchada por país, resultado de la casa según quién resolvió, alertas de compras tardías y comparación con referencias externas (Polymarket o precios manuales) |
-| Riesgo de la casa | Estado del market maker (v2), pérdida en el peor escenario por evento y total frente a sus límites, liquidez y spread por evento, inventario por mercado, recotizar y botón de pánico |
+| Riesgo de la casa | Estado del market maker (v2), pérdida en el peor escenario por evento y total frente a sus límites, liquidez y spread por evento, inventario por mercado, recotizar y botón de pánico; apostadores con ventaja (markout, puntaje y recargo, ajustable a mano) y mercados en freno |
 | Casinos | Alta de operadores con sus credenciales (se muestran una sola vez) |
 
 **Montarlo en bo-sio.com** (o en cualquier back-office existente), de tres maneras:
@@ -113,6 +113,7 @@ En todos los casos, restringe `/admin` por IP o VPN y cambia `ADMIN_API_KEY` en 
 | Dar de alta un casino | `POST /admin/operators` `{ id, name, walletUrl, webhookUrl?, theme? }` |
 | Riesgo de la casa | `GET /admin/exposure` · `GET /admin/mm/status` |
 | Botón de pánico del market maker | `POST /admin/mm/kill` `{ on: true }` |
+| Apostadores con ventaja y mercados en freno | `GET /admin/toxicity` · `POST /admin/players/:id/surcharge` `{ bps }` |
 
 Las tareas programadas (ingesta, generación, cierre, resolución, market maker, reintentos, webhooks) corren solas. Sus intervalos se configuran en `.env`.
 
@@ -120,5 +121,5 @@ Las tareas programadas (ingesta, generación, cierre, resolución, market maker,
 
 - [Guía de integración para casinos](docs/INTEGRACION-CASINO.md)
 - [Arquitectura y comparación con Polymarket](docs/ARQUITECTURA.md)
-- [Market maker v2 y simulador](docs/MARKET-MAKER.md)
+- [Market maker v2, protección contra informados y simulador](docs/MARKET-MAKER.md)
 - [Despliegue en Easypanel](docs/DESPLIEGUE-EASYPANEL.md)

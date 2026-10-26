@@ -42,6 +42,7 @@ El casino entrega:
 - `webhookUrl` (opcional)
 - `theme` (opcional): `{ "brandName": "Ecuabet", "primary": "#ffd400" }`. El módulo usa el nombre y el color del casino.
 - `feeBps` (opcional): comisión por apuesta en puntos básicos (200 = 2%). Si no se indica, se usa la global.
+  - A los jugadores que le ganan a la casa de forma sostenida se les suma un recargo de hasta 3% en lo que le compran al market maker de la casa (ver [MARKET-MAKER.md](MARKET-MAKER.md#protección-contra-el-apostador-informado)). Va incluido en el `fee` de cada orden y en el débito. Avísalo en los términos y condiciones del casino.
 
 ## 2. Firma de las peticiones (HMAC-SHA256)
 

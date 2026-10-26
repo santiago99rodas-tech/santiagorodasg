@@ -46,9 +46,16 @@ test("el precio justo aprende del flujo de los jugadores (no de la casa)", async
   assert.ok(withRef > after1);
   await updateFairPrices();
   assert.equal(await fairOf(marketId), withRef);
+  // El salto de más de 12¢ en minutos activó el freno de emergencia: la casa se retira un rato
+  const m = (await pool.query("SELECT paused_until > now() AS paused, shock_until > now() AS shock, shock_reason FROM markets WHERE id=$1", [marketId])).rows[0];
+  assert.ok(m.paused && m.shock, JSON.stringify(m));
+  assert.match(m.shock_reason, /Salto de precio/);
+  await refreshQuotes(marketId);
+  assert.equal(bookOf(marketId).ordersOf(await houseAccount()).length, 0);
 });
 
 test("estado del market maker y botón de pánico", async () => {
+  await pool.query("UPDATE markets SET paused_until=NULL, shock_until=NULL WHERE id=$1", [marketId]);
   await refreshQuotes(marketId);
   const st = await mmStatus();
   assert.equal(st.strategy, "v2");
@@ -61,4 +68,15 @@ test("estado del market maker y botón de pánico", async () => {
   await setKillSwitch(false, "test");
   await refreshQuotes(marketId);
   assert.ok(bookOf(marketId).ordersOf(house).length > 0);
+});
+
+test("muchos cruces seguidos no disparan la volatilidad ni abren el spread a 1¢/99¢", async () => {
+  await pool.query("UPDATE markets SET paused_until=NULL, shock_until=NULL WHERE id=$1", [marketId]);
+  const beto = await player("beto", 500);
+  for (let i = 0; i < 6; i++) {
+    await placeOrder(beto, { marketId, side: "BUY", outcome: i % 2 ? "YES" : "NO", type: "MARKET", amount: 10 });
+    await refreshQuotes(marketId);
+  }
+  const b = bookOf(marketId);
+  assert.ok(b.bestAsk()! - b.bestBid()! <= 12, `${b.bestBid()} / ${b.bestAsk()}`);
 });

@@ -78,6 +78,14 @@
   const MM = { levels: 3, levelSizeShares: 200, bShares: 1500, minLiquidity: 0.15, tauRefDays: 7, gamma: 0.5, kappa: 12,
     sigmaFloor: 0.25, holdDays: 1, minHalfSpreadCents: 1, maxLossUsd: 2000, maxTotalLossUsd: 50000 };
   const mmControl = { killed: false };
+  // Protección contra informados (engine/toxicity.ts). En la demo el tiempo va comprimido:
+  // el markout "corto" se mide al minuto, el flujo se mira en 10 min y el freno en 2 min.
+  const TOX = { minTrades: 10, confidenceZ: 2, startCents: 0.5, fullCents: 3, maxSurchargeBps: 300, imbalanceSpread: 0.12, imbalanceMinUsd: 150,
+    breakerCents: 12, shockSpreadMult: 2, shockSizeFactor: 0.5, markoutMs: 60e3, flowWindowMs: 10 * 60e3, breakerWindowMs: 2 * 60e3, pauseMs: 30e3, shockMs: 3 * 60e3 };
+  const flow = new Map(); // jugador → estadísticas de markout
+  const overrides = new Map();
+  const tradeLog = []; // cruces de jugadores pendientes de markout
+  const surchargeOf = (pid) => overrides.has(pid) ? overrides.get(pid) : surchargeBps(toxicityScore(flow.get(pid) ?? emptyStats(), TOX), TOX);
   const S = {
     events: [], markets: new Map(), books: new Map(), players: new Map(), orders: new Map(), trades: [], positions: new Map(),
     ledger: [], fees: [], history: new Map(), drafts: [], resolutions: [], trends: [], sources: [], signals: [], operators: [],
@@ -173,7 +181,7 @@
     let qty, budget;
     if (input.type === "MARKET" && buy) {
       if (!(input.amount > 0)) throw bad("invalid_amount", "Indica el monto (amount) en USD");
-      qty = Number.MAX_SAFE_INTEGER; budget = Math.floor((Math.round(input.amount * 1e6) * 10000) / (10000 + feeBps));
+      qty = Number.MAX_SAFE_INTEGER; budget = Math.floor((Math.round(input.amount * 1e6) * 10000) / (10000 + feeBps + (player.isHouse ? 0 : surchargeOf(pid))));
     } else {
       if (!(input.shares > 0)) throw bad("invalid_shares", "Indica la cantidad de acciones (shares)");
       qty = Math.round(input.shares * 100);
@@ -183,7 +191,8 @@
     if (tif === "FOK" && dry.filled < qty) throw conflict("fok_not_filled", "La orden no se puede llenar completa al precio indicado");
     if (tif !== "GTC" && dry.filled === 0) throw conflict("no_liquidity", "No hay liquidez al precio indicado");
     const restQty = tif === "GTC" ? qty - dry.filled : 0;
-    const fillFees = dry.fills.map((f) => feeOf(notional(ownPrice(kind, f.yesPrice), f.qty), feeBps));
+    const sur = player.isHouse ? 0 : surchargeOf(pid);
+    const fillFees = dry.fills.map((f) => feeOf(notional(ownPrice(kind, f.yesPrice), f.qty), feeBps + (f.makerOwnerId === HOUSE ? sur : 0)));
     const totalFee = fillFees.reduce((a, b) => a + b, 0);
     const restReserve = buy ? notional(limitOwn, restQty) : restQty;
     if (buy && !player.isHouse) {
@@ -229,6 +238,7 @@
   function applyFill(m, takerOrderId, takerId, takerKind, f, fee) {
     const tn = notional(ownPrice(takerKind, f.yesPrice), f.qty), mn = notional(ownPrice(f.makerKind, f.yesPrice), f.qty);
     S.trades.push({ id: ++S.seq.trade, marketId: m.id, makerOrderId: f.makerId, takerOrderId, takerId, yesPrice: f.yesPrice, qty: f.qty, kind: f.kind, fee, at: now() });
+    if (takerId !== HOUSE) tradeLog.push({ pid: takerId, mid: m.id, yesPrice: f.yesPrice, yes: takerKind === "BUY_YES" || takerKind === "SELL_NO", usd: tn / 1e6, at: now(), short: false });
     if (fee > 0) S.fees.push({ amount: fee, at: now() });
     const mo = S.orders.get(f.makerId);
     const makerBuy = isBuy(f.makerKind);
@@ -273,12 +283,39 @@
     const prev = ms.map((x) => x.fairExact ?? x.fair / 100);
     const sum = prev.reduce((a, x) => a + x, 0);
     const next = flowUpdate(kind, kind === "multi" ? prev.map((x) => x / sum) : prev, ms.map((x) => (x.id === m.id ? yesShares : 0)), b);
-    ms.forEach((x, i) => { x.fairExact = clamp(next[i], 0.02, 0.98); x.fair = clamp(Math.round(x.fairExact * 100), 2, 98); });
+    ms.forEach((x, i) => { x.fairExact = clamp(next[i], 0.02, 0.98); x.fair = clamp(Math.round(x.fairExact * 100), 2, 98); trackFair(x); });
   }
+  function trackFair(x) {
+    const t = now();
+    x.trail = (x.trail ?? []).filter((p) => t - p.t <= TOX.breakerWindowMs);
+    x.trail.push({ t, fair: x.fairExact * 100 });
+    const jump = Math.max(...x.trail.map((p) => Math.abs(p.fair - x.fairExact * 100)));
+    if (breakerTripped(x.fairExact * 100 - jump, x.fairExact * 100, TOX)) { setShock([x.id], `Salto de precio de ${Math.round(jump)}¢ en 2 min`, true); x.trail = [{ t, fair: x.fairExact * 100 }]; }
+  }
+  function setShock(ids, reason, pause) {
+    for (const id of ids) { const x = S.markets.get(id); if (!x || x.status !== "open") continue; x.shockUntil = Math.max(x.shockUntil ?? 0, now() + TOX.shockMs); if (pause) x.pausedUntil = now() + TOX.pauseMs; x.shockReason = reason; }
+  }
+  function imbalanceOf(mid) {
+    let y = 0, n = 0; const t = now();
+    for (let i = tradeLog.length - 1; i >= 0 && t - tradeLog[i].at <= TOX.flowWindowMs; i--) if (tradeLog[i].mid === mid) { if (tradeLog[i].yes) y += tradeLog[i].usd; else n += tradeLog[i].usd; }
+    return flowImbalance(y, n, TOX);
+  }
+  function scoreMarkouts() {
+    const t = now();
+    for (const tr of tradeLog) {
+      if (tr.short || t - tr.at < TOX.markoutMs) continue;
+      const m = S.markets.get(tr.mid);
+      tr.short = true;
+      if (m.status !== "open") continue;
+      flow.set(tr.pid, addMarkout(flow.get(tr.pid) ?? emptyStats(), markoutCents(tr.yesPrice, (m.fairExact ?? m.fair / 100) * 100, tr.yes), tr.usd));
+    }
+  }
+  setInterval(scoreMarkouts, 15e3);
   function eventState(m) {
     const ms = eventMarkets(m);
     return { ms, state: { kind: ms.length > 1 ? "multi" : "binary", tauDays: tauOf(m),
-      outcomes: ms.map((x) => { const y = pos(HOUSE, x.id, "YES"), n = pos(HOUSE, x.id, "NO"); return { fair: x.fairExact != null ? x.fairExact * 100 : x.fair, yesShares: y.qty / 100, noShares: n.qty / 100, costUsd: (y.cost + n.cost) / 1e6 }; }) } };
+      outcomes: ms.map((x) => { const y = pos(HOUSE, x.id, "YES"), n = pos(HOUSE, x.id, "NO"); return { fair: x.fairExact != null ? x.fairExact * 100 : x.fair, yesShares: y.qty / 100, noShares: n.qty / 100, costUsd: (y.cost + n.cost) / 1e6,
+        imbalance: imbalanceOf(x.id), shock: (x.shockUntil ?? 0) > now() }; }) } };
   }
   function totalWorstLoss() {
     const seen = new Set(); let t = 0;
@@ -302,7 +339,8 @@
     const { ms, state } = eventState(m);
     ms.forEach((x) => clearHouse(x.id));
     if (mmControl.killed) return;
-    const { quotes } = quoteV2(state, { ...MM, riskOff: totalWorstLoss() > MM.maxTotalLossUsd });
+    if (ms.some((x) => (x.pausedUntil ?? 0) > now())) return; // freno de emergencia
+    const { quotes } = quoteV2(state, { ...MM, ...TOX, riskOff: totalWorstLoss() > MM.maxTotalLossUsd });
     for (const q of quotes) quote(ms[q.outcome].id, q.kind, q.yesPrice, q.shares);
   }
   function mmStatus() {
@@ -311,11 +349,12 @@
       if (m.status !== "open" || seen.has(m.eventId)) continue;
       seen.add(m.eventId);
       const { ms, state } = eventState(m);
-      const { quotes, diag } = quoteV2(state, MM);
+      const { quotes, diag } = quoteV2(state, { ...MM, ...TOX });
       const e = S.events.find((x) => x.id === m.eventId);
       events.push({ eventId: e.id, marketIds: ms.map((x) => x.id), title: e.title, kind: state.kind, tauDays: Math.round(state.tauDays * 10) / 10,
         liquidity: Math.round(diag.liquidity * 100) / 100, b: Math.round(diag.b), halfSpreadCents: Math.round(diag.halfSpreadCents * 10) / 10, prices: diag.prices,
-        worstCaseLossUsd: Math.round(diag.worstCaseLossUsd), lmsrMaxLossUsd: Math.round(diag.lmsrMaxLossUsd), limited: diag.limited, quotes: quotes.length });
+        worstCaseLossUsd: Math.round(diag.worstCaseLossUsd), lmsrMaxLossUsd: Math.round(diag.lmsrMaxLossUsd), limited: diag.limited, quotes: quotes.length,
+        paused: ms.some((x) => (x.pausedUntil ?? 0) > now()), shock: diag.shock, imbalance: Math.round(Math.max(...state.outcomes.map((o) => Math.abs(o.imbalance))) * 100) / 100 });
     }
     events.sort((a, b) => b.worstCaseLossUsd - a.worstCaseLossUsd);
     const worst = events.reduce((a, e) => a + e.worstCaseLossUsd, 0);
@@ -363,6 +402,8 @@
       const m = S.markets.get(mid);
       const out = r.outcome === "VOID" ? "VOID" : e.kind === "multi" ? (mid === r.winning_market_id ? "YES" : "NO") : r.outcome;
       m.status = out === "VOID" ? "void" : "resolved"; m.resolved = out; m.last = out === "YES" ? 99 : out === "NO" ? 1 : 50;
+      const value = out === "YES" ? 100 : out === "NO" ? 0 : 50; // markout final contra el resultado
+      for (const tr of tradeLog) if (tr.mid === mid) flow.set(tr.pid, addMarkout(flow.get(tr.pid) ?? emptyStats(), markoutCents(tr.yesPrice, value, tr.yes), tr.usd));
       for (const p of S.positions.values()) {
         if (p.marketId !== mid || p.qty <= 0) continue;
         const per = out === "VOID" ? 500000 : p.outcome === out ? 1000000 : 0;
@@ -667,6 +708,18 @@
   route("POST", "/admin/references/refresh", () => { throw new ApiError(503, "offline", "La demo no tiene conexión a internet para leer Polymarket. En el servidor real se actualiza cada 30 minutos."); });
   route("POST", "/admin/mm/refresh", () => { let n = 0; for (const m of S.markets.values()) if (m.status === "open") { refreshQuotes(m.id); n++; } return { markets: n }; });
   route("GET", "/admin/mm/status", () => mmStatus());
+  route("GET", "/admin/toxicity", () => {
+    const players = [...flow.entries()].filter(([, st]) => st.trades >= 3).map(([pid, st]) => {
+      const p = S.players.get(pid), score = toxicityScore(st, TOX);
+      return { playerId: pid, name: p.name, externalId: `jugador-${pid}`, operatorId: "casino-demo", since: iso(p.since ?? now()), trades: st.trades, volumeUsd: Math.round(st.w),
+        meanMarkoutCents: Math.round(meanMarkout(st) * 10) / 10, scoreCents: Math.round(score * 10) / 10, surchargeBps: surchargeOf(pid), automaticBps: surchargeBps(score, TOX), override: overrides.get(pid) ?? null };
+    }).sort((a, b) => b.surchargeBps - a.surchargeBps || b.scoreCents - a.scoreCents);
+    const markets = [...S.markets.values()].filter((m) => m.status === "open" && Math.max(m.shockUntil ?? 0, m.pausedUntil ?? 0) > now())
+      .map((m) => ({ marketId: m.id, title: m.question, pausedUntil: m.pausedUntil ? iso(m.pausedUntil) : null, shockUntil: m.shockUntil ? iso(m.shockUntil) : null, reason: m.shockReason }));
+    return { enabled: true, params: { ...TOX, breakerWindowMinutes: 2 }, flagged: players.filter((p) => p.surchargeBps > 0).length, tracked: flow.size, players: players.slice(0, 50), markets };
+  });
+  route("POST", "/admin/players/:id/surcharge", ({ p, b }) => { const id = Number(p.id); if (b.bps == null) overrides.delete(id); else overrides.set(id, b.bps); return { playerId: id, surchargeOverride: b.bps }; });
+  route("POST", "/admin/markets/:id/shock", ({ p, b }) => { setShock([Number(p.id)], b.reason ?? "Manual (Demo)", !!b.pause); return { ok: true }; });
   route("POST", "/admin/mm/kill", ({ b }) => {
     mmControl.killed = !!b.on; let n = 0;
     for (const m of S.markets.values()) if (m.status === "open") { if (mmControl.killed) { if (bookOf(m.id).ordersOf(HOUSE).length) { clearHouse(m.id); n++; } } else refreshQuotes(m.id); }
@@ -742,6 +795,16 @@
       ev.marketIds.forEach((mid) => backfill(mid, S.markets.get(mid).initial));
     }
     for (const m of S.markets.values()) refreshQuotes(m.id);
+    // Historial de markout de los mercados de demostración ya resueltos: dos jugadores le ganan a la
+    // casa de forma sostenida (Kevin Andrade y Diego Torres); el resto apuesta como casual
+    BOT_NAMES.forEach((_, i) => {
+      const sharp = i === 6 || i === 8; let st = emptyStats();
+      for (let k = 0; k < 30 + Math.floor(rnd() * 30); k++) {
+        const g = Math.sqrt(-2 * Math.log(1 - rnd())) * Math.cos(2 * Math.PI * rnd());
+        st = addMarkout(st, (sharp ? 7 : -3) + g * 22, sharp ? 40 + rnd() * 80 : 5 + rnd() * 40);
+      }
+      flow.set(10 + i, st);
+    });
     held.forEach((it) => S.drafts.push({ id: ++S.seq.draft, status: "pending", created_by: "ai:claude-opus-5-5", created_at: iso(now() - Math.floor(rnd() * 6 * 3600e3)),
       trend_label: it.tags?.[0] ?? null, payload: { ...it, rationale: "Tema con alta cobertura en varias fuentes y búsquedas en alza en Ecuador y Colombia; resolución clara con fuente oficial.", sourceUrls: [] } }));
     // 48 h de actividad simulada (con el reloj en el pasado), algo más intensa hoy que ayer

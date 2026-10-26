@@ -15,6 +15,7 @@ import { cancelAllInMarket } from "../services/trading.js";
 import { refreshQuotes, houseStats, mmStatus, setKillSwitch } from "../services/marketmaker.js";
 import { houseAccount } from "../services/house.js";
 import { listEvents } from "../services/marketdata.js";
+import { toxicityReport, setSurchargeOverride, setShock } from "../services/toxicity.js";
 import { integrityReport, setExternalRef, addReferencePrice, refreshExternalPrices } from "../services/integrity.js";
 
 const SourceBody = z.object({
@@ -209,6 +210,17 @@ export async function adminRoutes(app: FastifyInstance) {
   });
   app.post("/admin/mm/refresh", async (req) => ({ markets: await refreshQuotes((req.body as any)?.marketId) }));
   app.get("/admin/mm/status", async () => mmStatus());
+  // Protección contra apostadores informados
+  app.get("/admin/toxicity", async () => toxicityReport());
+  app.post<{ Params: { id: string } }>("/admin/players/:id/surcharge", async (req) => {
+    const { bps } = z.object({ bps: z.number().int().min(0).max(2000).nullable() }).parse(req.body ?? {});
+    return setSurchargeOverride(Number(req.params.id), bps);
+  });
+  app.post<{ Params: { id: string } }>("/admin/markets/:id/shock", async (req) => {
+    const { pause, reason } = z.object({ pause: z.boolean().default(false), reason: z.string().max(200).optional() }).parse(req.body ?? {});
+    await setShock([Number(req.params.id)], reason ?? `Manual (${adminUser(req)})`, pause);
+    return { ok: true };
+  });
   // Botón de pánico: { on: true } retira todas las órdenes de la casa y deja de cotizar
   app.post("/admin/mm/kill", async (req) => {
     const on = z.object({ on: z.boolean() }).parse(req.body ?? {}).on;

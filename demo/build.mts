@@ -40,8 +40,8 @@ const admin = inject(read("web/admin/index.html"), [
 
 // La matemática del market maker es la misma del servidor: se transpila engine/quoting.ts a JS plano
 const { transformSync } = createRequire(new URL("../server/package.json", import.meta.url))("esbuild");
-const quoting = transformSync(read("server/src/engine/quoting.ts"), { loader: "ts", format: "esm" }).code
-  .replace(/^export /gm, "").replace(/^\s*const clamp = .*$/m, "");
+const plain = (f: string) => transformSync(read(f), { loader: "ts", format: "esm" }).code.replace(/^export /gm, "");
+const quoting = plain("server/src/engine/quoting.ts").replace(/^\s*const clamp = .*$/m, "") + "\n" + plain("server/src/engine/toxicity.ts");
 
 // Literal JS seguro dentro de <script>
 const js = (v: unknown) => JSON.stringify(v).replace(/<\/script/gi, "<\\/script").replace(/<!--/g, "<\\!--");

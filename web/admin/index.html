@@ -612,21 +612,46 @@ async function viewFuentes(el) {
 
 // ---------- Riesgo ----------
 async function viewRiesgo(el) {
-  const [r, mm] = await Promise.all([api("/admin/exposure"), api("/admin/mm/status").catch(() => null)]);
+  const [r, mm, tox] = await Promise.all([api("/admin/exposure"), api("/admin/mm/status").catch(() => null), api("/admin/toxicity").catch(() => null)]);
   const rows = r.markets.filter((m) => m.house_cost > 0 || m.players_yes > 0 || m.players_no > 0);
   el.innerHTML = `<div class="head"><div><h1>Riesgo de la casa</h1><p>El market maker de la casa da liquidez a ambos lados. Aquí ves su inventario y dinero comprometido por mercado.</p></div><div class="row"><button class="btn" id="mmRefresh">Recotizar ahora</button>${mm ? `<button class="btn ${mm.killed ? "ok" : "bad"}" id="mmKill">${mm.killed ? "Reanudar market maker" : "Botón de pánico"}</button>` : ""}</div></div>
     ${mm ? mmPanel(mm) : ""}
+    ${tox ? toxPanel(tox) : ""}
     <div class="kpis" style="margin-bottom:14px"><div class="kpi"><span class="k">Comprometido en posiciones</span><span class="v">${kmoney(r.house.open_cost)}</span></div><div class="kpi"><span class="k">Resultado realizado</span><span class="v ${r.house.realized >= 0 ? "ok" : "bad"}">${money(r.house.realized)}</span></div><div class="kpi"><span class="k">Comisiones cobradas</span><span class="v">${money(r.house.fees)}</span></div><div class="kpi"><span class="k">Mercados con exposición</span><span class="v">${rows.filter((m) => m.house_cost > 0).length}</span></div></div>
     <div class="tablewrap"><table><thead><tr><th>Mercado</th><th>Estado</th><th class="num">Precio</th><th class="num">Justo</th><th class="num">Casa Sí</th><th class="num">Casa No</th><th class="num">Comprometido</th><th class="num">Jugadores Sí / No</th><th class="num">Volumen</th></tr></thead><tbody>
     ${rows.length ? rows.slice(0, 200).map((m) => `<tr><td><div class="t">${esc(m.question)}</div></td><td>${pill(m.status)}</td><td class="num">${m.last_price}¢</td><td class="num">${m.fair_price}¢</td><td class="num">${(m.house_yes / 100).toLocaleString("es-EC")}</td><td class="num">${(m.house_no / 100).toLocaleString("es-EC")}</td><td class="num">${money(m.house_cost)}</td><td class="num">${(m.players_yes / 100).toLocaleString("es-EC")} / ${(m.players_no / 100).toLocaleString("es-EC")}</td><td class="num">${kmoney(m.volume)}</td></tr>`).join("") : `<tr><td colspan="9" class="muted" style="text-align:center;padding:24px">Sin exposición todavía.</td></tr>`}
     </tbody></table></div>`;
   el.querySelector("#mmRefresh").onclick = (e) => run(e.target, () => api("/admin/mm/refresh", { method: "POST", body: {} }), (x) => `${x.markets} mercados recotizados`).then(() => route());
+  el.querySelectorAll("[data-sur]").forEach((b) => (b.onclick = async () => {
+    const p = tox.players.find((x) => String(x.playerId) === b.dataset.sur);
+    const f = await modal({ title: `Recargo de ${p.name}`, text: `Automático: ${(p.automaticBps / 100).toFixed(2)}%. Deja el campo vacío para volver al automático.`, ok: "Guardar",
+      fields: [{ id: "pct", label: "Recargo manual (%)", type: "number", value: p.override == null ? "" : String(p.override / 100) }] });
+    if (!f) return;
+    const bps = f.pct === "" ? null : Math.round(Number(f.pct) * 100);
+    run(null, () => api(`/admin/players/${p.playerId}/surcharge`, { method: "POST", body: { bps } }), bps == null ? "Recargo automático" : `Recargo fijado en ${(bps / 100).toFixed(2)}%`).then(() => route());
+  }));
   const kill = el.querySelector("#mmKill");
   if (kill) kill.onclick = async () => {
     const on = !mm.killed;
     if (on && !(await modal({ title: "Botón de pánico", text: "La casa retira todas sus cotizaciones y deja de dar liquidez hasta que la reanudes. Las apuestas entre jugadores siguen funcionando.", ok: "Retirar cotizaciones", danger: true }))) return;
     run(kill, () => api("/admin/mm/kill", { method: "POST", body: { on } }), on ? (x) => `Market maker detenido · ${x.marketsCleared} mercados retirados` : "Market maker reanudado").then(() => route());
   };
+}
+
+function toxPanel(t) {
+  const usd = (v) => "$" + Math.round(v).toLocaleString("es-EC");
+  const until = (d) => d ? new Date(d).toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" }) : "—";
+  return `<div style="display:grid;gap:14px;margin:0 0 14px">
+    <div class="panel"><h2>Apostadores con ventaja <small>${t.flagged} con recargo de ${t.tracked} medidos${t.enabled ? "" : " · protección apagada"}</small></h2>
+      ${t.players.length ? `<div class="tablewrap"><table><thead><tr><th>Jugador</th><th class="num">Apuestas</th><th class="num">Volumen</th><th class="num">Markout medio</th><th class="num">Puntaje</th><th class="num">Recargo</th><th></th></tr></thead><tbody>
+      ${t.players.slice(0, 12).map((p) => `<tr><td><div class="t">${esc(p.name)}</div><span class="faint" style="font-size:11px">${esc(p.operatorId ?? "")} · ${esc(p.externalId)}</span></td><td class="num">${p.trades}</td><td class="num">${usd(p.volumeUsd)}</td><td class="num ${p.meanMarkoutCents > 0 ? "warn" : ""}">${p.meanMarkoutCents > 0 ? "+" : ""}${p.meanMarkoutCents}¢</td><td class="num">${p.scoreCents}¢</td><td class="num ${p.surchargeBps ? "bad" : ""}">${(p.surchargeBps / 100).toFixed(2)}%${p.override != null ? " (manual)" : ""}</td><td><button class="btn sm" data-sur="${p.playerId}">Ajustar</button></td></tr>`).join("")}
+      </tbody></table></div>` : `<p class="muted">Todavía no hay apuestas medidas.</p>`}
+      <p class="faint" style="font-size:12px;margin:10px 0 0">Markout: cuánto le ganó cada apuesta a la casa frente al precio que pagó, medido con el precio justo una hora después y con el resultado final. Puntaje: el promedio menos dos errores estándar, así la suerte no marca a nadie. Con puntaje sobre ${t.params.startCents}¢ paga un recargo de hasta ${(t.params.maxSurchargeBps / 100).toFixed(0)}% en lo que le compra a la casa. Avisa este recargo en los términos del casino.</p></div>
+    <div class="panel"><h2>Mercados en freno o con spread ancho <small>${t.markets.length}</small></h2>
+      ${t.markets.length ? `<div class="tablewrap"><table><thead><tr><th>Mercado</th><th>Motivo</th><th class="num">Casa vuelve</th><th class="num">Spread normal</th></tr></thead><tbody>
+      ${t.markets.slice(0, 12).map((m) => `<tr><td><div class="t">${esc(m.title)}</div></td><td style="font-size:12px">${esc(m.reason ?? "")}</td><td class="num">${m.pausedUntil && new Date(m.pausedUntil) > new Date() ? until(m.pausedUntil) : "Cotizando"}</td><td class="num">${until(m.shockUntil)}</td></tr>`).join("")}
+      </tbody></table></div>` : `<p class="muted">Ningún mercado en freno. Se activa si el precio salta ${t.params.breakerCents}¢ o más en ${t.params.breakerWindowMinutes ?? 10} minutos, o si llega una noticia sobre un mercado abierto.</p>`}</div>
+  </div>`;
 }
 
 function mmPanel(mm) {
@@ -640,7 +665,7 @@ function mmPanel(mm) {
       <div class="kpi"><span class="k">Parámetros</span><span class="v" style="font-size:15px">b ${p.bShares ?? "—"} · γ ${p.gamma ?? "—"} · κ ${p.kappa ?? "—"}</span><span class="d">Liquidez completa con más de ${p.tauRefDays ?? "—"} días al cierre</span></div>
     </div>
     ${mm.events?.length ? `<div class="panel" style="margin-bottom:14px"><h2>Riesgo por evento <small>v2 · ordenado por pérdida en el peor escenario</small></h2><div class="tablewrap"><table><thead><tr><th>Evento</th><th class="num">Días al cierre</th><th class="num">Liquidez</th><th class="num">Medio spread</th><th class="num">Peor escenario</th><th class="num">Techo LMSR</th><th>Estado</th></tr></thead><tbody>
-      ${mm.events.slice(0, 15).map((e) => `<tr><td><div class="t">${esc(e.title)}</div><span class="faint" style="font-size:11px">${e.kind === "multi" ? `${e.marketIds.length} opciones` : "Sí / No"} · b ${e.b.toLocaleString("es-EC")}</span></td><td class="num">${e.tauDays}</td><td class="num">${Math.round(e.liquidity * 100)}%</td><td class="num">${e.halfSpreadCents}¢</td><td class="num ${e.worstCaseLossUsd > mm.limits.maxLossUsd * 0.8 ? "bad" : ""}">${usd(e.worstCaseLossUsd)}</td><td class="num">${usd(e.lmsrMaxLossUsd)}</td><td>${e.limited ? `<span class="pill void">Solo reduce riesgo</span>` : `<span class="pill open">Normal</span>`}</td></tr>`).join("")}
+      ${mm.events.slice(0, 15).map((e) => `<tr><td><div class="t">${esc(e.title)}</div><span class="faint" style="font-size:11px">${e.kind === "multi" ? `${e.marketIds.length} opciones` : "Sí / No"} · b ${e.b.toLocaleString("es-EC")}</span></td><td class="num">${e.tauDays}</td><td class="num">${Math.round(e.liquidity * 100)}%</td><td class="num">${e.halfSpreadCents}¢</td><td class="num ${e.worstCaseLossUsd > mm.limits.maxLossUsd * 0.8 ? "bad" : ""}">${usd(e.worstCaseLossUsd)}</td><td class="num">${usd(e.lmsrMaxLossUsd)}</td><td>${e.paused ? `<span class="pill void">Freno</span>` : e.limited ? `<span class="pill void">Solo reduce riesgo</span>` : e.shock ? `<span class="pill proposed">Spread ancho</span>` : e.imbalance >= 0.5 ? `<span class="pill proposed">Flujo a un lado</span>` : `<span class="pill open">Normal</span>`}</td></tr>`).join("")}
       </tbody></table></div><p class="faint" style="font-size:12px;margin:10px 0 0">Peor escenario: lo que perdería la casa si gana la opción que más le cuesta. Techo LMSR: lo máximo que puede perder desde ahora siguiendo la curva, aunque todos los que compren tengan razón. Con menos de ${p.tauRefDays ?? 7} días al cierre la liquidez baja con la raíz del tiempo que falta.</p></div>` : ""}`;
 }
 

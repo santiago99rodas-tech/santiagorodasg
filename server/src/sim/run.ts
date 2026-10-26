@@ -4,6 +4,7 @@
 
 import { writeFileSync } from "node:fs";
 import { config } from "../config.js";
+import { DEFAULT_TOXICITY } from "../engine/toxicity.js";
 import { SCENARIOS, runMany, type Strategy, type Summary } from "./engine.js";
 
 const args = process.argv.slice(2);
@@ -23,15 +24,18 @@ export function strategies(): Strategy[] {
     },
     weights: { prev: mm.weightPrev, external: mm.weightExternal },
     feeBps: config.takerFeeBps,
+    tox: { ...DEFAULT_TOXICITY, ...config.toxicity },
   };
   // --set clave=valor cambia un parámetro de v2 para probar ajustes
   for (let i = 0; i < args.length; i++) if (args[i] === "--set") {
     const [k, v] = args[i + 1].split("=");
     if (k in common.v2) (common.v2 as any)[k] = Number(v);
+    else if (k in common.tox) (common.tox as any)[k] = Number(v);
     else if (k in common.weights) (common.weights as any)[k] = Number(v);
     else throw new Error(`parámetro desconocido: ${k}`);
   }
-  return [{ name: "v1", ...common }, { name: "v2", ...common }];
+  const only = arg("mm")?.split(",");
+  return ([{ name: "v1", ...common }, { name: "v2", ...common }, { name: "v2+", ...common }] as Strategy[]).filter((st) => !only || only.includes(st.name));
 }
 
 const usd = (x: number) => `${x < 0 ? "−" : ""}$${Math.abs(x).toLocaleString("es", { maximumFractionDigits: 0 })}`;
@@ -46,10 +50,10 @@ function table(rows: { sc: string; v: string; s: Summary }[]) {
 }
 
 function agentsTable(rows: { sc: string; v: string; s: Summary }[]) {
-  const head = "| Escenario | MM | Casuales | Informados | Hinchada | Ballenas |";
-  const sep = "|---|---|---:|---:|---:|---:|";
+  const head = "| Escenario | MM | Casuales | Informados | Hinchada | Ballenas | Con recargo: informados / casuales / hinchas / ballenas |";
+  const sep = "|---|---|---:|---:|---:|---:|---|";
   return [head, sep, ...rows.map(({ sc, v, s }) =>
-    `| ${sc} | ${v} | ${usd(s.agents.ruido)} | ${usd(s.agents.informado)} | ${usd(s.agents.hinchada)} | ${usd(s.agents.ballena)} |`)].join("\n");
+    `| ${sc} | ${v} | ${usd(s.agents.ruido)} | ${usd(s.agents.informado)} | ${usd(s.agents.hinchada)} | ${usd(s.agents.ballena)} | ${v === "v2+" ? `${pct(s.flagged.informado)} / ${pct(s.flagged.ruido)} / ${pct(s.flagged.hinchada)} / ${pct(s.flagged.ballena)}` : "—"} |`)].join("\n");
 }
 
 if (process.argv[1]?.endsWith("run.ts")) main();

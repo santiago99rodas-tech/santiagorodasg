@@ -15,6 +15,7 @@ import { config } from "../config.js";
 import { placeOrder, cancelAllOf, bookOf } from "./trading.js";
 import { houseAccount } from "./house.js";
 import { MICRO } from "../lib/money.js";
+import { flowImbalances, trackFair } from "./toxicity.js";
 import {
   quoteV1, quoteV2, flowUpdate, poolLogOdds, liquidityFactor, worstCaseLoss,
   type EventState, type Quote, type QuoteParamsV2, type V2Diagnostics,
@@ -38,6 +39,9 @@ export async function setKillSwitch(on: boolean, by = "admin") {
 }
 
 export const v2Params = (): QuoteParamsV2 => ({
+  ...(config.toxicity.enabled ? {
+    imbalanceSpread: config.toxicity.imbalanceSpread, shockSpreadMult: config.toxicity.shockSpreadMult, shockSizeFactor: config.toxicity.shockSizeFactor,
+  } : {}),
   levels: config.mm.levels, levelSizeShares: config.mm.levelSizeShares, bShares: config.mm.bShares,
   minLiquidity: config.mm.minLiquidity, tauRefDays: config.mm.tauRefDays, gamma: config.mm.gamma, kappa: config.mm.kappa,
   sigmaFloor: config.mm.sigmaFloor, holdDays: config.mm.holdDays, minHalfSpreadCents: config.mm.minHalfSpreadCents,
@@ -122,6 +126,7 @@ async function updateFairPricesV2() {
         const cursor = m.last_id ? Math.max(Number(m.last_id), Number(m.flow_cursor)) : Number(m.flow_cursor);
         await pool.query("UPDATE markets SET fair_exact=$2, fair_price=$3, flow_cursor=$4, ref_cursor=GREATEST(ref_cursor, $5) WHERE id=$1",
           [m.id, exact, clamp(Math.round(exact * 100), 2, 98), cursor, m.ext_id ?? 0]);
+        await trackFair(m.id, exact * 100); // freno de emergencia si saltó mucho en pocos minutos
         changed++;
       }
     }
@@ -133,13 +138,14 @@ const normalize = (xs: number[]) => { const s = xs.reduce((a, x) => a + x, 0) ||
 
 // ---------- cotizaciones ----------
 
-interface EventQuotes { eventId: number; marketIds: number[]; state: EventState; quotes: Quote[]; diag?: V2Diagnostics }
+interface EventQuotes { eventId: number; marketIds: number[]; state: EventState; quotes: Quote[]; diag?: V2Diagnostics; paused?: boolean }
 
 /** Arma el estado de cada evento abierto (o del evento de un mercado) y calcula las cotizaciones objetivo. */
 export async function planQuotes(marketId?: number): Promise<EventQuotes[]> {
   const house = await houseAccount();
   const rows = await many(pool, `
     SELECT m.id, m.event_id, e.kind, COALESCE(m.fair_exact * 100, m.fair_price) AS fair,
+           COALESCE(m.paused_until > now(), FALSE) AS paused, COALESCE(m.shock_until > now(), FALSE) AS shock,
            EXTRACT(EPOCH FROM (m.close_time - now())) / 86400 AS tau,
            COALESCE(SUM(ps.qty) FILTER (WHERE ps.outcome='YES'),0)::float8 / 100 AS yes,
            COALESCE(SUM(ps.qty) FILTER (WHERE ps.outcome='NO'),0)::float8 / 100 AS no,
@@ -150,6 +156,7 @@ export async function planQuotes(marketId?: number): Promise<EventQuotes[]> {
       ${marketId ? "AND m.event_id = (SELECT event_id FROM markets WHERE id=$2)" : ""}
     GROUP BY m.id, e.kind ORDER BY m.event_id, m.id`, marketId ? [house, marketId] : [house]);
   const sigmas = config.mm.strategy === "v2" ? await realizedSigma(rows.map((r) => r.id)) : new Map<number, number>();
+  const imbalances = config.mm.strategy === "v2" ? await flowImbalances(rows.map((r) => r.id)) : new Map<number, number>();
 
   const byEvent = new Map<number, typeof rows>();
   for (const r of rows) byEvent.set(r.event_id, [...(byEvent.get(r.event_id) ?? []), r]);
@@ -162,9 +169,12 @@ export async function planQuotes(marketId?: number): Promise<EventQuotes[]> {
       const state: EventState = {
         kind: multi ? "multi" : "binary",
         tauDays: Math.max(0, Number(g[0].tau)),
-        outcomes: g.map((m) => ({ fair: Number(m.fair), yesShares: Number(m.yes), noShares: Number(m.no), costUsd: Number(m.cost), sigma: sigmas.get(m.id) })),
+        outcomes: g.map((m) => ({
+          fair: Number(m.fair), yesShares: Number(m.yes), noShares: Number(m.no), costUsd: Number(m.cost), sigma: sigmas.get(m.id),
+          imbalance: imbalances.get(m.id), shock: m.shock,
+        })),
       };
-      plans.push({ eventId, marketIds: g.map((m) => m.id), state, quotes: [] });
+      plans.push({ eventId, marketIds: g.map((m) => m.id), state, quotes: [], paused: g.some((m) => m.paused) });
     }
   }
 
@@ -178,26 +188,31 @@ export async function planQuotes(marketId?: number): Promise<EventQuotes[]> {
   const riskOff = totalWorst > config.mm.maxTotalLossUsd;
   for (const pl of plans) {
     const r = quoteV2(pl.state, { ...v2Params(), riskOff });
-    pl.quotes = r.quotes;
+    pl.quotes = pl.paused ? [] : r.quotes; // freno de emergencia: sin cotizaciones hasta paused_until
     pl.diag = r.diag;
   }
   return plans;
 }
 
-/** Volatilidad del log-odds por √día con las fotos de precio de las últimas 24 h. */
+/**
+ * Volatilidad del log-odds por √día con las fotos del precio justo de las últimas 24 h (una cada
+ * 15 min). No se usan los precios de cada cruce: rebotan entre compra y venta y llegan a segundos de
+ * distancia, lo que inflaba la volatilidad y abría el spread hasta 1¢/99¢.
+ */
 async function realizedSigma(ids: number[]) {
   const out = new Map<number, number>();
   if (!ids.length) return out;
   const rows = await many(pool, `
     WITH h AS (
-      SELECT market_id, ts, LN(GREATEST(1, LEAST(99, price))::float8 / (100 - GREATEST(1, LEAST(99, price)))) AS x
-      FROM price_history WHERE market_id = ANY($1) AND ts > now() - interval '24 hours'),
-    d AS (SELECT market_id, ts, x - LAG(x) OVER (PARTITION BY market_id ORDER BY ts) AS dx,
+      SELECT market_id, ts, LN(LEAST(99, GREATEST(1, fair))::float8 / (100 - LEAST(99, GREATEST(1, fair)))) AS x
+      FROM price_history WHERE market_id = ANY($1) AND fair IS NOT NULL AND ts > now() - interval '24 hours'),
+    d AS (SELECT market_id, x - LAG(x) OVER (PARTITION BY market_id ORDER BY ts) AS dx,
                  EXTRACT(EPOCH FROM ts - LAG(ts) OVER (PARTITION BY market_id ORDER BY ts)) / 86400 AS dt FROM h)
-    SELECT market_id, SUM(dx * dx) AS ss, SUM(dt) AS days, COUNT(*) AS n FROM d WHERE dx IS NOT NULL GROUP BY market_id`, [ids]);
-  for (const r of rows) if (Number(r.n) >= 3 && Number(r.days) > 0) out.set(r.market_id, Math.sqrt(Number(r.ss) / Number(r.days)));
+    SELECT market_id, SUM(dx * dx) AS ss, SUM(dt) AS days, COUNT(*) AS n FROM d WHERE dx IS NOT NULL AND dt >= 0.005 GROUP BY market_id`, [ids]);
+  for (const r of rows) if (Number(r.n) >= 4 && Number(r.days) > 0) out.set(r.market_id, Math.min(SIGMA_MAX, Math.sqrt(Number(r.ss) / Number(r.days))));
   return out;
 }
+const SIGMA_MAX = 3; // tope por √día: más que esto ya es un salto, y de eso se ocupa el freno de emergencia
 
 export async function refreshQuotes(marketId?: number) {
   if (!config.mm.enabled || mmControl.killed) return 0;
@@ -267,7 +282,8 @@ export async function mmStatus() {
         prices: p.diag!.prices,
         worstCaseLossUsd: Math.round(p.diag!.worstCaseLossUsd),
         lmsrMaxLossUsd: Math.round(p.diag!.lmsrMaxLossUsd),
-        limited: p.diag!.limited, quotes: p.quotes.length,
+        limited: p.diag!.limited, quotes: p.quotes.length, paused: !!p.paused, shock: p.diag!.shock,
+        imbalance: Math.round(Math.max(...p.state.outcomes.map((o) => Math.abs(o.imbalance ?? 0))) * 100) / 100,
       };
     })
     .sort((a, b) => b.worstCaseLossUsd - a.worstCaseLossUsd);

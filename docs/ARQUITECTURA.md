@@ -82,7 +82,12 @@ Si la transacción falla después del débito, se reembolsa con un `txId` determ
 - **Cotizaciones**: `MM_LEVELS` niveles a cada lado sobre la curva LMSR, con el medio spread de Avellaneda-Stoikov. Solo usa órdenes de compra (BUY_YES y BUY_NO), así no necesita inventario: cuando un jugador le compra, el cruce *mint* crea las acciones.
 - **Tiempo al cierre**: la profundidad y el tamaño por nivel bajan con √(días al cierre / `MM_TAU_REF_DAYS`).
 - **Límites**: pérdida en el peor escenario por evento (`MM_MAX_LOSS_USD`) y total (`MM_MAX_TOTAL_LOSS_USD`). Al superarlos, solo cotiza lo que reduce el riesgo. El botón de pánico (`POST /admin/mm/kill`) retira todo.
-- **Simulador** (`npm run sim`): jugadores casuales, informados, hinchada y ballenas contra v1 y v2, con el mismo motor de órdenes.
+- **Protección contra informados** (`server/src/services/toxicity.ts`):
+  - Markout de cada apuesta frente al precio pagado, con el precio justo una hora después y con el resultado final.
+  - Recargo de hasta 3% en lo que le compra a la casa a quien gana de forma estadísticamente significativa.
+  - Spread asimétrico cuando el flujo reciente va todo a un lado.
+  - Freno de emergencia si el precio salta 12¢ en 10 minutos, y spread más ancho cuando llega una noticia sobre un mercado abierto.
+- **Simulador** (`npm run sim`): jugadores casuales, informados, hinchada y ballenas contra v1, v2 y v2 con protección, con el mismo motor de órdenes.
 - **Ingresos de la casa**: comisión de taker (`TAKER_FEE_BPS`), spread y redondeos. `GET /admin/exposure` y `GET /admin/mm/status` muestran el riesgo.
 - `MM_STRATEGY=v1` vuelve a la versión anterior (media móvil, spread fijo, corrimiento simple por inventario).
 
