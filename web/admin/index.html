@@ -864,8 +864,9 @@ async function viewTesoreria(el) {
     const r = await fetch(A.api.replace(/\/$/, "") + `/admin/treasury/settlements/${b.dataset.stm}/statement`, { headers: { "x-admin-key": A.key ?? "", "x-admin-user": A.user ?? "" } });
     const text = await r.text();
     const sig = r.headers.get("x-oracle-signature");
-    const blob = new Blob([JSON.stringify({ statement: text, signature: sig, keyId: r.headers.get("x-oracle-key-id"), howToVerify: "Ed25519 (base64) sobre el texto exacto de 'statement', con la clave pública de /v1/oracle/keys", readable: JSON.parse(text) }, null, 2)], { type: "application/json" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `estado-LIQ-${b.dataset.stm}.json`; a.click();
+    const full = JSON.stringify({ statement: text, signature: sig, keyId: r.headers.get("x-oracle-key-id"), howToVerify: "Ed25519 (base64) sobre el texto exacto de 'statement', con la clave pública de /v1/oracle/keys" }, null, 2);
+    await modal({ title: `Estado de cuenta LIQ-${b.dataset.stm}`, text: "Copia este bloque y envíaselo al casino. El texto de <code>statement</code> va firmado tal cual: cualquier cambio invalida la firma.", ok: "Cerrar",
+      fields: [{ id: "json", label: "Estado firmado", type: "textarea", value: full }] });
   }));
 }
 
