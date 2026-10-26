@@ -110,3 +110,26 @@ export const config = {
     refillEveryMin: num("REFILL_EVERY_MIN", 360),
   },
 };
+
+const DEFAULTS = { adminApiKey: "dev-admin-key", sessionSecret: "dev-session-secret" };
+
+/** Errores que impiden arrancar en producción (NODE_ENV=production). */
+export function productionProblems() {
+  if (process.env.NODE_ENV !== "production") return [];
+  const out: string[] = [];
+  if (!process.env.DATABASE_URL) out.push("Falta DATABASE_URL (la Internal Connection URL del Postgres de Easypanel)");
+  if (config.adminApiKey === DEFAULTS.adminApiKey || config.adminApiKey.length < 24) out.push("ADMIN_API_KEY falta o es corta: usa una de 24 caracteres o más (npm run gen:secrets)");
+  if (config.sessionSecret === DEFAULTS.sessionSecret || config.sessionSecret.length < 24) out.push("SESSION_SECRET falta o es corta: usa una de 24 caracteres o más (npm run gen:secrets)");
+  if (config.oracle.privateKeyPem && !config.oracle.privateKeyPem.includes("BEGIN PRIVATE KEY")) out.push("ORACLE_PRIVATE_KEY no parece una clave PEM (debe empezar con -----BEGIN PRIVATE KEY-----)");
+  return out;
+}
+
+/** Cosas que conviene revisar pero no impiden arrancar. */
+export function productionWarnings() {
+  if (process.env.NODE_ENV !== "production") return [];
+  const out: string[] = [];
+  if (!process.env.PUBLIC_URL || /localhost|127\.0\.0\.1/.test(config.publicUrl)) out.push("PUBLIC_URL apunta a localhost: los enlaces del módulo para los casinos no van a funcionar");
+  if (!config.oracle.privateKeyPem) out.push("sin ORACLE_PRIVATE_KEY: se usa una clave generada y guardada en la base (fíjala con npm run gen:secrets)");
+  if (!config.anthropicApiKey) out.push("sin ANTHROPIC_API_KEY: la IA (generar y resolver preguntas) queda desactivada");
+  return out;
+}

@@ -74,6 +74,7 @@ const page = (launchUrl: string, player: string, name: string) => `<!doctype htm
 createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
+    if (url.pathname === "/health") return json(res, 200, { ok: true });
     if (req.method === "POST" && url.pathname.startsWith("/wallet/")) return wallet(req, res, url.pathname.split("/")[2]);
     if (req.method === "POST" && url.pathname === "/webhooks") {
       console.log("[webhook]", await readBody(req));

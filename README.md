@@ -129,4 +129,4 @@ Las tareas programadas (ingesta, generación, cierre, resolución, market maker,
 - [Market maker v2, protección contra informados y simulador](docs/MARKET-MAKER.md)
 - [Oráculo: probabilidades públicas y resolución con fianzas](docs/ORACULO.md)
 - [P2P: libro compartido, market makers externos y liquidación](docs/P2P.md)
-- [Despliegue en Easypanel](docs/DESPLIEGUE-EASYPANEL.md)
+- [Despliegue en Easypanel](docs/DESPLIEGUE-EASYPANEL.md): claves con `npm run gen:secrets`, variables en `deploy/easypanel.env.example` y revisión del despliegue con `npm run smoke`

@@ -21,13 +21,16 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       NEWSAPI_KEY: ${NEWSAPI_KEY:-}
       DEMO_CASINO_URL: http://mock-casino:4000
+      # En producción se exigen claves de 24+ caracteres; aquí corre en modo desarrollo
+      NODE_ENV: development
     ports: ["8080:8080"]
   mock-casino:
     profiles: [demo]
     build: { context: ., dockerfile: server/Dockerfile }
-    command: ["npx", "tsx", "mock-casino/server.ts"]
+    command: ["node", "--import", "tsx", "mock-casino/server.ts"]
     environment:
       PLATFORM_URL: http://api:8080
+      HEALTH_PORT: "4000"
     ports: ["4000:4000"]
 volumes:
   pgdata:

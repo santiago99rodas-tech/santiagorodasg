@@ -1,3 +1,4 @@
+import { pool } from "./db/pool.js";
 import Fastify from "fastify";
 import { readFileSync, existsSync } from "node:fs";
 import { ZodError } from "zod";
@@ -35,7 +36,16 @@ export async function buildServer() {
     return reply.code(500).send({ error: "internal_error", message: "Error interno" });
   });
 
-  app.get("/health", async () => ({ ok: true }));
+  // Salud: Easypanel/Docker la consultan para saber si el contenedor está listo
+  const started = Date.now();
+  app.get("/health", async (_req, reply) => {
+    try {
+      const r = await pool.query("SELECT (SELECT COUNT(*) FROM schema_migrations)::int AS migrations, (SELECT COUNT(*) FROM markets WHERE status='open')::int AS open_markets");
+      return { ok: true, db: "ok", migrations: r.rows[0].migrations, openMarkets: r.rows[0].open_markets, uptimeSec: Math.round((Date.now() - started) / 1000), version: process.env.APP_VERSION ?? null };
+    } catch (e) {
+      return reply.code(503).send({ ok: false, db: (e as Error).message });
+    }
+  });
 
   // Módulo embebible (iframe del casino)
   const embed = new URL("../../web/embed/index.html", import.meta.url);

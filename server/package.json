@@ -14,7 +14,9 @@
     "test": "node --import tsx --test --test-concurrency=1 test/*.test.ts",
     "simulate": "tsx mock-casino/simulate.ts",
     "sim": "tsx src/sim/run.ts",
-    "demo:build": "tsx ../demo/build.mts"
+    "demo:build": "tsx ../demo/build.mts",
+    "gen:secrets": "tsx scripts/gen-secrets.ts",
+    "smoke": "tsx scripts/smoke.ts"
   },
   "engines": {
     "node": ">=22"
@@ -24,13 +26,13 @@
     "fast-xml-parser": "^5.11.2",
     "fastify": "^5.12.7",
     "pg": "^8.23.1",
+    "tsx": "^4.23.15",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
     "@types/pg": "^8.23.1",
     "esbuild": "^0.28.2",
-    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }
