@@ -88,10 +88,11 @@
 
   // Jugadores: el usuario de la demo, bots y la casa
   const USER = 1, HOUSE = 99;
-  S.players.set(USER, { id: USER, name: "Santiago Rodas", balance: 500e6, isHouse: false, lastSeen: now() });
+  S.players.set(USER, { id: USER, name: "Santiago Rodas", balance: 500e6, isHouse: false, lastSeen: now(), country: "EC", since: now() - 400 * 864e5 });
   S.players.set(HOUSE, { id: HOUSE, name: "Casa", balance: Infinity, isHouse: true });
   const BOT_NAMES = ["Carlos Mendoza", "Andrea Paredes", "Luis Guerrero", "María Fernanda", "Jorge Ruiz", "Daniela Vera", "Kevin Andrade", "Sofía León", "Diego Torres", "Valeria Cevallos"];
-  BOT_NAMES.forEach((n, i) => S.players.set(10 + i, { id: 10 + i, name: n, balance: 1e12, isHouse: false, lastSeen: now() }));
+  const BOT_COUNTRIES = ["CO", "EC", "CO", "VE", "EC", "CO", "EC", "MX", "PE", "EC"];
+  BOT_NAMES.forEach((n, i) => S.players.set(10 + i, { id: 10 + i, name: n, balance: 1e12, isHouse: false, lastSeen: now(), country: BOT_COUNTRIES[i], since: now() - (30 + i * 20) * 864e5 }));
   const mask = (pid) => { const p = S.players.get(pid); if (!p) return "Jugador"; const [a, b] = p.name.split(" "); return b ? `${a} ${b[0]}.` : a; };
 
   // Generador pseudoaleatorio estable
@@ -181,6 +182,12 @@
     const fillFees = dry.fills.map((f) => feeOf(notional(ownPrice(kind, f.yesPrice), f.qty), feeBps));
     const totalFee = fillFees.reduce((a, b) => a + b, 0);
     const restReserve = buy ? notional(limitOwn, restQty) : restQty;
+    if (buy && !player.isHouse) {
+      // Límite por jugador y mercado, igual que el servidor (MAX_STAKE_PER_MARKET_USD = 1000)
+      let exposure = pos(pid, m.id, "YES").cost + pos(pid, m.id, "NO").cost;
+      for (const o of S.orders.values()) if (o.playerId === pid && o.marketId === m.id && o.status === "open" && o.side === "BUY") exposure += o.reserved;
+      if (exposure + dry.spent + restReserve > 1000e6) throw conflict("stake_limit", `Superas el máximo de $1000 comprometidos en este mercado (ya tienes $${(exposure / 1e6).toFixed(2)})`);
+    }
     if (buy) debit(pid, dry.spent + totalFee + restReserve);
 
     const id = ++S.seq.order;
@@ -455,6 +462,98 @@
     return { house: { open_cost: house.reduce((a, p) => a + p.cost, 0), realized: house.reduce((a, p) => a + p.realized, 0), fees: S.fees.reduce((a, f) => a + f.amount, 0) }, markets: rows };
   }
 
+
+  // ---------- Calibración y sesgo (port de server/src/services/integrity.ts) ----------
+  const COUNTRY = { colombia: "CO", ecuador: "EC", venezuela: "VE", "méxico": "MX", mexico: "MX", "perú": "PE", peru: "PE", argentina: "AR", chile: "CL", brasil: "BR", "puerto rico": "PR", "españa": "ES" };
+  const ARCHIVE = []; // mercados históricos de demostración, ya resueltos
+  const refs = [];
+  function seedArchive() {
+    const cats = CATEGORIES.map(([s]) => s), origins = ["ia", "catálogo o diseñador", "catálogo o diseñador", "borrador manual"];
+    for (let i = 1; i <= 160; i++) {
+      const q = 0.03 + rnd() * 0.94;                        // probabilidad "real"
+      const yes = rnd() < q;
+      const bias = q < 0.2 ? 0.06 : q > 0.8 ? -0.03 : 0;     // sesgo favorito-batacazo leve
+      const noise = (s) => (rnd() - 0.5) * s;
+      const pRef = { 24: clamp(q + bias + noise(0.08) + (yes ? 0.08 : -0.08), 0.02, 0.98), 168: clamp(q + bias + noise(0.1) + (yes ? 0.03 : -0.03), 0.02, 0.98), 720: clamp(q + bias + noise(0.2), 0.02, 0.98) };
+      const cat = cats[Math.floor(rnd() * cats.length)];
+      ARCHIVE.push({ id: -i, question: `[Demo] Mercado resuelto ${i} · ${CATEGORIES.find(([s]) => s === cat)[1]}`, category: cat, kind: "binary", outcome: yes ? "YES" : "NO",
+        initial: clamp(q + noise(0.5), 0.03, 0.97), pRef, pClose: clamp(yes ? 0.9 + noise(0.1) : 0.1 + noise(0.1), 0.01, 0.99),
+        volume: Math.round(Math.pow(10, 1 + rnd() * 2.6)) * 1e6, origin: origins[Math.floor(rnd() * origins.length)],
+        proposer: rnd() < 0.55 ? "IA" : rnd() < 0.5 ? "admin:Laura" : "admin:Andrés", housePnl: Math.round((rnd() - 0.42) * 60e6) });
+    }
+  }
+  function sessionResolved(h) {
+    const out = [];
+    for (const m of S.markets.values()) {
+      if (m.resolved !== "YES" && m.resolved !== "NO") continue;
+      const e = S.events.find((x) => x.id === m.eventId);
+      const r = S.resolutions.find((x) => x.event_id === e.id);
+      const end = Math.min(Date.parse(m.closeTime), r ? Date.parse(r.created_at) : Infinity);
+      out.push({ id: m.id, question: m.question, category: e.category, kind: e.kind, outcome: m.resolved, initial: m.initial / 100,
+        pRef: { [h]: priceAt(m.id, end - h * 3600e3) / 100 }, pClose: priceAt(m.id, end) / 100, volume: m.volume, origin: e.origin ?? "catálogo o diseñador",
+        proposer: r ? (r.proposer.startsWith("ai:") ? "IA" : r.proposer) : "—", housePnl: pos(HOUSE, m.id, "YES").realized + pos(HOUSE, m.id, "NO").realized, end });
+    }
+    return out;
+  }
+  const brierOf = (rows, f) => (rows.length ? Math.round((rows.reduce((a, r) => a + (f(r) - (r.outcome === "YES" ? 1 : 0)) ** 2, 0) / rows.length) * 1e4) / 1e4 : null);
+  function score(rows, h) {
+    const n = rows.length, base = n ? rows.filter((r) => r.outcome === "YES").length / n : null;
+    return { n, brierRef: brierOf(rows, (r) => r.pRef[h]), brierClose: brierOf(rows, (r) => r.pClose), brierInitial: brierOf(rows, (r) => r.initial),
+      brierBaseRate: base == null ? null : Math.round(base * (1 - base) * 1e4) / 1e4, baseRate: base == null ? null : Math.round(base * 1000) / 1000 };
+  }
+  function integrity(h) {
+    const rows = [...ARCHIVE, ...sessionResolved(h)];
+    const o = (r) => (r.outcome === "YES" ? 1 : 0), r3 = (v) => Math.round(v * 1000) / 1000;
+    const bins = Array.from({ length: 10 }, (_, i) => { const lo = i / 10, hi = (i + 1) / 10, b = rows.filter((r) => r.pRef[h] >= lo && (i === 9 ? r.pRef[h] <= hi : r.pRef[h] < hi));
+      return { from: lo, to: hi, n: b.length, predicted: b.length ? r3(b.reduce((a, r) => a + r.pRef[h], 0) / b.length) : null, actual: b.length ? r3(b.reduce((a, r) => a + o(r), 0) / b.length) : null }; });
+    const group = (f) => { const m = new Map(); for (const r of rows) { const k = f(r); if (!m.has(k)) m.set(k, []); m.get(k).push(r); } return m; };
+    const tier = (v) => (v < 100e6 ? "menos de $100" : v < 1000e6 ? "$100 a $1.000" : "más de $1.000");
+    const gap = (b) => (b.length ? r3(b.reduce((a, r) => a + (o(r) - r.pRef[h]), 0) / b.length) : null);
+    const yesNo = [...group((r) => r.category)].map(([c, b]) => ({ category: c, name: CATEGORIES.find(([s]) => s === c)[1], yes: b.filter((r) => r.outcome === "YES").length, no: b.filter((r) => r.outcome === "NO").length, void: 0 }));
+    // Integridad con datos de la sesión
+    const flows = new Map();
+    for (const t of S.trades) {
+      const ord = S.orders.get(t.takerOrderId); if (!ord || ord.playerId === HOUSE || ord.side !== "BUY") continue;
+      const amt = (ord.outcome === "YES" ? t.yesPrice : 100 - t.yesPrice) * t.qty * 100, k = `${t.marketId}`;
+      if (!flows.has(k)) flows.set(k, []); flows.get(k).push({ pid: ord.playerId, outcome: ord.outcome, amt, at: t.at });
+    }
+    const title = (mid) => { const m = S.markets.get(mid), e = S.events.find((x) => x.id === m.eventId); return e.kind === "multi" ? `${e.title} · ${m.label}` : e.title; };
+    const concentration = [], homeBias = [], alerts = [];
+    for (const [k, fl] of flows) {
+      const mid = Number(k), m = S.markets.get(mid);
+      const byP = new Map(); fl.forEach((f) => byP.set(f.pid, (byP.get(f.pid) ?? 0) + f.amt));
+      const amounts = [...byP.values()].sort((a, b) => b - a), total = amounts.reduce((a, b) => a + b, 0);
+      if (m.status === "open" && total >= 200e6) { const top1 = amounts[0] / total, top5 = amounts.slice(0, 5).reduce((a, b) => a + b, 0) / total; if (top1 >= 0.5 || top5 >= 0.8) concentration.push({ marketId: mid, title: title(mid), total, players: amounts.length, top1: r3(top1), top5: r3(top5) }); }
+      const code = COUNTRY[m.label.toLowerCase()];
+      if (code) {
+        const yesF = fl.filter((f) => f.outcome === "YES"), tot = yesF.reduce((a, f) => a + f.amt, 0);
+        const e = S.events.find((x) => x.id === m.eventId), bettors = new Set();
+        e.marketIds.forEach((x) => (flows.get(String(x)) ?? []).forEach((f) => bettors.add(f.pid)));
+        if (tot >= 50e6 && bettors.size >= 3) {
+          const home = yesF.filter((f) => S.players.get(f.pid).country === code).reduce((a, f) => a + f.amt, 0);
+          const share = [...bettors].filter((p) => S.players.get(p).country === code).length / bettors.size;
+          homeBias.push({ marketId: mid, title: title(mid), country: code, totalYes: tot, moneyFromHome: r3(home / tot), bettorsFromHome: r3(share), ratio: share ? Math.round((home / tot / share) * 100) / 100 : null });
+        }
+      }
+      if (m.resolved === "YES" || m.resolved === "NO") {
+        const r = S.resolutions.find((x) => x.event_id === m.eventId), end = Math.min(Date.parse(m.closeTime), r ? Date.parse(r.created_at) : Infinity);
+        const late = new Map(); fl.filter((f) => f.outcome === m.resolved && f.at >= end - 120 * 60e3 && f.at <= end).forEach((f) => late.set(f.pid, (late.get(f.pid) ?? 0) + f.amt));
+        for (const [pid, amt] of late) if (amt >= 100e6) alerts.push({ kind: "compra tardía ganadora", marketId: mid, title: title(mid), player: mask(pid), amount: amt, detail: `en los 120 min previos al cierre o a la propuesta` });
+      }
+    }
+    alerts.push({ kind: "compra tardía ganadora", marketId: null, title: "[Demo] Mercado resuelto 42", player: "Kevin A. (demo-casino:kevin-a)", amount: 640e6, detail: "18 min antes de la propuesta · ejemplo de demostración" });
+    const resolvers = [...group((r) => r.proposer)].filter(([p]) => p !== "—").map(([proposer, b]) => ({ proposer, events: b.length, house_won: b.filter((r) => r.housePnl > 0).length, house_pnl: b.reduce((a, r) => a + r.housePnl, 0) }));
+    const external = refs.map((x) => { const m = S.markets.get(x.marketId), ours = displayPrice(m); return { marketId: x.marketId, title: title(x.marketId), source: x.source, refPrice: x.price, ourPrice: ours, diff: ours - x.price, capturedAt: x.capturedAt }; })
+      .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+    return { horizonHours: h, reliable: rows.length >= 30, minReliable: 30, overall: score(rows, h), calibration: bins,
+      byCategory: [...group((r) => r.category)].map(([c, b]) => ({ category: c, name: CATEGORIES.find(([s]) => s === c)[1], ...score(b, h) })).sort((a, b) => b.n - a.n),
+      byVolume: ["menos de $100", "$100 a $1.000", "más de $1.000"].map((t) => ({ tier: t, ...score(rows.filter((r) => tier(r.volume) === t), h) })),
+      bias: { longshot: { longshots: { n: rows.filter((r) => r.pRef[h] < 0.2).length, gap: gap(rows.filter((r) => r.pRef[h] < 0.2)) }, favorites: { n: rows.filter((r) => r.pRef[h] > 0.8).length, gap: gap(rows.filter((r) => r.pRef[h] > 0.8)) } },
+        yesNo, openingAccuracy: [...group((r) => r.origin)].map(([origin, b]) => ({ origin, ...score(b, h) })) },
+      integrity: { concentration: concentration.sort((a, b) => b.top1 - a.top1), homeBias: homeBias.sort((a, b) => (b.ratio ?? 0) - (a.ratio ?? 0)), houseByResolver: resolvers, alerts, countryCoverage: S.players.size },
+      external, thresholds: { minVolumeUsd: 200, alertMinUsd: 100, lateWindowMinutes: 120, maxStakePerMarketUsd: 1000 } };
+  }
+
   // ---------- Enrutador: mismas rutas y formatos que la API real ----------
   const routes = [];
   const route = (method, pattern, fn) => routes.push({ method, re: new RegExp("^" + pattern.replace(/:(\w+)/g, "(?<$1>[^/]+)") + "$"), fn });
@@ -508,6 +607,10 @@
   route("PATCH", "/admin/sources/:id", ({ p, b }) => { const s = S.sources.find((x) => x.id === Number(p.id)); Object.assign(s, b); return s; });
   route("POST", "/admin/ingest/run", () => { throw new ApiError(503, "offline", "La demo corre sin conexión a internet. En el servidor real, la ingesta lee estas fuentes cada 30 minutos."); });
   route("GET", "/admin/exposure", () => exposure());
+  route("GET", "/admin/integrity", ({ q }) => integrity([24, 168, 720].includes(Number(q.horizon)) ? Number(q.horizon) : 168));
+  route("PATCH", "/admin/markets/:id", ({ p, b }) => { const m = S.markets.get(Number(p.id)); if (!m) throw notFound("Mercado no encontrado"); m.externalRef = b.externalRef; return { id: m.id, external_ref: m.externalRef }; });
+  route("POST", "/admin/markets/:id/reference", ({ p, b }) => { const m = S.markets.get(Number(p.id)); if (!m) throw notFound("Mercado no encontrado"); const x = { marketId: m.id, source: b.source, price: Math.round(b.price), capturedAt: iso(now()) }; refs.push(x); return x; });
+  route("POST", "/admin/references/refresh", () => { throw new ApiError(503, "offline", "La demo no tiene conexión a internet para leer Polymarket. En el servidor real se actualiza cada 30 minutos."); });
   route("POST", "/admin/mm/refresh", () => { let n = 0; for (const m of S.markets.values()) if (m.status === "open") { refreshQuotes(m.id); n++; } return { markets: n }; });
   route("GET", "/admin/operators", () => S.operators);
   route("POST", "/admin/operators", ({ b }) => { const tok = () => Math.random().toString(36).slice(2, 14); const creds = { apiKey: `pk_${tok()}`, apiSecret: `sk_${tok()}${tok()}`, walletSecret: `ws_${tok()}${tok()}` };
@@ -586,7 +689,15 @@
     for (let i = 0; i < N; i++) { const x = i / N; clockOffset = -2 * H24 + Math.pow(x, 0.85) * 2 * H24; botBet(); }
     clockOffset = 0;
     for (const p of S.players.values()) if (!p.isHouse) p.lastSeen = now() - Math.floor(rnd() * 120e3);
+    // Escenarios para el panel de sesgo: hinchada colombiana en un mercado con opción "Colombia" y una ballena
+    const colMk = [...S.markets.values()].find((m) => m.label === "Colombia" && m.status === "open");
+    if (colMk) for (const [pid, amt] of [[10, 120], [12, 90], [15, 140], [11, 15], [18, 10]]) { clockOffset = -3 * 3600e3; try { placeOrder(pid, { marketId: colMk.id, side: "BUY", outcome: "YES", type: "MARKET", amount: amt }); } catch {} }
+    const whaleEv = S.events.filter((e) => e.status === "open" && e.kind === "binary")[5];
+    if (whaleEv) { clockOffset = -2 * 3600e3; try { placeOrder(16, { marketId: whaleEv.marketIds[0], side: "BUY", outcome: "YES", type: "MARKET", amount: 380 }); } catch {} }
+    clockOffset = 0;
     for (const h of S.history.values()) h.sort((a, b) => a.t - b.t);
+    seedArchive();
+    S.events.filter((e) => e.status === "open").slice(0, 4).forEach((e, i) => { const m = S.markets.get(e.marketIds[0]); refs.push({ marketId: m.id, source: "Referencia demo", price: clamp(displayPrice(m) + [-3, 6, -12, 2][i], 1, 99), capturedAt: iso(now() - (i + 1) * 900e3) }); });
     // Tendencias y fuentes de ejemplo
     const T = [["Miss Universo 2026", ["miss universo", "colombia", "venezuela", "corona"], "reinados", 18.4, 14, 6, 3], ["GTA VI", ["gta vi", "rockstar", "lanzamiento", "precio"], "videojuegos", 16.9, 21, 7, 4],
       ["Avengers: Doomsday", ["avengers", "doomsday", "taquilla", "marvel"], "cine", 13.2, 12, 5, 2], ["Elecciones EE. UU. 2026", ["midterms", "cámara", "senado", "trump"], "elecciones", 12.7, 25, 8, 0],

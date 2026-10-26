@@ -15,6 +15,7 @@ import { cancelAllInMarket } from "../services/trading.js";
 import { refreshQuotes, houseStats } from "../services/marketmaker.js";
 import { houseAccount } from "../services/house.js";
 import { listEvents } from "../services/marketdata.js";
+import { integrityReport, setExternalRef, addReferencePrice, refreshExternalPrices } from "../services/integrity.js";
 
 const SourceBody = z.object({
   kind: z.enum(["rss", "gdelt", "google_trends", "newsapi", "tiktok_cc", "json_feed"]),
@@ -180,6 +181,17 @@ export async function adminRoutes(app: FastifyInstance) {
       [b.id, b.name, creds.apiKey, creds.apiSecret, b.walletUrl, creds.walletSecret, b.webhookUrl ?? null, b.currency, b.feeBps ?? null, JSON.stringify(b.theme ?? {})]);
     return { id: b.id, ...creds, note: "Guarda los secretos ahora: no se vuelven a mostrar completos." };
   });
+
+  // ---------- Calibración, sesgo e integridad ----------
+  app.get("/admin/integrity", async (req) => {
+    const h = Number((req.query as any).horizon ?? 168);
+    return integrityReport({ horizonHours: [24, 168, 720].includes(h) ? h : 168 });
+  });
+  app.patch<{ Params: { id: string } }>("/admin/markets/:id", async (req) =>
+    setExternalRef(Number(req.params.id), parse(z.object({ externalRef: z.string().nullable() }), req.body).externalRef || null));
+  app.post<{ Params: { id: string } }>("/admin/markets/:id/reference", async (req) =>
+    addReferencePrice(Number(req.params.id), parse(z.object({ source: z.string().min(2), price: z.number().min(0).max(100), note: z.string().optional() }), req.body), adminUser(req)));
+  app.post("/admin/references/refresh", async () => ({ updated: await refreshExternalPrices() }));
 
   // ---------- Riesgo y market maker ----------
   app.get("/admin/exposure", async () => {

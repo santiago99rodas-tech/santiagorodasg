@@ -12,11 +12,15 @@ export async function operatorRoutes(app: FastifyInstance) {
 
   /** Abre una sesión para un jugador del casino y devuelve la URL para embeber el módulo. */
   app.post("/operator/v1/sessions", async (req) => {
-    const b = parse(z.object({ playerId: z.string().min(1).max(100), displayName: z.string().max(80).optional(), lang: z.string().optional() }), req.body);
+    const b = parse(z.object({
+      playerId: z.string().min(1).max(100), displayName: z.string().max(80).optional(), lang: z.string().optional(),
+      country: z.string().regex(/^[A-Za-z]{2}$/, "country: código ISO de 2 letras (EC, CO…)").optional(),
+    }), req.body);
     const p = await one(pool,
-      `INSERT INTO players (operator_id, external_id, display_name, last_seen_at) VALUES ($1,$2,$3, now())
-       ON CONFLICT (operator_id, external_id) DO UPDATE SET display_name = COALESCE(EXCLUDED.display_name, players.display_name), last_seen_at = now()
-       RETURNING id, operator_id, external_id, display_name`, [req.operator!.id, b.playerId, b.displayName ?? null]);
+      `INSERT INTO players (operator_id, external_id, display_name, country, last_seen_at) VALUES ($1,$2,$3,$4, now())
+       ON CONFLICT (operator_id, external_id) DO UPDATE SET display_name = COALESCE(EXCLUDED.display_name, players.display_name),
+         country = COALESCE(EXCLUDED.country, players.country), last_seen_at = now()
+       RETURNING id, operator_id, external_id, display_name`, [req.operator!.id, b.playerId, b.displayName ?? null, b.country?.toUpperCase() ?? null]);
     const s = issueSession(p);
     return { ...s, launchUrl: `${config.publicUrl}/embed/?token=${encodeURIComponent(s.token)}` };
   });

@@ -121,6 +121,18 @@ async function placeLocked(playerId: number, input: PlaceOrderInput): Promise<Or
   const totalFee = fillFees.reduce((a, b) => a + b, 0);
   const restReserve = buy ? notional(limitOwn, restQty) : restQty;
 
+  // Límite de exposición por jugador y mercado (mitiga manipulación y ballenas). La casa no tiene límite.
+  if (buy && feeBps > 0 && config.integrity.maxStakePerMarketUsd > 0) {
+    const cur = await one(pool,
+      `SELECT COALESCE((SELECT SUM(cost) FROM positions WHERE player_id=$1 AND market_id=$2),0)::bigint
+            + COALESCE((SELECT SUM(reserved) FROM orders WHERE player_id=$1 AND market_id=$2 AND status='open' AND side='BUY'),0)::bigint AS exposure`,
+      [playerId, market.id]);
+    const limit = config.integrity.maxStakePerMarketUsd * 1e6;
+    if (cur!.exposure + dry.spent + restReserve > limit) {
+      throw conflict("stake_limit", `Superas el máximo de $${config.integrity.maxStakePerMarketUsd} comprometidos en este mercado (ya tienes $${(cur!.exposure / 1e6).toFixed(2)})`);
+    }
+  }
+
   const orderId: number = (await one(pool, "SELECT nextval('orders_id_seq')::bigint AS id"))!.id;
 
   // Cobro en el casino antes de tocar el libro

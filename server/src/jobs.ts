@@ -9,6 +9,7 @@ import { refreshQuotes, updateFairPrices } from "./services/marketmaker.js";
 import { retryCredits } from "./services/wallet.js";
 import { deliverWebhooks } from "./services/webhooks.js";
 import { pool } from "./db/pool.js";
+import { refreshExternalPrices } from "./services/integrity.js";
 
 const timers: NodeJS.Timeout[] = [];
 
@@ -31,6 +32,7 @@ export function startJobs() {
   every("webhooks", 15_000, deliverWebhooks);
   every("market-maker", config.jobs.mmRefreshEverySec * 1000, async () => { await updateFairPrices(); await refreshQuotes(); });
   every("snapshot-precios", 15 * 60_000, () => pool.query("INSERT INTO price_history (market_id, ts, price) SELECT id, date_trunc('minute', now()), last_price FROM markets WHERE status='open' ON CONFLICT DO NOTHING"));
+  every("referencias-externas", 30 * 60_000, () => refreshExternalPrices());
   every("ingesta", config.jobs.ingestEveryMin * 60_000, () => runIngest());
   if (aiEnabled()) {
     every("generar-preguntas", config.jobs.generateEveryMin * 60_000, () => generateForTopTrends(5));

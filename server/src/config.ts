@@ -31,6 +31,15 @@ export const config = {
     levels: num("MM_LEVELS", 3),
     maxExposureUsd: num("MM_MAX_EXPOSURE_USD", 5000),
   },
+  integrity: {
+    // Volumen mínimo de un mercado para entrar en los análisis de concentración y sesgo por país
+    minVolumeUsd: num("INTEGRITY_MIN_VOLUME_USD", 200),
+    // Monto mínimo de una compra para generar alerta (compras tardías ganadoras; el doble para cuentas nuevas)
+    alertMinUsd: num("INTEGRITY_ALERT_MIN_USD", 100),
+    lateWindowMinutes: num("INTEGRITY_LATE_WINDOW_MIN", 120),
+    // Máximo que un jugador puede tener comprometido en un mismo mercado (0 = sin límite)
+    maxStakePerMarketUsd: num("MAX_STAKE_PER_MARKET_USD", 1000),
+  },
   catalog: {
     // Mínimo de mercados abiertos (más borradores pendientes) por categoría que la IA intenta mantener
     minOpenPerCategory: num("MIN_OPEN_PER_CATEGORY", 25),

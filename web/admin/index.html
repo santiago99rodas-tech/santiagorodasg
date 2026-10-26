@@ -150,6 +150,16 @@ a.btn { text-decoration: none; display: inline-block; }
 .login { min-height: 100%; display: grid; place-items: center; padding: 16px; }
 .login .panel { width: min(400px, 100%); display: flex; flex-direction: column; gap: 12px; }
 .creds { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; word-break: break-all; display: flex; flex-direction: column; gap: 6px; }
+.bars2 { display: grid; grid-template-columns: 150px minmax(0, 1fr) 64px 40px; gap: 10px; align-items: center; font-size: 13px; padding: 3px 0; }
+.bars2 .bar { position: relative; height: 12px; background: var(--card-2); border-radius: 3px; }
+.bars2 .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--brand); opacity: .85; }
+.bars2 .bar b { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); opacity: .6; }
+.calib text { fill: var(--faint); font-family: var(--mono); font-size: 11px; }
+.banner { border: 1px dashed var(--line); border-radius: 10px; padding: 10px 14px; color: var(--muted); font-size: 13px; line-height: 1.5; margin-bottom: 14px; }
+.banner b { color: var(--text); }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
+@media (max-width: 1100px) { .grid3 { grid-template-columns: minmax(0, 1fr); } }
+.help { font-size: 12px; color: var(--faint); line-height: 1.5; margin: 8px 0 0; }
 </style>
 </head>
 <body>
@@ -175,6 +185,7 @@ a.btn { text-decoration: none; display: inline-block; }
       <a href="#resoluciones" data-v="resoluciones">Resoluciones <span class="count" id="cRes" hidden></span></a>
       <a href="#tendencias" data-v="tendencias">Tendencias y señales</a>
       <a href="#fuentes" data-v="fuentes">Fuentes</a>
+      <a href="#calibracion" data-v="calibracion">Calibración y sesgo</a>
       <a href="#riesgo" data-v="riesgo">Riesgo de la casa</a>
       <a href="#operadores" data-v="operadores">Casinos</a>
     </nav>
@@ -271,7 +282,7 @@ async function refreshCounts() {
 }
 setInterval(() => { if (A.key) refreshCounts(); }, 30000);
 
-const VIEWS = { resumen: viewResumen, disenar: viewDisenar, moderacion: viewModeracion, mercados: viewMercados, resoluciones: viewResoluciones, tendencias: viewTendencias, fuentes: viewFuentes, riesgo: viewRiesgo, operadores: viewOperadores };
+const VIEWS = { resumen: viewResumen, disenar: viewDisenar, moderacion: viewModeracion, mercados: viewMercados, resoluciones: viewResoluciones, tendencias: viewTendencias, fuentes: viewFuentes, riesgo: viewRiesgo, operadores: viewOperadores, calibracion: viewCalibracion };
 function route() {
   VIEW = (location.hash.slice(1) || "resumen"); if (!VIEWS[VIEW]) VIEW = "resumen";
   document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("on", a.dataset.v === VIEW));
@@ -500,7 +511,7 @@ async function viewMercados(el) {
       <td><div class="row" style="flex-wrap:nowrap">
         ${["open", "closed", "resolving"].includes(e.status) ? `<button class="btn sm" data-res="${e.id}">Resolver</button>` : ""}
         ${e.status === "open" ? `<button class="btn sm" data-feat="${e.id}" data-v="${e.featured ? 0 : 1}">${e.featured ? "Quitar ★" : "Destacar"}</button><button class="btn sm" data-close="${e.id}">Cerrar</button>` : ""}
-        <button class="btn sm" data-dup="${e.id}">Duplicar</button></div></td></tr>`).join("") : `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">No hay mercados con estos filtros.</td></tr>`}
+        <button class="btn sm" data-dup="${e.id}">Duplicar</button><button class="btn sm" data-ref="${e.id}">Referencia</button></div></td></tr>`).join("") : `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">No hay mercados con estos filtros.</td></tr>`}
     </tbody></table></div>
     <div class="row" style="justify-content:space-between;margin-top:10px"><button class="btn sm" id="pPrev" ${MK.offset ? "" : "disabled"}>← Anteriores</button><span class="faint">Mostrando ${MK.offset + 1}–${MK.offset + events.length}</span><button class="btn sm" id="pNext" ${events.length === 50 ? "" : "disabled"}>Siguientes →</button></div>`;
   const reload = () => { MK.offset = 0; route(); };
@@ -520,6 +531,7 @@ async function viewMercados(el) {
     DESIGN = designFromPayload({ title: e.title, description: e.description, category: e.category, kind: e.kind, outcomes: e.kind === "multi" ? e.markets.map((m) => ({ label: m.label, probability: m.price / 100 })) : [{ label: "Sí", probability: e.markets[0].price / 100 }], resolutionCriteria: e.resolutionCriteria, resolutionSource: e.resolutionSource, imageUrl: e.imageUrl ?? "", tags: e.tags });
     location.hash = "#disenar"; }));
   el.querySelectorAll("[data-res]").forEach((b) => (b.onclick = () => resolveDialog(ev(b.dataset.res), b)));
+  el.querySelectorAll("[data-ref]").forEach((b) => (b.onclick = () => referenceDialog(ev(b.dataset.ref), b)));
 }
 async function resolveDialog(e, btn) {
   const options = e.kind === "multi" ? [...e.markets.map((m) => [String(m.id), `Gana: ${m.label}`]), ["VOID", "Anular (paga $0,50 por acción)"]] : [["YES", "Sí"], ["NO", "No"], ["VOID", "Anular (paga $0,50 por acción)"]];
@@ -630,6 +642,106 @@ async function viewOperadores(el) {
       <div class="row" style="margin-top:10px"><button class="btn sm" id="oCopy">Copiar</button><span class="faint" style="font-size:12px">Envíalas al casino por un canal seguro junto con la guía de integración.</span></div></div>`;
     el.querySelector("#oCopy").onclick = () => navigator.clipboard?.writeText(`X-Operator-Key: ${out.apiKey}\nAPI secret: ${out.apiSecret}\nWallet secret: ${out.walletSecret}`).then(() => toast("Copiado"), () => toast("Selecciona y copia el texto manualmente", true));
   };
+}
+
+
+// ---------- Calibración y sesgo ----------
+async function referenceDialog(e, btn) {
+  const fields = [];
+  if (e.kind === "multi") fields.push({ id: "market", label: "Opción", type: "select", options: e.markets.map((m) => [String(m.id), m.label]) });
+  fields.push({ id: "type", label: "Tipo de referencia", type: "select", options: [["manual", "Precio manual (casa de apuestas, encuesta…)"], ["polymarket", "Polymarket (se actualiza solo cada 30 min)"]] });
+  fields.push({ id: "source", label: "Fuente (para precio manual)", placeholder: "Betplay, Bet365, encuesta Invamer…" });
+  fields.push({ id: "value", label: "Probabilidad del Sí en % (manual) o slug del mercado en Polymarket", placeholder: "62  ·  will-colombia-win-miss-universe-2026" });
+  const r = await modal({ title: "Precio de referencia externo", text: `<b>${esc(e.title)}</b><br>Compara nuestro precio con otra fuente para detectar sesgos.`, fields, ok: "Guardar" });
+  if (!r) return;
+  const mid = Number(r.market ?? e.markets[0].id);
+  if (r.type === "polymarket") run(btn, async () => { await api(`/admin/markets/${mid}`, { method: "PATCH", body: { externalRef: `polymarket:${r.value.trim()}` } }); return api("/admin/references/refresh", { method: "POST", body: {} }); }, "Referencia de Polymarket guardada");
+  else run(btn, () => api(`/admin/markets/${mid}/reference`, { method: "POST", body: { source: r.source || "Manual", price: Number(r.value) } }), "Precio de referencia guardado");
+}
+
+function calibrationChart(bins) {
+  const W = 360, H = 300, pad = { l: 40, r: 12, t: 12, b: 34 };
+  const x = (v) => pad.l + v * (W - pad.l - pad.r), y = (v) => H - pad.b - v * (H - pad.t - pad.b);
+  const maxN = Math.max(1, ...bins.map((b) => b.n));
+  let g = "";
+  for (let t = 0; t <= 1.0001; t += 0.25) g += `<line x1="${x(0)}" x2="${x(1)}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${pad.l - 6}" y="${y(t) + 4}" text-anchor="end">${Math.round(t * 100)}%</text><text x="${x(t)}" y="${H - pad.b + 16}" text-anchor="middle">${Math.round(t * 100)}%</text>`;
+  const pts = bins.filter((b) => b.n);
+  const path = pts.map((b, i) => `${i ? "L" : "M"}${x(b.predicted)} ${y(b.actual)}`).join("");
+  const dots = pts.map((b) => `<circle cx="${x(b.predicted)}" cy="${y(b.actual)}" r="${5 + 9 * Math.sqrt(b.n / maxN)}" fill="var(--brand)" fill-opacity=".85" stroke="var(--card)" stroke-width="2"><title>Precio ${Math.round(b.from * 100)}–${Math.round(b.to * 100)}%: ${b.n} mercados · precio medio ${Math.round(b.predicted * 100)}% · se cumplieron ${Math.round(b.actual * 100)}%</title></circle>`).join("");
+  return `<svg class="calib" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W * 1.4}px" role="img" aria-label="Gráfico de calibración: precio frente a porcentaje cumplido">
+    ${g}<line x1="${x(0)}" y1="${y(0)}" x2="${x(1)}" y2="${y(1)}" stroke="var(--muted)" stroke-dasharray="4 4"/>
+    ${pts.length > 1 ? `<path d="${path}" fill="none" stroke="var(--brand)" stroke-width="2" opacity=".6"/>` : ""}${dots}
+    <text x="${x(0.5)}" y="${H - 4}" text-anchor="middle">Precio del Sí antes del cierre</text>
+    <text transform="translate(11 ${y(0.5)}) rotate(-90)" text-anchor="middle">Se cumplió</text></svg>`;
+}
+const bscore = (v) => (v == null ? "—" : v.toFixed(3));
+function brierBars(rows, labelKey) {
+  const max = 0.35;
+  return rows.filter((r) => r.n).map((r) => `<div class="bars2" title="${esc(r[labelKey])}: Brier ${bscore(r.brierRef)} con ${r.n} mercados (apertura ${bscore(r.brierInitial)})"><span>${esc(r[labelKey])}</span>
+    <span class="bar"><i style="width:${Math.min(100, ((r.brierRef ?? 0) / max) * 100)}%"></i><b style="left:${(0.25 / max) * 100}%"></b></span><span class="num" style="text-align:right">${bscore(r.brierRef)}</span><span class="faint num" style="text-align:right">${r.n}</span></div>`).join("") || `<p class="muted">Sin mercados resueltos todavía.</p>`;
+}
+const pctS = (v) => (v == null ? "—" : `${v > 0 ? "+" : ""}${Math.round(v * 100)} pts`);
+
+async function viewCalibracion(el) {
+  const h = viewCalibracion.h ?? 168;
+  const r = await api(`/admin/integrity?horizon=${h}`);
+  const o = r.overall, I = r.integrity;
+  const improve = o.brierInitial != null && o.brierRef != null ? o.brierInitial - o.brierRef : null;
+  el.innerHTML = `<div class="head"><div><h1>Calibración y sesgo</h1><p>¿Los precios predicen bien? Se mide con los mercados ya resueltos: si los que estaban a 70% se cumplieron cerca del 70% de las veces, el mercado está bien calibrado.</p></div>
+    <span class="seg" id="cH">${[[24, "1 día antes"], [168, "7 días antes"], [720, "30 días antes"]].map(([v, l]) => `<button type="button" data-h="${v}" class="${v === h ? "on" : ""}">${l}</button>`).join("")}</span></div>
+    ${!r.reliable ? `<div class="banner"><b>Todavía hay pocos datos:</b> ${o.n} mercados resueltos. Con menos de ${r.minReliable}, estos números son orientativos; con varias decenas por categoría empiezan a ser confiables.</div>` : ""}
+    <div class="kpis">
+      <div class="kpi"><span class="k">Mercados resueltos</span><span class="v">${o.n}</span><span class="d">Tasa de Sí: ${o.baseRate == null ? "—" : Math.round(o.baseRate * 100) + "%"}</span></div>
+      <div class="kpi"><span class="k">Puntaje de Brier</span><span class="v ${o.brierRef != null && o.brierRef < 0.2 ? "ok" : ""}">${bscore(o.brierRef)}</span><span class="d">0 = perfecto · 0,25 = decir 50% a todo</span></div>
+      <div class="kpi"><span class="k">Brier al cierre</span><span class="v">${bscore(o.brierClose)}</span><span class="d">Sin información: ${bscore(o.brierBaseRate)}</span></div>
+      <div class="kpi"><span class="k">Aporte de los jugadores</span><span class="v ${improve > 0 ? "ok" : improve < 0 ? "bad" : ""}">${improve == null ? "—" : (improve >= 0 ? "+" : "") + improve.toFixed(3)}</span><span class="d">Brier de apertura ${bscore(o.brierInitial)} → ${bscore(o.brierRef)}</span></div>
+    </div>
+    <div class="grid2">
+      <div class="panel"><h2>Gráfico de calibración <small>${h === 24 ? "1 día" : h === 168 ? "7 días" : "30 días"} antes del cierre</small></h2>${calibrationChart(r.calibration)}
+        <p class="help">Cada punto agrupa mercados por precio; su tamaño indica cuántos. Sobre la diagonal, el precio acierta. Por debajo, se cumplen menos de lo que decía el precio (sobrevalorados); por encima, más (infravalorados).</p>
+        <div class="tablewrap" style="margin-top:10px"><table><thead><tr><th>Tramo de precio</th><th class="num">Mercados</th><th class="num">Precio medio</th><th class="num">Se cumplió</th><th class="num">Desvío</th></tr></thead><tbody>
+        ${r.calibration.map((b) => `<tr><td>${Math.round(b.from * 100)}–${Math.round(b.to * 100)}%</td><td class="num">${b.n}</td><td class="num">${b.predicted == null ? "—" : Math.round(b.predicted * 100) + "%"}</td><td class="num">${b.actual == null ? "—" : Math.round(b.actual * 100) + "%"}</td><td class="num ${b.n && Math.abs(b.actual - b.predicted) > 0.1 ? "warn" : ""}">${b.n ? pctS(b.actual - b.predicted) : "—"}</td></tr>`).join("")}</tbody></table></div></div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="panel"><h2>Brier por categoría <small>línea = 0,25 · menor es mejor</small></h2>${brierBars(r.byCategory, "name")}</div>
+        <div class="panel"><h2>Brier por volumen del mercado</h2>${brierBars(r.byVolume, "tier")}<p class="help">Con más dinero en juego, los precios suelen predecir mejor. Si los mercados chicos tienen Brier alto, conviene no presentarlos como predicción confiable.</p></div>
+      </div>
+    </div>
+    <h2 style="font-size:18px;margin:26px 0 10px">Sesgos</h2>
+    <div class="grid3">
+      <div class="panel"><h2>Favorito y batacazo</h2>
+        <div class="bars2" style="grid-template-columns:1fr auto auto"><span>Batacazos (precio &lt; 20%)</span><b class="num ${(r.bias.longshot.longshots.gap ?? 0) < -0.05 ? "warn" : ""}">${pctS(r.bias.longshot.longshots.gap)}</b><span class="faint num">${r.bias.longshot.longshots.n}</span></div>
+        <div class="bars2" style="grid-template-columns:1fr auto auto"><span>Favoritos (precio &gt; 80%)</span><b class="num ${(r.bias.longshot.favorites.gap ?? 0) > 0.05 ? "warn" : ""}">${pctS(r.bias.longshot.favorites.gap)}</b><span class="faint num">${r.bias.longshot.favorites.n}</span></div>
+        <p class="help">Cuánto se cumplieron frente a su precio. Negativo en batacazos = los jugadores pagan de más por lo improbable (sesgo clásico de las apuestas).</p></div>
+      <div class="panel"><h2>Resultados Sí / No <small>binarios</small></h2>
+        ${r.bias.yesNo.length ? r.bias.yesNo.map((y) => { const t = y.yes + y.no || 1; return `<div class="bars2" style="grid-template-columns:110px minmax(0,1fr) 70px" title="${esc(y.name)}: ${y.yes} Sí, ${y.no} No, ${y.void} anulados"><span>${esc(y.name)}</span><span class="bar"><i style="width:${(y.yes / t) * 100}%"></i><b style="left:50%"></b></span><span class="num" style="text-align:right">${y.yes}/${y.no}</span></div>`; }).join("") : `<p class="muted">Sin binarios resueltos todavía.</p>`}
+        <p class="help">Si casi todo se resuelve en No (o en Sí), las preguntas pueden estar redactadas con sesgo.</p></div>
+      <div class="panel"><h2>Precisión de la apertura <small>por origen</small></h2>
+        ${r.bias.openingAccuracy.length ? r.bias.openingAccuracy.map((a) => `<div class="bars2" style="grid-template-columns:1fr auto auto"><span>${esc(a.origin)}</span><b class="num">${bscore(a.brierInitial)}</b><span class="faint num">${a.n}</span></div>`).join("") : `<p class="muted">Sin datos todavía.</p>`}
+        <p class="help">Brier de la probabilidad con la que abrió el mercado: compara la IA con el catálogo y los moderadores.</p></div>
+    </div>
+    <h2 style="font-size:18px;margin:26px 0 10px">Integridad</h2>
+    <div class="grid2">
+      <div class="panel"><h2>Alertas <small>compras tardías ganadoras y cuentas nuevas</small></h2>
+        ${I.alerts.length ? `<div class="tablewrap"><table><thead><tr><th>Tipo</th><th>Mercado</th><th>Jugador</th><th class="num">Monto</th><th>Detalle</th></tr></thead><tbody>${I.alerts.map((a) => `<tr><td><span class="pill disputed">${esc(a.kind)}</span></td><td>${esc(a.title)}</td><td>${esc(a.player)}</td><td class="num">${money(a.amount)}</td><td class="muted" style="font-size:12px">${esc(a.detail)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="ok">Sin alertas.</p>`}
+        <p class="help">Compras de $${r.thresholds.alertMinUsd} o más en el lado ganador dentro de los ${r.thresholds.lateWindowMinutes} min previos al cierre o a la propuesta, y cuentas de menos de 7 días que apuestan $${r.thresholds.alertMinUsd * 2} o más en un día. Límite por jugador y mercado: ${r.thresholds.maxStakePerMarketUsd ? "$" + r.thresholds.maxStakePerMarketUsd : "sin límite"}.</p></div>
+      <div class="panel"><h2>Resultado de la casa según quién resolvió</h2>
+        ${I.houseByResolver.length ? `<div class="tablewrap"><table><thead><tr><th>Propuso</th><th class="num">Eventos</th><th class="num">Casa ganó</th><th class="num">Resultado casa</th></tr></thead><tbody>${I.houseByResolver.map((x) => `<tr><td>${esc(x.proposer)}</td><td class="num">${x.events}</td><td class="num">${x.events ? Math.round((x.house_won / x.events) * 100) : 0}%</td><td class="num ${x.house_pnl >= 0 ? "ok" : "bad"}">${money(x.house_pnl)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">Sin resoluciones finalizadas todavía.</p>`}
+        <p class="help">La casa es contraparte y además resuelve. Si con un resolutor la casa gana mucho más seguido que con los demás, hay que revisar esas resoluciones.</p></div>
+    </div>
+    <div class="grid2">
+      <div class="panel"><h2>Concentración del dinero <small>mercados abiertos</small></h2>
+        ${I.concentration.length ? `<div class="tablewrap"><table><thead><tr><th>Mercado</th><th class="num">Apostado</th><th class="num">Jugadores</th><th class="num">Top 1</th><th class="num">Top 5</th></tr></thead><tbody>${I.concentration.map((c) => `<tr><td>${esc(c.title)}</td><td class="num">${money(c.total)}</td><td class="num">${c.players}</td><td class="num warn">${Math.round(c.top1 * 100)}%</td><td class="num">${Math.round(c.top5 * 100)}%</td></tr>`).join("")}</tbody></table></div>` : `<p class="ok">Ningún mercado depende de uno o pocos jugadores.</p>`}
+        <p class="help">Mercados con al menos $${r.thresholds.minVolumeUsd} apostados donde un jugador pone el 50% o más, o los 5 mayores el 80% o más: su precio refleja a pocas personas.</p></div>
+      <div class="panel"><h2>Sesgo de hinchada <small>por país del jugador</small></h2>
+        ${I.homeBias.length ? `<div class="tablewrap"><table><thead><tr><th>Opción</th><th class="num">Dinero de su país</th><th class="num">Jugadores de su país</th><th class="num">Veces</th></tr></thead><tbody>${I.homeBias.map((b) => `<tr><td>${esc(b.title)}</td><td class="num">${Math.round(b.moneyFromHome * 100)}%</td><td class="num">${Math.round(b.bettorsFromHome * 100)}%</td><td class="num ${b.ratio > 1.3 ? "warn" : ""}">${b.ratio ?? "—"}×</td></tr>`).join("")}</tbody></table></div>`
+          : `<p class="muted">${I.countryCoverage ? "Sin sesgo de hinchada detectable todavía." : "Aún no hay jugadores con país. El casino debe enviar <code>country</code> (EC, CO…) al abrir la sesión."}</p>`}
+        <p class="help">Cuando una opción es un país, compara qué parte del dinero al Sí viene de jugadores de ese país con qué parte de los jugadores del evento son de ahí. Más de 1,3× indica apuesta de hinchada.</p></div>
+    </div>
+    <div class="panel" style="margin-top:14px"><h2>Comparación con referencias externas <small>usa “Referencia” en Mercados para agregar</small></h2>
+      ${r.external.length ? `<div class="tablewrap"><table><thead><tr><th>Mercado</th><th>Fuente</th><th class="num">Referencia</th><th class="num">Nuestro precio</th><th class="num">Diferencia</th><th>Actualizado</th></tr></thead><tbody>${r.external.map((x) => `<tr><td>${esc(x.title)}</td><td>${esc(x.source)}</td><td class="num">${x.refPrice}%</td><td class="num">${x.ourPrice}%</td><td class="num ${Math.abs(x.diff) >= 10 ? "warn" : ""}">${x.diff > 0 ? "+" : ""}${x.diff} pts</td><td style="white-space:nowrap">${ago(x.capturedAt)}</td></tr>`).join("")}</tbody></table></div>`
+        : `<p class="muted">Sin referencias todavía. Para eventos que también existen en Polymarket o en casas de apuestas, agrega la referencia desde Mercados.</p>`}
+      <p class="help">Diferencias de 10 puntos o más con una fuente con mucho volumen suelen indicar sesgo local o poca liquidez.</p></div>`;
+  el.querySelectorAll("#cH button").forEach((b) => (b.onclick = () => { viewCalibracion.h = Number(b.dataset.h); route(); }));
 }
 
 // ---------- Arranque ----------

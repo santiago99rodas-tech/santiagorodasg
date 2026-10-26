@@ -76,7 +76,7 @@ $firma = hash_hmac('sha256', $ts . "\n" . $metodo . "\n" . $ruta . "\n" . $cuerp
 **`POST /operator/v1/sessions`**, firmado con `apiSecret` y con la cabecera `X-Operator-Key: <apiKey>`.
 
 ```json
-{ "playerId": "123456", "displayName": "Santiago Rodas" }
+{ "playerId": "123456", "displayName": "Santiago Rodas", "country": "EC" }
 ```
 
 Respuesta:
@@ -96,6 +96,7 @@ En la pestaña "Predicciones" del casino:
 ```
 
 - `playerId` es el ID del jugador en el casino. El jugador se crea en la plataforma la primera vez.
+- `country` es opcional pero recomendado: código ISO de 2 letras del país del jugador (EC, CO, MX…). Sirve para medir el sesgo de "hinchada" en el back-office (por ejemplo, colombianos apostando por Colombia).
 - `displayName` es opcional. En el feed público solo se muestra el nombre y la inicial del apellido ("Santiago R.").
 - El token dura 4 horas (`SESSION_TTL_MIN`). Pide uno nuevo cada vez que el jugador abre la pestaña.
 - **Front propio:** si el casino prefiere dibujar su propia interfaz, usa el mismo token como `Authorization: Bearer <token>` contra la API del jugador (sección 6).
@@ -230,5 +231,5 @@ Formato: `{ "error": "codigo", "message": "texto legible en español" }`
 | 401 | `unauthorized`, `bad_signature`, `stale_request`, `session_expired` | Autenticación |
 | 402 | `insufficient_funds` | El casino rechazó el débito por saldo |
 | 404 | `not_found` | No existe |
-| 409 | `market_closed`, `no_liquidity`, `fok_not_filled`, `insufficient_shares`, `duplicate_order` | Estado del mercado o de la orden |
+| 409 | `market_closed`, `no_liquidity`, `fok_not_filled`, `insufficient_shares`, `duplicate_order`, `stake_limit` | Estado del mercado o de la orden; `stake_limit` = el jugador superó el máximo comprometido por mercado |
 | 502 | `wallet_error` | La billetera del casino falló |

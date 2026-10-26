@@ -84,6 +84,7 @@ npm run typecheck
 | Resoluciones | Ver propuestas y evidencias, disputar, rechazar, finalizar y pagar; resolver con IA los eventos cerrados |
 | Tendencias y señales | Tendencias detectadas, generar preguntas desde una tendencia, cargar señales de Instagram/TikTok |
 | Fuentes | Estado de cada fuente, activar o desactivar, agregar nuevas y leer ahora |
+| Calibración y sesgo | Si los precios predicen bien (gráfico de calibración y puntaje de Brier por categoría y volumen), sesgo favorito-batacazo, proporción Sí/No, precisión de la apertura (IA vs. catálogo), concentración del dinero, sesgo de hinchada por país, resultado de la casa según quién resolvió, alertas de compras tardías y comparación con referencias externas (Polymarket o precios manuales) |
 | Riesgo de la casa | Inventario y dinero comprometido del market maker por mercado; recotizar |
 | Casinos | Alta de operadores con sus credenciales (se muestran una sola vez) |
 

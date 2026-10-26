@@ -108,6 +108,18 @@ stateDiagram-v2
 - El **resolvedor con IA** (`server/src/ai/resolver.ts`) investiga con búsqueda web y decide con salida estructurada. Solo propone si su confianza es de 90% o más. La propuesta igual pasa por la ventana de disputa (`CHALLENGE_WINDOW_MINUTES`, 2 h por defecto).
 - Al finalizar: $1 por acción ganadora (o $0,50 si se anula), acreditado a cada jugador en su casino, más el webhook `event.resolved`.
 
+## Calibración, sesgo e integridad
+
+`server/src/services/integrity.ts` (sección "Calibración y sesgo" del back-office) mide con los mercados ya resueltos:
+
+- **Calibración y Brier**: el precio del Sí 1, 7 o 30 días antes del cierre frente al resultado. Se agrupa en tramos de 10 puntos y por categoría y volumen. El Brier de apertura se compara con el del precio previo al cierre para ver si los jugadores mejoran la estimación inicial.
+- **Sesgos**: favorito-batacazo (desvío en precios < 20% y > 80%), proporción Sí/No de los binarios (redacción) y precisión de la apertura según su origen (IA, catálogo o moderador).
+- **Integridad**: concentración del dinero (un jugador ≥ 50% o los 5 mayores ≥ 80%), sesgo de hinchada (dinero al Sí de un país frente a la proporción de jugadores de ese país; requiere `country` en la sesión), resultado de la casa según quién propuso la resolución, compras grandes del lado ganador poco antes del cierre y cuentas nuevas con apuestas grandes.
+- **Referencias externas**: precio de Polymarket (API pública Gamma, `markets.external_ref = "polymarket:<slug>"`, cada 30 min) o precios cargados a mano (casas de apuestas, encuestas).
+- **Mitigación**: `MAX_STAKE_PER_MARKET_USD` (1.000 por defecto) limita lo que un jugador puede tener comprometido en un mercado.
+
+Con menos de 30 mercados resueltos el panel avisa que los números son orientativos.
+
 ## Modelo de datos
 
 | Tabla | Para qué |

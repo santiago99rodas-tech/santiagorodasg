@@ -21,10 +21,11 @@ document.addEventListener("click",function(e){var a=e.target.closest&&e.target.c
 })();</script>`;
 
 function inject(html: string, replacements: [string, string][]) {
-  let out = html.replace("<head>", `<head>\n${SHIM}`);
+  // Reemplazos con función: así los "$" del código no se interpretan como patrones de String.replace
+  let out = html.replace("<head>", () => `<head>\n${SHIM}`);
   for (const [from, to] of replacements) {
     if (!out.includes(from)) throw new Error(`No se encontró en el HTML: ${from.slice(0, 60)}…`);
-    out = out.replace(from, to);
+    out = out.replace(from, () => to);
   }
   return out;
 }
@@ -40,9 +41,9 @@ const admin = inject(read("web/admin/index.html"), [
 const js = (v: unknown) => JSON.stringify(v).replace(/<\/script/gi, "<\\/script").replace(/<!--/g, "<\\!--");
 
 const shell = read("demo/shell.html")
-  .replace("/*__DATA__*/", `const CATALOG = ${js(catalog)};\nconst CATEGORIES = ${js(CATEGORIES)};\nconst SOURCES = ${js(SOURCES.map(({ kind, name, url, category, country }) => ({ kind, name, url, category, country })))};`)
-  .replace("/*__BACKEND__*/", read("demo/backend.js"))
-  .replace("/*__PAGES__*/", `const EMBED_HTML = ${js(embed)};\nconst ADMIN_HTML = ${js(admin)};`);
+  .replace("/*__DATA__*/", () => `const CATALOG = ${js(catalog)};\nconst CATEGORIES = ${js(CATEGORIES)};\nconst SOURCES = ${js(SOURCES.map(({ kind, name, url, category, country }) => ({ kind, name, url, category, country })))};`)
+  .replace("/*__BACKEND__*/", () => read("demo/backend.js"))
+  .replace("/*__PAGES__*/", () => `const EMBED_HTML = ${js(embed)};\nconst ADMIN_HTML = ${js(admin)};`);
 
 mkdirSync(new URL("demo/dist/", root), { recursive: true });
 writeFileSync(new URL("demo/dist/predicciones-demo.html", root), shell);
