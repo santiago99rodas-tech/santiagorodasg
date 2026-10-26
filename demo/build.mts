@@ -34,7 +34,7 @@ const embed = inject(read("web/embed/index.html"), [
   ['const TOKEN = new URLSearchParams(location.search).get("token");', 'const TOKEN = "demo";'],
 ]);
 const admin = inject(read("web/admin/index.html"), [
-  ['const A = { key: store.get("pa_key"), user: store.get("pa_user"), api: qs.get("api") ?? store.get("pa_api") ?? "" };', 'const A = { key: "demo", user: "Demo", api: "" };'],
+  ['const A = { key: store.get("pa_key"), user: store.get("pa_user"), api: qs.get("api") ?? store.get("pa_api") ?? DEFAULT_API };', 'const A = { key: "demo", user: "Demo", api: "" };'],
 ]);
 
 // Literal JS seguro dentro de <script>
