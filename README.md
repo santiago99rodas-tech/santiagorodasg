@@ -116,3 +116,4 @@ Las tareas programadas (ingesta, generación, cierre, resolución, market maker,
 
 - [Guía de integración para casinos](docs/INTEGRACION-CASINO.md)
 - [Arquitectura y comparación con Polymarket](docs/ARQUITECTURA.md)
+- [Despliegue en Easypanel](docs/DESPLIEGUE-EASYPANEL.md)

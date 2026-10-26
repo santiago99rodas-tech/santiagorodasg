@@ -38,7 +38,11 @@ export function toEventInput(cat: CatalogCategory, item: CatalogItem): EventInpu
 
 export interface ValidationIssue { category: string; q: string; problem: string }
 
-export function validateCatalog(cats: CatalogCategory[], opts: { minPerCategory?: number; today?: Date; knownCategories?: string[] } = {}) {
+/**
+ * expired: "error" (por defecto, para revisar el catálogo antes de agregarlo) marca las preguntas que cierran
+ * en menos de 2 días; "ignore" las deja fuera del conteo, como hace la semilla al cargarlas.
+ */
+export function validateCatalog(cats: CatalogCategory[], opts: { minPerCategory?: number; today?: Date; knownCategories?: string[]; expired?: "error" | "ignore" } = {}) {
   const issues: ValidationIssue[] = [];
   const min = opts.minPerCategory ?? 25;
   const today = opts.today ?? new Date();
@@ -48,7 +52,7 @@ export function validateCatalog(cats: CatalogCategory[], opts: { minPerCategory?
   const counts = new Map<string, number>();
   for (const c of cats) {
     if (opts.knownCategories && !opts.knownCategories.includes(c.category)) issues.push({ category: c.category, q: "-", problem: "categoría desconocida" });
-    counts.set(c.category, (counts.get(c.category) ?? 0) + c.items.length);
+    counts.set(c.category, counts.get(c.category) ?? 0);
     for (const i of c.items) {
       const bad = (problem: string) => issues.push({ category: c.category, q: i.q, problem });
       if (!/^¿.+\?$/.test(i.q.trim())) bad("debe empezar con ¿ y terminar con ?");
@@ -58,7 +62,11 @@ export function validateCatalog(cats: CatalogCategory[], opts: { minPerCategory?
       seen.set(key, c.category);
       if (!DATE.test(i.close)) { bad(`fecha inválida: ${i.close}`); continue; }
       const d = new Date(`${i.close}T23:59:00-05:00`);
-      if (d < earliest) bad(`cierra demasiado pronto: ${i.close}`);
+      if (d < earliest) {
+        if (opts.expired !== "ignore") bad(`cierra demasiado pronto: ${i.close}`);
+        continue;
+      }
+      counts.set(c.category, (counts.get(c.category) ?? 0) + 1);
       if (d > latest) bad(`cierra demasiado lejos: ${i.close}`);
       if (isMulti(i)) {
         if (i.options.length < 2 || i.options.length > 8) bad("múltiple debe tener 2 a 8 opciones");

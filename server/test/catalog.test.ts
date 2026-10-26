@@ -4,9 +4,9 @@ import { loadCatalog, validateCatalog, toEventInput } from "../src/db/catalog/in
 import { CATEGORIES } from "../src/db/seed.js";
 import { EventInput } from "../src/services/events.js";
 
-test("catálogo: válido y con al menos 25 preguntas en cada una de las categorías", async () => {
+test("catálogo: válido y con al menos 25 preguntas vigentes en cada categoría", async () => {
   const cats = await loadCatalog();
-  const r = validateCatalog(cats, { knownCategories: CATEGORIES.map(([s]) => s) });
+  const r = validateCatalog(cats, { knownCategories: CATEGORIES.map(([s]) => s), expired: "ignore" });
   assert.deepEqual(r.issues, []);
   for (const [slug] of CATEGORIES) assert.ok((r.counts[slug] ?? 0) >= 25, `${slug}: ${r.counts[slug] ?? 0} preguntas`);
 });

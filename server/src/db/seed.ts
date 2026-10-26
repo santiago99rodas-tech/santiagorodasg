@@ -110,7 +110,7 @@ export async function seedDemoOperator() {
   await pool.query(
     `INSERT INTO operators (id, name, api_key, api_secret, wallet_url, wallet_secret, webhook_url, theme)
      VALUES ('demo-casino','Casino Demo','demo-api-key','demo-api-secret',$1,'demo-wallet-secret',$2, '{"brandName":"TuCasino","primary":"#ffd400"}')
-     ON CONFLICT (id) DO NOTHING`, [`${base}/wallet`, `${base}/webhooks`]);
+     ON CONFLICT (id) DO UPDATE SET wallet_url=EXCLUDED.wallet_url, webhook_url=EXCLUDED.webhook_url`, [`${base}/wallet`, `${base}/webhooks`]);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
