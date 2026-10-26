@@ -156,6 +156,13 @@ h2.sec .aside { margin-left: auto; font-size: 13px; color: var(--brand); font-we
 .tip b { font-family: var(--mono); } .tip small { display: block; color: var(--muted); font-size: 11px; }
 
 .scrim { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 30; display: grid; align-items: end; justify-items: center; }
+.resbox { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.resbox .k { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
+.resbox p { margin: 0; color: var(--muted); line-height: 1.45; } .resbox .warn { color: #fbbf24; } .resbox a { color: inherit; }
+.resbox .ghost { background: none; border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 8px 10px; font: inherit; font-weight: 600; cursor: pointer; }
+.resf { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; } .resf label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 600; }
+.resf textarea, .resf input, .resf select { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: inherit; } .resf textarea { min-height: 70px; }
+.resf small { color: var(--faint); font-size: 11px; }
 .sheet { width: min(900px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 18px 18px 0 0; padding: 18px; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 18px; max-height: 92%; overflow-y: auto; }
 @media (min-width: 700px) { .scrim { align-items: center; } .sheet { border-radius: 18px; } }
 @media (max-width: 760px) { .sheet { grid-template-columns: minmax(0, 1fr); } }
@@ -533,9 +540,10 @@ function renderSheet() {
       <div class="chart" id="hist" style="height:220px"></div>
       <div class="stats"><div class="stat"><small>Apostado</small><b>${kmoney(e.volume)}</b></div><div class="stat"><small>Jugadores</small><b>${e.traders}</b></div><div class="stat"><small>Cierra</small><b>${fmtDate(e.closeTime)}</b></div></div>
       <div class="book" id="book"></div>
-      <div class="rules"><b>Cómo se resuelve:</b> ${esc(e.resolutionCriteria)}<br><b>Fuente:</b> ${esc(e.resolutionSource)}${e.resolution ? `<br><b>Resolución:</b> ${esc(e.resolution.status)} · ${esc(e.resolution.explanation ?? "")}` : ""}</div>
+      <div class="rules"><b>Cómo se resuelve:</b> ${esc(e.resolutionCriteria)}<br><b>Fuente:</b> ${esc(e.resolutionSource)}</div>
     </div>
     <div class="col">
+      ${!tradable ? resBox(e) : ""}
       ${e.kind === "multi" ? `<div style="font-weight:700">${esc(m.label)}</div>` : ""}
       <div class="pick2">
         <button type="button" class="side y${S.side === "YES" ? " sel" : ""}" data-side="YES">Sí<small>${buyPrice(m, "YES")}¢ · cuota ${odds(buyPrice(m, "YES"))}</small></button>
@@ -550,7 +558,61 @@ function renderSheet() {
       <button type="button" class="place" id="place" ${!S.me || !tradable ? "disabled" : ""}>${!S.me ? "Abre desde tu casino para apostar" : !tradable ? "Mercado cerrado" : `Apostar $${S.amount} al ${S.side === "YES" ? "Sí" : "No"}`}</button>
       <div class="msg" id="msg" role="status"></div>
     </div></div>`;
-  drawHist(); drawBook();
+  drawHist(); drawBook(); bindRes();
+}
+
+// ---------- Resolución con fianzas ----------
+const outcomeName = (e, r) => r.outcome === "VOID" ? "Anulado (se devuelve $0,50 por acción)" : e.kind === "multi" ? (e.markets.find((m) => m.id === r.winning_market_id)?.label ?? "—") : r.outcome === "YES" ? "Sí" : "No";
+function resBox(e) {
+  const r = e.resolution, o = e.resolutionOptions ?? {};
+  const bond = `$${o.bondUsd ?? 10}`;
+  const evid = (list) => (list ?? []).filter((x) => x.url).map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title ?? new URL(x.url).hostname)}</a>`).join(" · ");
+  let html = "";
+  if (r && ["proposed", "disputed"].includes(r.status)) {
+    html = `<div class="k">Resultado propuesto</div><b style="font-size:18px">${esc(outcomeName(e, r))}</b>
+      ${r.explanation ? `<p>${esc(r.explanation)}</p>` : ""}${evid(r.evidence) ? `<p class="ev">Evidencia: ${evid(r.evidence)}</p>` : ""}
+      ${r.status === "disputed" ? `<p class="warn">En disputa: un administrador revisa la evidencia. Quien tenga razón recupera su fianza y gana parte de la del otro.</p>`
+        : `<p>Si nadie lo disputa, se paga el ${new Date(r.challenge_ends_at).toLocaleString("es-EC", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.</p>`}
+      ${o.canDispute && S.me ? `<button type="button" class="ghost" id="resOpen" data-act="dispute">¿Está mal? Disputar (fianza ${bond})</button>` : ""}`;
+  } else if (r && r.status === "finalized") {
+    html = `<div class="k">Resuelto</div><b style="font-size:18px">${esc(outcomeName(e, r))}</b>${r.explanation ? `<p>${esc(r.explanation)}</p>` : ""}`;
+  } else if (o.canPropose) {
+    html = `<div class="k">Esperando resultado</div><p>Nadie ha propuesto el resultado todavía. Si lo sabes, propónlo con evidencia: si nadie lo disputa en ${Math.round((o.challengeMinutes ?? 120) / 60 * 10) / 10} h, se paga y recuperas tu fianza.</p>
+      ${S.me ? `<button type="button" class="ghost" id="resOpen" data-act="propose">Proponer resultado (fianza ${bond})</button>` : ""}`;
+  } else {
+    html = `<div class="k">Mercado cerrado</div><p>El resultado se propone con evidencia y queda abierto a disputa antes de pagar.</p>`;
+  }
+  return `<div class="resbox">${html}<div id="resForm"></div></div>`;
+}
+function bindRes() {
+  const b = document.getElementById("resOpen");
+  if (!b) return;
+  b.onclick = () => {
+    const e = S.open, act = b.dataset.act, bond = e.resolutionOptions?.bondUsd ?? 10;
+    const opts = e.kind === "multi" ? e.markets.map((m) => `<option value="m${m.id}">${esc(m.label)}</option>`).join("") : `<option value="YES">Sí</option><option value="NO">No</option>`;
+    document.getElementById("resForm").innerHTML = `<form id="resF" class="resf">
+      ${act === "propose" ? `<label>Resultado<select id="rfOut">${opts}<option value="VOID">Anulado</option></select></label>` : ""}
+      <label>${act === "propose" ? "Explicación" : "¿Por qué está mal?"}<textarea id="rfWhy" required minlength="10" maxlength="1000" placeholder="${act === "propose" ? "Qué pasó y dónde se publicó" : "Qué dice la fuente oficial"}"></textarea></label>
+      <label>Enlace a la evidencia<input id="rfUrl" type="url" ${act === "propose" ? "required" : ""} placeholder="https://…"></label>
+      <small>Se debitan $${bond} de tu saldo como fianza. Si tienes razón te devolvemos la fianza${act === "dispute" ? " y ganas parte de la fianza de quien propuso" : ""}; si no, la pierdes.</small>
+      <button type="submit" class="place">${act === "propose" ? "Proponer" : "Disputar"} con fianza de $${bond}</button></form>`;
+    b.hidden = true;
+    document.getElementById("resF").onsubmit = async (ev) => {
+      ev.preventDefault();
+      const why = document.getElementById("rfWhy").value.trim(), url = document.getElementById("rfUrl").value.trim();
+      const evidence = url ? [{ url }] : [];
+      try {
+        if (act === "dispute") await api(`/v1/resolutions/${e.resolution.id}/dispute`, { method: "POST", body: JSON.stringify({ reason: why, evidence }) });
+        else {
+          const v = document.getElementById("rfOut").value;
+          await api(`/v1/events/${e.id}/propose`, { method: "POST", body: JSON.stringify({ ...(v.startsWith("m") ? { winningMarketId: Number(v.slice(1)) } : { outcome: v }), explanation: why, evidence }) });
+        }
+        toast(act === "dispute" ? "Disputa registrada" : "Propuesta registrada");
+        await refreshMe();
+        S.open = await api(`/v1/events/${e.id}`); renderSheet();
+      } catch (err) { toast(err.message); }
+    };
+  };
 }
 async function drawHist() {
   const m = curMarket(); if (!m) return;

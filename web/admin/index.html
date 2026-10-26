@@ -186,6 +186,7 @@ a.btn { text-decoration: none; display: inline-block; }
       <a href="#tendencias" data-v="tendencias">Tendencias y señales</a>
       <a href="#fuentes" data-v="fuentes">Fuentes</a>
       <a href="#calibracion" data-v="calibracion">Calibración y sesgo</a>
+      <a href="#oraculo" data-v="oraculo">Oráculo</a>
       <a href="#riesgo" data-v="riesgo">Riesgo de la casa</a>
       <a href="#operadores" data-v="operadores">Casinos</a>
     </nav>
@@ -284,7 +285,7 @@ async function refreshCounts() {
 }
 setInterval(() => { if (A.key) refreshCounts(); }, 30000);
 
-const VIEWS = { resumen: viewResumen, disenar: viewDisenar, moderacion: viewModeracion, mercados: viewMercados, resoluciones: viewResoluciones, tendencias: viewTendencias, fuentes: viewFuentes, riesgo: viewRiesgo, operadores: viewOperadores, calibracion: viewCalibracion };
+const VIEWS = { resumen: viewResumen, disenar: viewDisenar, moderacion: viewModeracion, mercados: viewMercados, resoluciones: viewResoluciones, tendencias: viewTendencias, fuentes: viewFuentes, riesgo: viewRiesgo, operadores: viewOperadores, calibracion: viewCalibracion, oraculo: viewOraculo };
 function route() {
   VIEW = (location.hash.slice(1) || "resumen"); if (!VIEWS[VIEW]) VIEW = "resumen";
   document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("on", a.dataset.v === VIEW));
@@ -550,20 +551,40 @@ async function viewResoluciones(el) {
   const status = viewResoluciones.status ?? "proposed,disputed";
   const list = await api(`/admin/resolutions?status=${status}`);
   const closed = OV?.aiEnabled ? await api("/admin/events?status=closed&sort=closing&limit=20") : [];
-  el.innerHTML = `<div class="head"><div><h1>Resoluciones</h1><p>Como el oráculo optimista de Polymarket: alguien propone el resultado, corre la ventana de disputa y, si nadie disputa, se paga $1 por acción ganadora.</p></div>
+  el.innerHTML = `<div class="head"><div><h1>Resoluciones</h1><p>Como el oráculo optimista de Polymarket: alguien propone el resultado con una fianza, corre la ventana de disputa y, si nadie disputa, se paga $1 por acción ganadora. Si hay disputa, decides tú: quien tenía razón recupera su fianza y se lleva la mitad de la del otro.</p></div>
     <span class="seg" id="rStatus">${[["proposed,disputed", "Abiertas"], ["finalized", "Finalizadas"], ["rejected", "Rechazadas"]].map(([k, l]) => `<button type="button" data-s="${k}" class="${k === status ? "on" : ""}">${l}</button>`).join("")}</span></div>
     <div class="cards">${list.length ? list.map((r) => `<div class="dcard"><span></span><div><h3>${esc(r.title)}</h3>
       <div class="meta">${pill(r.status)}<span>Resultado: <b>${r.outcome === "VOID" ? "Anulado" : r.winning_market_id ? `mercado #${r.winning_market_id}` : r.outcome === "YES" ? "Sí" : "No"}</b></span><span>Propuso: ${esc(r.proposer)}</span><span>${ago(r.created_at)}</span>${r.status === "proposed" ? `<span>Ventana: ${until(r.challenge_ends_at)}</span>` : ""}</div>
       ${r.explanation ? `<div class="muted" style="font-size:13px">${esc(r.explanation)}</div>` : ""}
       ${(r.evidence ?? []).length ? `<details><summary>Evidencia</summary><p>${r.evidence.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title || x.url)}</a>${x.quote ? ` — “${esc(x.quote)}”` : ""}`).join("<br>")}</p></details>` : ""}
-      ${r.dispute_reason ? `<div class="bad" style="font-size:13px;margin-top:6px">Disputa (${esc(r.disputed_by)}): ${esc(r.dispute_reason)}</div>` : ""}</div>
+      ${r.dispute_reason ? `<div class="bad" style="font-size:13px;margin-top:6px">Disputa (${esc(r.disputed_by)}): ${esc(r.dispute_reason)}${(r.dispute_evidence ?? []).map((x) => ` · <a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title || "evidencia")}</a>`).join("")}</div>` : ""}
+      ${r.dispute_result ? `<div class="muted" style="font-size:12px;margin-top:4px">${r.dispute_result === "dispute_upheld" ? "Tenía razón quien disputó" : "Tenía razón quien propuso"}${r.decided_by ? ` · decidió ${esc(r.decided_by)}` : ""}</div>` : ""}
+      ${(r.bonds ?? []).length ? `<div class="faint" style="font-size:12px;margin-top:4px">Fianzas: ${r.bonds.map((b) => `${b.role === "proposer" ? "propuso" : "disputó"} ${b.playerId ? "jugador" : "la casa"} $${(b.amount / 1e6).toFixed(0)} · ${{ held: "retenida", returned: "devuelta", rewarded: `devuelta con premio ($${(b.payout / 1e6).toFixed(0)})`, forfeited: "perdida" }[b.status]}`).join(" · ")}</div>` : ""}</div>
       <div class="acts">${r.status === "proposed" ? `<button class="btn sm" data-dis="${r.id}">Disputar</button><button class="btn ok sm" data-fin="${r.id}" data-force="${new Date(r.challenge_ends_at) > new Date() ? 1 : 0}">Finalizar${new Date(r.challenge_ends_at) > new Date() ? " ya" : ""}</button>` : ""}
-        ${r.status === "disputed" ? `<button class="btn ok sm" data-fin="${r.id}" data-force="1">Confirmar y pagar</button><button class="btn bad sm" data-rej="${r.id}">Rechazar propuesta</button>` : ""}</div></div>`).join("") : `<div class="empty">No hay resoluciones en este estado.</div>`}</div>
+        ${r.status === "proposed" ? `<button class="btn bad sm" data-rej="${r.id}">Rechazar</button>` : ""}
+        ${r.status === "disputed" ? `<button class="btn ok sm" data-keep="${r.id}">Tenía razón quien propuso</button><button class="btn bad sm" data-upheld="${r.id}" data-ev="${r.event_id}">Tenía razón quien disputó</button>` : ""}</div></div>`).join("") : `<div class="empty">No hay resoluciones en este estado.</div>`}</div>
     ${closed.length && status !== "finalized" ? `<h2 style="font-size:16px;margin:24px 0 10px">Cerrados sin propuesta <span class="faint" style="font-size:12px;font-weight:500">la IA puede investigar el resultado</span></h2>
       <div class="tablewrap"><table><tbody>${closed.filter((e) => !e.resolution).map((e) => `<tr><td><div class="t">${esc(e.title)}</div><span class="faint" style="font-size:11px">Cerró ${fday(e.closeTime)} · ${esc(e.resolutionSource)}</span></td><td style="width:1%"><button class="btn sm" data-ai="${e.id}">Resolver con IA</button></td></tr>`).join("")}</tbody></table></div>` : ""}`;
   el.querySelectorAll("#rStatus button").forEach((b) => (b.onclick = () => { viewResoluciones.status = b.dataset.s; route(); }));
   el.querySelectorAll("[data-dis]").forEach((b) => (b.onclick = async () => { const r = await modal({ title: "Disputar propuesta", fields: [{ id: "reason", label: "Motivo", type: "textarea" }], ok: "Disputar", danger: true }); if (r) run(b, () => api(`/admin/resolutions/${b.dataset.dis}/dispute`, { method: "POST", body: { reason: r.reason } }), "Propuesta disputada").then(() => route()); }));
-  el.querySelectorAll("[data-rej]").forEach((b) => (b.onclick = () => run(b, () => api(`/admin/resolutions/${b.dataset.rej}/reject`, { method: "POST", body: {} }), "Propuesta rechazada. Puedes proponer otro resultado desde Mercados.").then(() => route())));
+  el.querySelectorAll("[data-keep]").forEach((b) => (b.onclick = async () => {
+    const r = list.find((x) => String(x.id) === b.dataset.keep);
+    if (!(await modal({ title: "Mantener la propuesta", text: "Se paga el resultado propuesto. Quien propuso recupera su fianza y se lleva la mitad de la de quien disputó.", ok: "Confirmar y pagar" }))) return;
+    run(b, () => api(`/admin/resolutions/${r.id}/decide`, { method: "POST", body: r.outcome === "VOID" || !r.winning_market_id ? { outcome: r.outcome } : { winningMarketId: r.winning_market_id } }), (x) => `Finalizada. ${x.payouts ?? 0} pagos enviados.`).then(async () => { await refreshCounts(); route(); });
+  }));
+  el.querySelectorAll("[data-upheld]").forEach((b) => (b.onclick = async () => {
+    const ev = await api(`/v1/events/${b.dataset.ev}`);
+    const options = ev.kind === "multi" ? ev.markets.map((m) => [`m${m.id}`, m.label]) : [["YES", "Sí"], ["NO", "No"]];
+    const f = await modal({ title: "Dar la razón a la disputa", text: "Se paga el resultado correcto. Quien disputó recupera su fianza y se lleva la mitad de la de quien propuso (si propuso la casa, la paga la casa).", ok: "Resolver y pagar", danger: true,
+      fields: [{ id: "out", label: "Resultado correcto", type: "select", options: [...options, ["VOID", "Anulado"]] }, { id: "note", label: "Nota (opcional)", type: "textarea" }] });
+    if (!f) return;
+    const body = f.out.startsWith("m") ? { winningMarketId: Number(f.out.slice(1)) } : { outcome: f.out };
+    run(b, () => api(`/admin/resolutions/${b.dataset.upheld}/decide`, { method: "POST", body: { ...body, note: f.note || undefined } }), (x) => `Resuelto. ${x.payouts ?? 0} pagos enviados.`).then(async () => { await refreshCounts(); route(); });
+  }));
+  el.querySelectorAll("[data-rej]").forEach((b) => (b.onclick = async () => {
+    if (!(await modal({ title: "Rechazar propuesta", text: "Si la propuso un jugador, pierde su fianza. Después puedes proponer otro resultado desde Mercados.", ok: "Rechazar", danger: true }))) return;
+    run(b, () => api(`/admin/resolutions/${b.dataset.rej}/reject`, { method: "POST", body: {} }), "Propuesta rechazada").then(() => route());
+  }));
   el.querySelectorAll("[data-fin]").forEach((b) => (b.onclick = async () => {
     if (b.dataset.force === "1") { const r = await modal({ title: "Finalizar y pagar", text: "Se pagará a los ganadores en sus casinos. Esta acción no se puede deshacer.", ok: "Finalizar" }); if (!r) return; }
     run(b, () => api(`/admin/resolutions/${b.dataset.fin}/finalize`, { method: "POST", body: { force: b.dataset.force === "1" } }), (x) => `Finalizada. ${x.payouts ?? 0} pagos enviados.`).then(async () => { await refreshCounts(); route(); });
@@ -706,6 +727,42 @@ async function referenceDialog(e, btn) {
   const mid = Number(r.market ?? e.markets[0].id);
   if (r.type === "polymarket") run(btn, async () => { await api(`/admin/markets/${mid}`, { method: "PATCH", body: { externalRef: `polymarket:${r.value.trim()}` } }); return api("/admin/references/refresh", { method: "POST", body: {} }); }, "Referencia de Polymarket guardada");
   else run(btn, () => api(`/admin/markets/${mid}/reference`, { method: "POST", body: { source: r.source || "Manual", price: Number(r.value) } }), "Precio de referencia guardado");
+}
+
+// ---------- Oráculo ----------
+async function viewOraculo(el) {
+  const [idx, tr, keys, mk] = await Promise.all([api("/v1/oracle"), api("/v1/oracle/track-record"), api("/v1/oracle/keys"), api("/v1/oracle/markets?limit=12")]);
+  const base = (A.api || (location.origin !== "null" ? location.origin : "https://tu-servidor")).replace(/\/$/, "");
+  const [d, w] = tr.data.horizons, res = tr.data.resolutions;
+  const kpi = (k, v, sub, cls = "") => `<div class="kpi ${cls}"><span class="k">${k}</span><span class="v">${v}</span><span class="d">${sub}</span></div>`;
+  const pct = (p) => p == null ? "—" : Math.round(p * 100) + "%";
+  el.innerHTML = `<div class="head"><div><h1>Oráculo</h1><p>Lo que la plataforma publica para que otros lo usen: la probabilidad de cada mercado, firmada, y su historial de aciertos. Mientras mejor calibrado, más vale el dato.</p></div></div>
+    ${!w.reliable ? `<div class="panel" style="margin-bottom:14px;border-color:color-mix(in srgb,var(--brand) 45%,var(--line))">Con ${w.resolvedMarkets} mercados resueltos el historial todavía es orientativo (hacen falta 30 o más).</div>` : ""}
+    <div class="kpis" style="margin-bottom:14px">
+      ${kpi("Brier 7 días antes", bscore(w.brier), `apertura ${bscore(w.brierOpening)} · sin información 0,250`, w.brier != null && w.brier < 0.2 ? "" : "attn")}
+      ${kpi("Brier 24 h antes", bscore(d.brier), `${d.resolvedMarkets} mercados resueltos`)}
+      ${kpi("Resoluciones", res.finalized, `${res.disputed} disputadas · ${res.disputesUpheld} con razón · ${res.proposedByPlayers} propuestas por jugadores`)}
+      ${kpi("Fianzas", "$" + res.bonds.playerBondUsd + " / $" + res.bonds.houseBondUsd, `jugador / casa · pagado a quien corrigió $${res.bonds.paidToDisputersUsd.toLocaleString("es-EC")}`)}
+    </div>
+    <div class="grid2">
+      <div class="panel"><h2>Calibración publicada <small>precio 7 días antes vs. resultado</small></h2>${calibrationChart(w.calibration)}</div>
+      <div class="panel"><h2>Endpoints públicos <small>sin clave, con caché de 30 s</small></h2>
+        <div class="tablewrap"><table><tbody>${Object.entries(idx.data.endpoints).map(([k, v]) => `<tr><td style="white-space:nowrap"><b>${esc(k)}</b></td><td style="font-family:var(--mono);font-size:12px;word-break:break-all">${esc(base + v)}</td></tr>`).join("")}</tbody></table></div>
+        <h2 style="margin-top:16px">Firma <small>Ed25519 · clave ${esc(keys.keys[0].kid)}</small></h2>
+        <p class="muted" style="font-size:13px;margin:0 0 8px">Cada respuesta trae la cabecera <code>X-Oracle-Signature</code>: la firma de los bytes exactos del cuerpo. Quien use el dato puede comprobar que salió de aquí y que nadie lo cambió.</p>
+        <details><summary>Clave pública y cómo verificar</summary><pre style="white-space:pre-wrap;font-size:11px">${esc(keys.keys[0].publicKeyPem)}</pre>
+<pre style="white-space:pre-wrap;font-size:11px">${esc(`// Node.js
+import { verify, createPublicKey } from "node:crypto";
+const res = await fetch("${base}/v1/oracle/markets");
+const body = await res.text();
+const ok = verify(null, Buffer.from(body), createPublicKey(PUBLIC_KEY_PEM),
+  Buffer.from(res.headers.get("x-oracle-signature"), "base64"));`)}</pre></details></div>
+    </div>
+    <div class="panel" style="margin-top:14px"><h2>Lo que se publica ahora <small>los 12 mercados con más volumen</small></h2>
+      <div class="tablewrap"><table><thead><tr><th>Mercado</th><th class="num">Probabilidad</th><th class="num">Compra / venta</th><th class="num">Volumen</th><th>Confianza</th><th class="num">Externa</th></tr></thead><tbody>
+      ${mk.data.markets.map((m) => `<tr><td><div class="t">${esc(m.event)}</div>${m.kind === "multi" ? `<span class="faint" style="font-size:11px">${esc(m.outcome)}</span>` : ""}</td><td class="num"><b>${pct(m.probability)}</b></td><td class="num">${m.bid != null ? Math.round(m.bid * 100) : "—"}¢ / ${m.ask != null ? Math.round(m.ask * 100) : "—"}¢</td><td class="num">$${m.volumeUsd.toLocaleString("es-EC")}</td><td><span class="pill ${m.confidence === "alta" ? "open" : m.confidence === "media" ? "proposed" : "void"}">${m.confidence}</span></td><td class="num">${m.external ? pct(m.external.probability) : "—"}</td></tr>`).join("")}
+      </tbody></table></div>
+      <p class="faint" style="font-size:12px;margin:10px 0 0">Probabilidad: precio justo del market maker (aprende del dinero de los jugadores y de referencias externas). Confianza: alta con más de $1.000 apostados y spread de 6¢ o menos; media con más de $100 y spread de 10¢ o menos.</p></div>`;
 }
 
 function calibrationChart(bins) {

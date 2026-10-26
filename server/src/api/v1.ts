@@ -7,6 +7,11 @@ import { listEvents, eventDetail, marketBook, priceHistory, recentTrades, platfo
 import { placeOrder, cancelOrder } from "../services/trading.js";
 import * as wallet from "../services/wallet.js";
 import { bus, type BusEvent } from "../lib/bus.js";
+import { config } from "../config.js";
+import { signed, oracleKeys, oracleMarkets, oracleMarket, trackRecord } from "../services/oracle.js";
+import { propose, disputeByPlayer } from "../services/resolution.js";
+
+const Evidence = z.array(z.object({ url: z.string().url(), title: z.string().max(200).optional() })).max(10).optional();
 
 const OrderBody = z.object({
   marketId: z.number().int(),
@@ -80,6 +85,31 @@ export async function v1Routes(app: FastifyInstance) {
     req.raw.on("close", () => { bus.off("event", onEvent); clearInterval(ping); });
   });
 
+  // ---------- Oráculo (público, firmado) ----------
+  const sendSigned = async (reply: any, data: unknown) => {
+    const s = await signed(data);
+    reply.header("content-type", "application/json; charset=utf-8")
+      .header("cache-control", `public, max-age=${config.oracle.cacheSeconds}`)
+      .header("x-oracle-key-id", s.keyId).header("x-oracle-signature", s.signature)
+      .header("access-control-expose-headers", "x-oracle-key-id, x-oracle-signature");
+    return reply.send(s.body);
+  };
+  app.get("/v1/oracle", async (_req, reply) => sendSigned(reply, {
+    name: config.oracle.name,
+    endpoints: {
+      markets: "/v1/oracle/markets?status=open|resolved|all&category=&limit=&offset=",
+      market: "/v1/oracle/markets/:id",
+      trackRecord: "/v1/oracle/track-record",
+      keys: "/v1/oracle/keys",
+    },
+    probability: "Precio justo del market maker: aprende del dinero de los jugadores y de referencias externas. 0 a 1.",
+    signature: "Ed25519 sobre los bytes exactos del cuerpo (cabecera X-Oracle-Signature, base64).",
+  }));
+  app.get("/v1/oracle/keys", async () => oracleKeys());
+  app.get("/v1/oracle/markets", async (req, reply) => sendSigned(reply, await oracleMarkets(req.query as any)));
+  app.get<{ Params: { id: string } }>("/v1/oracle/markets/:id", async (req, reply) => sendSigned(reply, await oracleMarket(Number(req.params.id))));
+  app.get("/v1/oracle/track-record", async (_req, reply) => sendSigned(reply, await trackRecord()));
+
   // ---------- Jugador ----------
   app.register(async (p) => {
     p.addHook("preHandler", requirePlayer);
@@ -128,6 +158,21 @@ export async function v1Routes(app: FastifyInstance) {
     });
 
     p.delete<{ Params: { id: string } }>("/v1/orders/:id", async (req) => cancelOrder(req.player!.id, Number(req.params.id)));
+
+    // Resolución con fianzas: el jugador disputa una propuesta, o propone si el evento cerró y nadie lo hizo
+    p.post<{ Params: { id: string } }>("/v1/resolutions/:id/dispute", async (req, reply) => {
+      const body = parse(z.object({ reason: z.string().min(10).max(1000), evidence: Evidence }), req.body);
+      const r = await disputeByPlayer(req.player!.id, Number(req.params.id), body);
+      reply.code(201);
+      return { resolutionId: r.id, status: r.status, bondUsd: config.resolution.playerBondUsd };
+    });
+    p.post<{ Params: { id: string } }>("/v1/events/:id/propose", async (req, reply) => {
+      const body = parse(z.object({ outcome: z.enum(["YES", "NO", "VOID"]).optional(), winningMarketId: z.number().int().optional(),
+        explanation: z.string().min(10).max(1000), evidence: z.array(z.object({ url: z.string().url(), title: z.string().max(200).optional() })).min(1).max(10) }), req.body);
+      const r = await propose(Number(req.params.id), { ...body, proposer: `jugador:${req.player!.displayName ?? req.player!.externalId}` }, { playerId: req.player!.id });
+      reply.code(201);
+      return { resolutionId: r.id, status: r.status, challengeEndsAt: r.challenge_ends_at, bondUsd: config.resolution.playerBondUsd };
+    });
 
     p.get("/v1/me/activity", async (req) =>
       many(pool, `SELECT tx_id, direction, amount, reason, market_id, order_id, status, created_at FROM ledger WHERE player_id=$1 ORDER BY id DESC LIMIT 100`, [req.player!.id]));

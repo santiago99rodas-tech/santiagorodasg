@@ -10,7 +10,7 @@ import { generateForTrend, generateForTopTrends, generateForCategory, categoryCo
 import { aiResolve } from "../ai/resolver.js";
 import { listDrafts, approveDraft, rejectDraft, createManualDraft } from "../services/drafts.js";
 import { createEvent } from "../services/events.js";
-import { propose, dispute, reject, finalize, closeExpired } from "../services/resolution.js";
+import { propose, dispute, reject, finalize, closeExpired, decide } from "../services/resolution.js";
 import { cancelAllInMarket } from "../services/trading.js";
 import { refreshQuotes, houseStats, mmStatus, setKillSwitch } from "../services/marketmaker.js";
 import { houseAccount } from "../services/house.js";
@@ -163,9 +163,17 @@ export async function adminRoutes(app: FastifyInstance) {
   });
   app.post<{ Params: { id: string } }>("/admin/events/:id/ai-resolve", async (req) => aiResolve(Number(req.params.id), { autoPropose: (req.body as any)?.autoPropose !== false }));
   app.get("/admin/resolutions", async (req) =>
-    many(pool, "SELECT r.*, e.title FROM resolutions r JOIN events e ON e.id=r.event_id WHERE r.status = ANY($1) ORDER BY r.id DESC LIMIT 200", [((req.query as any).status ?? "proposed,disputed").split(",")]));
+    many(pool, `SELECT r.*, e.title, e.kind,
+        (SELECT json_agg(json_build_object('role', b.role, 'playerId', b.player_id, 'amount', b.amount, 'status', b.status, 'payout', b.payout) ORDER BY b.id)
+           FROM resolution_bonds b WHERE b.resolution_id = r.id) AS bonds
+      FROM resolutions r JOIN events e ON e.id=r.event_id WHERE r.status = ANY($1) ORDER BY r.id DESC LIMIT 200`, [((req.query as any).status ?? "proposed,disputed").split(",")]));
   app.post<{ Params: { id: string } }>("/admin/resolutions/:id/dispute", async (req) => dispute(Number(req.params.id), adminUser(req), (req.body as any)?.reason ?? ""));
-  app.post<{ Params: { id: string } }>("/admin/resolutions/:id/reject", async (req) => reject(Number(req.params.id)));
+  app.post<{ Params: { id: string } }>("/admin/resolutions/:id/reject", async (req) => reject(Number(req.params.id), adminUser(req)));
+  // Decisión sobre una disputa: mismo resultado = gana quien propuso; otro = gana quien disputó
+  app.post<{ Params: { id: string } }>("/admin/resolutions/:id/decide", async (req) => {
+    const b = z.object({ outcome: z.enum(["YES", "NO", "VOID"]).optional(), winningMarketId: z.number().int().optional(), note: z.string().max(1000).optional() }).parse(req.body ?? {});
+    return decide(Number(req.params.id), b, adminUser(req), b.note);
+  });
   app.post<{ Params: { id: string } }>("/admin/resolutions/:id/finalize", async (req) => finalize(Number(req.params.id), { force: Boolean((req.body as any)?.force) }));
   app.post("/admin/jobs/close-expired", async () => ({ closed: await closeExpired() }));
 

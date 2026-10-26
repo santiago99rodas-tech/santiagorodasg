@@ -1,8 +1,12 @@
 // Resolución inspirada en el oráculo optimista (UMA) que usa Polymarket:
-//   1. Alguien (la IA o un moderador) PROPONE el resultado con evidencia.
-//   2. Corre una ventana de disputa (CHALLENGE_WINDOW_MINUTES). Se detiene el trading.
-//   3. Si nadie disputa, se FINALIZA y se paga $1 por acción ganadora.
-//      Si alguien disputa, decide un administrador (nueva propuesta o finalización forzada).
+//   1. Alguien PROPONE el resultado con evidencia y deja una FIANZA: la casa (IA o moderador,
+//      HOUSE_BOND_USD) o un jugador (RESOLUTION_BOND_USD, debitada de su casino, solo si el evento
+//      ya cerró hace PLAYER_PROPOSE_AFTER_HOURS y nadie propuso).
+//   2. Corre una ventana de disputa (CHALLENGE_WINDOW_MINUTES). Se detiene el trading. Un jugador
+//      puede DISPUTAR dejando su propia fianza y evidencia.
+//   3. Sin disputa: se FINALIZA, se paga $1 por acción ganadora y se devuelve la fianza.
+//      Con disputa decide un administrador. Quien tenía razón recupera su fianza más BOND_REWARD_SHARE
+//      de la del otro; quien no, la pierde. Si la casa propuso mal, paga ella.
 // "VOID" (anulado) paga 0,50 por acción a SÍ y a NO, como el 50-50 de Polymarket.
 
 import { pool, tx, one, many } from "../db/pool.js";
@@ -33,12 +37,18 @@ export async function closeExpired() {
   return evs.length;
 }
 
-export async function propose(eventId: number, input: ProposeInput) {
+export async function propose(eventId: number, input: ProposeInput, opts: { playerId?: number; windowMinutes?: number } = {}) {
   const e = await one(pool, "SELECT * FROM events WHERE id=$1", [eventId]);
   if (!e) throw notFound("Evento no encontrado");
   if (!["open", "closed", "resolving"].includes(e.status)) throw conflict("event_not_resolvable", `El evento está ${e.status}`);
-  const pending = await one(pool, "SELECT id FROM resolutions WHERE event_id=$1 AND status='proposed'", [eventId]);
+  const pending = await one(pool, "SELECT id FROM resolutions WHERE event_id=$1 AND status IN ('proposed','disputed')", [eventId]);
   if (pending) throw conflict("resolution_pending", `Ya hay una propuesta en curso (#${pending.id})`);
+  if (opts.playerId) {
+    const after = new Date(e.close_time).getTime() + config.resolution.playerProposeAfterHours * 3600e3;
+    if (e.status === "open" || Date.now() < after) {
+      throw conflict("too_early", `Los jugadores pueden proponer ${config.resolution.playerProposeAfterHours} h después del cierre si nadie lo hizo antes`);
+    }
+  }
 
   let outcome = input.outcome;
   if (e.kind === "multi" && outcome !== "VOID") {
@@ -48,6 +58,11 @@ export async function propose(eventId: number, input: ProposeInput) {
   }
   if (!outcome) throw bad("invalid_outcome", "Indica outcome: YES, NO o VOID");
 
+  // Fianza del jugador antes de tocar nada (si el casino la rechaza, no pasa nada más)
+  const bond = opts.playerId ? config.resolution.playerBondUsd * 1e6 : config.resolution.houseBondUsd * 1e6;
+  const bondTx = opts.playerId ? `bond_p_${eventId}_${opts.playerId}_${Date.now()}` : null;
+  if (opts.playerId && bond > 0) await wallet.debit(opts.playerId, bond, { reason: "resolution_bond", txId: bondTx! });
+
   // Detener el trading
   const ms = await many(pool, "UPDATE markets SET status='resolving' WHERE event_id=$1 AND status IN ('open','closed') RETURNING id", [eventId]);
   await pool.query("UPDATE events SET status='resolving' WHERE id=$1", [eventId]);
@@ -56,11 +71,78 @@ export async function propose(eventId: number, input: ProposeInput) {
     bus.publish({ type: "market", marketId: m.id, eventId, status: "resolving" });
   }
 
-  return one(pool,
-    `INSERT INTO resolutions (event_id, winning_market_id, outcome, proposer, evidence, explanation, status, challenge_ends_at)
-     VALUES ($1,$2,$3,$4,$5,$6,'proposed', now() + make_interval(mins => $7)) RETURNING *`,
-    [eventId, e.kind === "multi" && outcome !== "VOID" ? input.winningMarketId : null, outcome, input.proposer,
-     JSON.stringify(input.evidence ?? []), input.explanation ?? "", config.challengeWindowMinutes]);
+  const r = await one(pool,
+    `INSERT INTO resolutions (event_id, winning_market_id, outcome, proposer, proposer_player_id, evidence, explanation, status, challenge_ends_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,'proposed', now() + make_interval(mins => $8)) RETURNING *`,
+    [eventId, e.kind === "multi" && outcome !== "VOID" ? input.winningMarketId : null, outcome, input.proposer, opts.playerId ?? null,
+     JSON.stringify(input.evidence ?? []), input.explanation ?? "", opts.windowMinutes ?? config.challengeWindowMinutes]);
+  if (bond > 0) await pool.query("INSERT INTO resolution_bonds (resolution_id, role, player_id, amount, status) VALUES ($1,'proposer',$2,$3,'held')", [r.id, opts.playerId ?? null, bond]);
+  return r;
+}
+
+/**
+ * Un jugador disputa una propuesta dentro de la ventana, con su fianza y evidencia. El evento queda
+ * esperando la decisión de un administrador.
+ */
+export async function disputeByPlayer(playerId: number, resolutionId: number, input: { reason: string; evidence?: { url: string; title?: string }[] }) {
+  const r = await one(pool, "SELECT * FROM resolutions WHERE id=$1", [resolutionId]);
+  if (!r) throw notFound("Propuesta no encontrada");
+  if (r.status !== "proposed" || new Date(r.challenge_ends_at) <= new Date()) throw conflict("not_disputable", "La propuesta ya no está en ventana de disputa");
+  if (r.proposer_player_id === playerId) throw conflict("own_proposal", "No puedes disputar tu propia propuesta");
+  if (!input.reason || input.reason.trim().length < 10) throw bad("invalid_reason", "Explica por qué el resultado propuesto es incorrecto (mínimo 10 caracteres)");
+  const bond = config.resolution.playerBondUsd * 1e6;
+  if (bond > 0) await wallet.debit(playerId, bond, { reason: "resolution_bond", txId: `bond_d_${resolutionId}_${playerId}` });
+  const p = await one(pool, "SELECT display_name FROM players WHERE id=$1", [playerId]);
+  const upd = await one(pool,
+    `UPDATE resolutions SET status='disputed', disputed_by=$2, dispute_reason=$3, disputer_player_id=$4, dispute_evidence=$5, disputed_at=now()
+     WHERE id=$1 AND status='proposed' RETURNING *`,
+    [resolutionId, `jugador:${p?.display_name ?? playerId}`, input.reason.trim(), playerId, JSON.stringify(input.evidence ?? [])]);
+  if (!upd) {
+    // Otro la disputó en el mismo instante: se devuelve la fianza
+    if (bond > 0) await wallet.credit(playerId, bond, { reason: "resolution_bond_refund", txId: `bond_d_${resolutionId}_${playerId}_refund` });
+    throw conflict("not_disputable", "La propuesta ya fue disputada");
+  }
+  if (bond > 0) await pool.query("INSERT INTO resolution_bonds (resolution_id, role, player_id, amount, status) VALUES ($1,'disputer',$2,$3,'held')", [resolutionId, playerId, bond]);
+  return upd;
+}
+
+/**
+ * Liquida las fianzas de una propuesta. winner = quién tenía razón (null si no hubo disputa y la
+ * propuesta se rechazó: el que propuso pierde la suya). El ganador recupera su fianza más
+ * BOND_REWARD_SHARE de la del perdedor; el resto de la fianza perdida queda para la casa.
+ */
+async function settleBonds(resolutionId: number, winner: "proposer" | "disputer" | null) {
+  const bonds = await many(pool, "SELECT * FROM resolution_bonds WHERE resolution_id=$1 AND status='held'", [resolutionId]);
+  const loser = winner ? bonds.find((b) => b.role !== winner) : undefined;
+  const reward = loser ? Math.floor(Number(loser.amount) * config.resolution.rewardShare) : 0;
+  for (const b of bonds) {
+    let status: string, payout: number;
+    if (winner === null) { status = b.player_id ? "forfeited" : "returned"; payout = b.player_id ? 0 : Number(b.amount); }
+    else if (b.role === winner) { status = reward > 0 ? "rewarded" : "returned"; payout = Number(b.amount) + reward; }
+    else { status = "forfeited"; payout = 0; }
+    await pool.query("UPDATE resolution_bonds SET status=$2, payout=$3, settled_at=now() WHERE id=$1", [b.id, status, payout]);
+    if (b.player_id && payout > 0) {
+      await wallet.credit(b.player_id, payout, { reason: status === "rewarded" ? "resolution_bond_reward" : "resolution_bond_refund", txId: `bond_${b.id}` });
+    }
+  }
+}
+
+/**
+ * Decisión de un administrador sobre una propuesta disputada: si el resultado es el propuesto, se
+ * finaliza tal cual; si no, se rechaza (gana quien disputó) y se finaliza con el resultado correcto.
+ */
+export async function decide(resolutionId: number, input: { outcome?: "YES" | "NO" | "VOID"; winningMarketId?: number }, by: string, note = "") {
+  const r = await one(pool, "SELECT r.*, e.kind FROM resolutions r JOIN events e ON e.id=r.event_id WHERE r.id=$1", [resolutionId]);
+  if (!r) throw notFound("Propuesta no encontrada");
+  if (r.status !== "disputed") throw conflict("not_disputed", "Solo se decide sobre propuestas disputadas");
+  const same = r.kind === "multi" && input.outcome !== "VOID"
+    ? r.outcome !== "VOID" && Number(input.winningMarketId) === Number(r.winning_market_id)
+    : input.outcome === r.outcome;
+  await pool.query("UPDATE resolutions SET decided_by=$2 WHERE id=$1", [resolutionId, by]);
+  if (same) return finalize(resolutionId, { force: true });
+  await reject(resolutionId, by);
+  const fresh = await propose(r.event_id, { ...input, proposer: `admin:${by}`, explanation: note || `Decisión sobre la disputa de la propuesta #${resolutionId}` }, { windowMinutes: 0 });
+  return finalize(fresh.id, { force: true });
 }
 
 export async function dispute(resolutionId: number, by: string, reason: string) {
@@ -69,10 +151,17 @@ export async function dispute(resolutionId: number, by: string, reason: string) 
   return r;
 }
 
-/** Rechaza una propuesta disputada: el evento queda listo para una nueva propuesta. */
-export async function reject(resolutionId: number) {
-  const r = await one(pool, "UPDATE resolutions SET status='rejected' WHERE id=$1 AND status IN ('proposed','disputed') RETURNING *", [resolutionId]);
+/**
+ * Rechaza una propuesta: el evento queda listo para una nueva. Si estaba disputada, tenía razón quien
+ * disputó; si no, quien propuso pierde su fianza.
+ */
+export async function reject(resolutionId: number, by?: string) {
+  const r = await one(pool,
+    `UPDATE resolutions SET status='rejected', decided_by=COALESCE($2, decided_by),
+       dispute_result = CASE WHEN status='disputed' THEN 'dispute_upheld' ELSE dispute_result END
+     WHERE id=$1 AND status IN ('proposed','disputed') RETURNING *`, [resolutionId, by ?? null]);
   if (!r) throw conflict("not_rejectable", "La propuesta no se puede rechazar");
+  await settleBonds(r.id, r.dispute_result === "dispute_upheld" ? "disputer" : null);
   return r;
 }
 
@@ -104,7 +193,8 @@ export async function finalize(resolutionId: number, opts: { force?: boolean } =
       }
     }
     await c.query("UPDATE events SET status=$2 WHERE id=$1", [e.id, r.outcome === "VOID" ? "void" : "resolved"]);
-    await c.query("UPDATE resolutions SET status='finalized', finalized_at=now() WHERE id=$1", [r.id]);
+    await c.query(`UPDATE resolutions SET status='finalized', finalized_at=now(),
+                     dispute_result = CASE WHEN status='disputed' THEN 'proposal_upheld' ELSE dispute_result END WHERE id=$1`, [r.id]);
     // Aviso a cada casino con los premios de sus jugadores
     await c.query(
       `INSERT INTO webhook_outbox (operator_id, type, payload)
@@ -115,6 +205,7 @@ export async function finalize(resolutionId: number, opts: { force?: boolean } =
   for (const p of payouts) {
     await wallet.credit(p.playerId, p.amount, { reason: r.outcome === "VOID" ? "void_refund" : "payout", marketId: p.marketId, txId: `pay_${r.id}_${p.marketId}_${p.playerId}` });
   }
+  await settleBonds(r.id, "proposer"); // con o sin disputa, quien propuso tenía razón
   for (const m of markets) bus.publish({ type: "market", marketId: m.id, eventId: e.id, status: r.outcome === "VOID" ? "void" : "resolved" });
   return { ...r, status: "finalized", payouts: payouts.length };
 }

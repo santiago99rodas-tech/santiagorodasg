@@ -374,19 +374,67 @@
   }
 
   // ---------- Resolución ----------
-  function propose(eid, input) {
+  // Fianzas (igual que server/src/services/resolution.ts): jugador $10, casa $100, premio = mitad de la del que perdió
+  const BOND = { player: 10e6, house: 100e6, rewardShare: 0.5, playerAfterMs: 60e3 };
+  S.bonds = [];
+  function settleBonds(rid, winner) {
+    const bonds = S.bonds.filter((b) => b.rid === rid && b.status === "held");
+    const loser = winner ? bonds.find((b) => b.role !== winner) : null;
+    const reward = loser ? Math.floor(loser.amount * BOND.rewardShare) : 0;
+    for (const b of bonds) {
+      if (winner === null) { b.status = b.playerId ? "forfeited" : "returned"; b.payout = b.playerId ? 0 : b.amount; }
+      else if (b.role === winner) { b.status = reward ? "rewarded" : "returned"; b.payout = b.amount + reward; }
+      else { b.status = "forfeited"; b.payout = 0; }
+      if (b.playerId && b.payout) credit(b.playerId, b.payout, b.status === "rewarded" ? "resolution_bond_reward" : "resolution_bond_refund");
+    }
+  }
+  function disputeByPlayer(pid, rid, b) {
+    const r = S.resolutions.find((x) => x.id === rid);
+    if (!r) throw notFound("Propuesta no encontrada");
+    if (r.status !== "proposed" || new Date(r.challenge_ends_at) <= new Date(now())) throw conflict("not_disputable", "La propuesta ya no está en ventana de disputa");
+    if (r.proposer_player_id === pid) throw conflict("own_proposal", "No puedes disputar tu propia propuesta");
+    if (!b.reason || b.reason.trim().length < 10) throw bad("invalid_reason", "Explica por qué el resultado propuesto es incorrecto (mínimo 10 caracteres)");
+    debit(pid, BOND.player);
+    Object.assign(r, { status: "disputed", disputed_by: `jugador:${S.players.get(pid).name}`, dispute_reason: b.reason.trim(), dispute_evidence: b.evidence ?? [], disputer_player_id: pid, disputed_at: iso(now()) });
+    S.bonds.push({ id: S.bonds.length + 1, rid, role: "disputer", playerId: pid, amount: BOND.player, status: "held", payout: 0 });
+    return r;
+  }
+  function rejectRes(rid, by) {
+    const r = S.resolutions.find((x) => x.id === rid);
+    if (!r || !["proposed", "disputed"].includes(r.status)) throw conflict("not_rejectable", "No se puede rechazar");
+    if (r.status === "disputed") r.dispute_result = "dispute_upheld";
+    r.status = "rejected"; r.decided_by = by;
+    settleBonds(rid, r.dispute_result === "dispute_upheld" ? "disputer" : null);
+    return r;
+  }
+  function decide(rid, input, by) {
+    const r = S.resolutions.find((x) => x.id === rid);
+    if (!r || r.status !== "disputed") throw conflict("not_disputed", "Solo se decide sobre propuestas disputadas");
+    const e = S.events.find((x) => x.id === r.event_id);
+    const same = e.kind === "multi" && input.outcome !== "VOID" ? r.outcome !== "VOID" && Number(input.winningMarketId) === r.winning_market_id : input.outcome === r.outcome;
+    r.decided_by = by;
+    if (same) return finalize(rid, true);
+    rejectRes(rid, by);
+    const fresh = propose(r.event_id, { ...input, proposer: by, explanation: input.note || `Decisión sobre la disputa de la propuesta #${rid}` }, { windowMs: 0 });
+    return finalize(fresh.id, true);
+  }
+  function propose(eid, input, opts = {}) {
     const e = S.events.find((x) => x.id === eid);
     if (!e) throw notFound("Evento no encontrado");
     if (!["open", "closed", "resolving"].includes(e.status)) throw conflict("event_not_resolvable", `El evento está ${e.status}`);
-    if (S.resolutions.some((r) => r.event_id === eid && r.status === "proposed")) throw conflict("resolution_pending", "Ya hay una propuesta en curso");
+    if (S.resolutions.some((r) => r.event_id === eid && ["proposed", "disputed"].includes(r.status))) throw conflict("resolution_pending", "Ya hay una propuesta en curso");
+    if (opts.playerId && (e.status === "open" || now() < new Date(e.closeTime).getTime() + BOND.playerAfterMs)) throw conflict("too_early", "Los jugadores pueden proponer un rato después del cierre si nadie lo hizo antes");
     let outcome = input.outcome;
     if (e.kind === "multi" && outcome !== "VOID") { if (!e.marketIds.includes(Number(input.winningMarketId))) throw bad("invalid_winner", "Indica el mercado ganador"); outcome = "YES"; }
     if (!outcome) throw bad("invalid_outcome", "Indica outcome: YES, NO o VOID");
+    if (opts.playerId) debit(opts.playerId, BOND.player);
     e.status = "resolving";
     e.marketIds.forEach((mid) => { const m = S.markets.get(mid); if (["open", "closed"].includes(m.status)) m.status = "resolving"; cancelAllInMarket(mid, "resolution"); publish({ type: "market", marketId: mid, eventId: eid, status: "resolving" }); });
     const r = { id: ++S.seq.res, event_id: eid, title: e.title, winning_market_id: e.kind === "multi" && outcome !== "VOID" ? Number(input.winningMarketId) : null, outcome,
-      proposer: input.proposer, evidence: input.evidence ?? [], explanation: input.explanation ?? "", status: "proposed", challenge_ends_at: iso(now() + CHALLENGE_MS), created_at: iso(now()) };
+      proposer: input.proposer, proposer_player_id: opts.playerId ?? null, evidence: input.evidence ?? [], explanation: input.explanation ?? "", status: "proposed",
+      challenge_ends_at: iso(now() + (opts.windowMs ?? CHALLENGE_MS)), created_at: iso(now()) };
     S.resolutions.unshift(r);
+    S.bonds.push({ id: S.bonds.length + 1, rid: r.id, role: "proposer", playerId: opts.playerId ?? null, amount: opts.playerId ? BOND.player : BOND.house, status: "held", payout: 0 });
     return r;
   }
   function finalize(rid, force) {
@@ -414,7 +462,9 @@
       publish({ type: "market", marketId: mid, eventId: e.id, status: m.status });
     }
     e.status = r.outcome === "VOID" ? "void" : "resolved";
+    if (r.status === "disputed") r.dispute_result = "proposal_upheld";
     r.status = "finalized"; r.finalized_at = iso(now());
+    settleBonds(r.id, "proposer");
     return { ...r, payouts };
   }
   setInterval(() => { S.resolutions.filter((r) => r.status === "proposed" && new Date(r.challenge_ends_at) <= new Date(now())).forEach((r) => { try { finalize(r.id); } catch {} }); }, 5000);
@@ -471,7 +521,11 @@
     const e = S.events.find((x) => x.id === Number(id) || x.slug === id);
     if (!e) throw notFound("Evento no encontrado");
     const r = S.resolutions.find((x) => x.event_id === e.id);
-    return { ...serializeEvent(e), resolution: r ? { id: r.id, outcome: r.outcome, winning_market_id: r.winning_market_id, status: r.status, proposer: r.proposer, explanation: r.explanation, evidence: r.evidence, challenge_ends_at: r.challenge_ends_at } : null };
+    const pending = r && ["proposed", "disputed"].includes(r.status);
+    return { ...serializeEvent(e), resolution: r ? { id: r.id, outcome: r.outcome, winning_market_id: r.winning_market_id, status: r.status, proposer: r.proposer, explanation: r.explanation, evidence: r.evidence,
+        challenge_ends_at: r.challenge_ends_at, disputed_at: r.disputed_at ?? null, dispute_reason: r.dispute_reason ?? null, dispute_result: r.dispute_result ?? null } : null,
+      resolutionOptions: { bondUsd: BOND.player / 1e6, challengeMinutes: CHALLENGE_MS / 60e3, canDispute: r?.status === "proposed" && new Date(r.challenge_ends_at) > new Date(now()),
+        canPropose: ["closed", "resolving"].includes(e.status) && !pending && now() >= new Date(e.closeTime).getTime() + BOND.playerAfterMs } };
   }
   function priceHistory(mid, interval) {
     const span = { "1d": H24, "1w": 7 * H24, "1m": 30 * H24, all: 3650 * H24 }[interval] ?? 7 * H24;
@@ -677,9 +731,50 @@
   route("POST", "/admin/events/:id/close", ({ p }) => { const e = S.events.find((x) => x.id === Number(p.id)); if (!e) throw notFound(); let n = 0; if (e.status === "open") { e.status = "closed"; e.marketIds.forEach((mid) => { const m = S.markets.get(mid); if (m.status === "open") { m.status = "closed"; n++; cancelAllInMarket(mid, "market_closed"); } }); } return { closed: n }; });
   route("POST", "/admin/events/:id/resolve", ({ p, b, user }) => propose(Number(p.id), { ...b, proposer: user }));
   route("POST", "/admin/events/:id/ai-resolve", AI_OFF);
-  route("GET", "/admin/resolutions", ({ q }) => S.resolutions.filter((r) => (q.status ?? "proposed,disputed").split(",").includes(r.status)));
+  route("GET", "/admin/resolutions", ({ q }) => S.resolutions.filter((r) => (q.status ?? "proposed,disputed").split(",").includes(r.status))
+    .map((r) => ({ ...r, kind: S.events.find((e) => e.id === r.event_id)?.kind, bonds: S.bonds.filter((b) => b.rid === r.id).map((b) => ({ role: b.role, playerId: b.playerId, amount: b.amount, status: b.status, payout: b.payout })) })));
+  route("POST", "/admin/resolutions/:id/decide", ({ p, b, user }) => decide(Number(p.id), b, user));
+  route("POST", "/v1/resolutions/:id/dispute", ({ p, b }) => { const r = disputeByPlayer(USER, Number(p.id), b); return { resolutionId: r.id, status: r.status, bondUsd: BOND.player / 1e6 }; });
+  route("POST", "/v1/events/:id/propose", ({ p, b }) => {
+    if (!b.explanation || b.explanation.length < 10 || !(b.evidence ?? []).length) throw bad("invalid_request", "Explica el resultado y agrega un enlace a la evidencia");
+    const r = propose(Number(p.id), { ...b, proposer: `jugador:${S.players.get(USER).name}` }, { playerId: USER });
+    return { resolutionId: r.id, status: r.status, challengeEndsAt: r.challenge_ends_at, bondUsd: BOND.player / 1e6 };
+  });
+  // Oráculo (en la demo las respuestas no se firman: el servidor real firma con Ed25519)
+  const oracleWrap = (data) => ({ oracle: "Predicciones (demo)", keyId: "demo", issuedAt: iso(now()), data });
+  const oracleMarket = (m) => {
+    const e = S.events.find((x) => x.id === m.eventId), book = bookOf(m.id), bid = book.bestBid(), ask = book.bestAsk(), vol = Math.round(m.volume / 1e6);
+    const resolved = ["resolved", "void"].includes(m.status);
+    const ref = [...refs].reverse().find((x) => x.marketId === m.id);
+    return { marketId: m.id, eventId: e.id, event: e.title, outcome: e.kind === "multi" ? m.label : "Sí", question: m.question, category: e.category, kind: e.kind, status: m.status, closeTime: m.closeTime,
+      probability: resolved ? (m.resolved === "YES" ? 1 : m.resolved === "NO" ? 0 : 0.5) : Math.round((m.fairExact ?? m.fair / 100) * 10000) / 10000,
+      bid: bid != null ? bid / 100 : null, ask: ask != null ? ask / 100 : null, lastTrade: m.last / 100, volumeUsd: vol,
+      confidence: resolved ? "resuelto" : vol >= 1000 && ask - bid <= 6 ? "alta" : vol >= 100 && ask - bid <= 10 ? "media" : "baja",
+      external: ref ? { source: ref.source, probability: ref.price / 100, capturedAt: ref.capturedAt } : null, resolution: resolved ? { outcome: m.resolved } : null };
+  };
+  route("GET", "/v1/oracle", () => oracleWrap({ name: "Predicciones (demo)", endpoints: { markets: "/v1/oracle/markets?status=open|resolved|all&category=&limit=&offset=", market: "/v1/oracle/markets/:id", trackRecord: "/v1/oracle/track-record", keys: "/v1/oracle/keys" } }));
+  route("GET", "/v1/oracle/keys", () => ({ keys: [{ kid: "demo", alg: "Ed25519", publicKeyPem: "La demo corre en tu navegador y no firma. El servidor real firma cada respuesta con Ed25519 y publica aquí su clave pública." }] }));
+  route("GET", "/v1/oracle/markets", ({ q }) => {
+    const st = q.status === "resolved" ? ["resolved", "void"] : q.status === "all" ? null : ["open"];
+    const ms = [...S.markets.values()].filter((m) => (!st || st.includes(m.status)) && (!q.category || S.events.find((e) => e.id === m.eventId)?.category === q.category))
+      .sort((a, b) => b.volume - a.volume).slice(Number(q.offset ?? 0), Number(q.offset ?? 0) + Math.min(Number(q.limit ?? 100), 500));
+    return oracleWrap({ count: ms.length, markets: ms.map(oracleMarket) });
+  });
+  route("GET", "/v1/oracle/markets/:id", ({ p }) => { const m = S.markets.get(Number(p.id)); if (!m) throw notFound("Mercado no encontrado"); return oracleWrap(oracleMarket(m)); });
+  route("GET", "/v1/oracle/track-record", () => {
+    const pick = (r) => ({ horizonHours: r.horizonHours, resolvedMarkets: r.overall.n, reliable: r.reliable, brier: r.overall.brierRef, brierAtClose: r.overall.brierClose, brierOpening: r.overall.brierInitial,
+      brierBaseRate: r.overall.brierBaseRate, calibration: r.calibration, byCategory: r.byCategory.filter((c) => c.n >= 5).map((c) => ({ category: c.category, name: c.name, n: c.n, brier: c.brierRef })) });
+    const rs = S.resolutions, bonds = S.bonds;
+    return oracleWrap({ horizons: [pick(integrity(24)), pick(integrity(168))], resolutions: {
+      finalized: rs.filter((r) => r.status === "finalized").length + ARCHIVE.length, disputed: rs.filter((r) => r.disputed_at).length,
+      disputesUpheld: rs.filter((r) => r.dispute_result === "dispute_upheld").length, proposalsUpheld: rs.filter((r) => r.dispute_result === "proposal_upheld").length,
+      proposedByPlayers: rs.filter((r) => r.status === "finalized" && r.proposer_player_id).length, challengeWindowMinutes: CHALLENGE_MS / 60e3,
+      bonds: { playerBondUsd: BOND.player / 1e6, houseBondUsd: BOND.house / 1e6, rewardShare: BOND.rewardShare,
+        forfeitedUsd: bonds.filter((b) => b.status === "forfeited").reduce((a, b) => a + b.amount, 0) / 1e6,
+        paidToDisputersUsd: bonds.filter((b) => b.status === "rewarded" && b.role === "disputer").reduce((a, b) => a + b.payout - b.amount, 0) / 1e6 } } });
+  });
   route("POST", "/admin/resolutions/:id/dispute", ({ p, b, user }) => { const r = S.resolutions.find((x) => x.id === Number(p.id) && x.status === "proposed"); if (!r) throw conflict("not_disputable", "La propuesta ya no está en ventana de disputa"); r.status = "disputed"; r.disputed_by = user; r.dispute_reason = b.reason ?? ""; return r; });
-  route("POST", "/admin/resolutions/:id/reject", ({ p }) => { const r = S.resolutions.find((x) => x.id === Number(p.id)); if (!r || !["proposed", "disputed"].includes(r.status)) throw conflict("not_rejectable", "No se puede rechazar"); r.status = "rejected"; return r; });
+  route("POST", "/admin/resolutions/:id/reject", ({ p, user }) => rejectRes(Number(p.id), user));
   route("POST", "/admin/resolutions/:id/finalize", ({ p, b }) => finalize(Number(p.id), !!b.force));
   route("GET", "/admin/categories/coverage", () => coverage());
   route("POST", "/admin/categories/refill", AI_OFF);

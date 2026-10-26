@@ -1,4 +1,5 @@
 // Consultas de lectura para el front y para los casinos (equivalente a la Gamma API + Data API de Polymarket).
+import { config } from "../config.js";
 import { pool, many, one } from "../db/pool.js";
 import { bookOf } from "./trading.js";
 import { notFound } from "../lib/errors.js";
@@ -124,8 +125,21 @@ export async function eventDetail(idOrSlug: string) {
   const row = await one(pool, `SELECT id FROM events WHERE ${/^\d+$/.test(idOrSlug) ? "id" : "slug"}=$1`, [idOrSlug]);
   if (!row) throw notFound("Evento no encontrado");
   const [e] = await listEvents({ status: "open,closed,resolving,resolved,void", ids: [row.id], limit: 1 });
-  const resolution = await one(pool, "SELECT id, outcome, winning_market_id, status, proposer, explanation, evidence, challenge_ends_at, finalized_at FROM resolutions WHERE event_id=$1 ORDER BY id DESC LIMIT 1", [e.id]);
-  return { ...e, resolution: resolution ?? null };
+  const resolution = await one(pool, `SELECT id, outcome, winning_market_id, status, proposer, explanation, evidence, challenge_ends_at, finalized_at,
+      disputed_at, dispute_reason, dispute_result FROM resolutions WHERE event_id=$1 ORDER BY id DESC LIMIT 1`, [e.id]);
+  // Resolución con fianzas: si un jugador puede proponer (evento cerrado hace rato y nadie propuso)
+  const pending = resolution && ["proposed", "disputed"].includes(resolution.status);
+  const proposeFrom = new Date(new Date(e.closeTime).getTime() + config.resolution.playerProposeAfterHours * 3600e3);
+  return {
+    ...e, resolution: resolution ?? null,
+    resolutionOptions: {
+      bondUsd: config.resolution.playerBondUsd,
+      challengeMinutes: config.challengeWindowMinutes,
+      canDispute: resolution?.status === "proposed" && new Date(resolution.challenge_ends_at) > new Date(),
+      canPropose: ["closed", "resolving"].includes(e.status) && !pending && proposeFrom <= new Date(),
+      proposeFrom,
+    },
+  };
 }
 
 export async function marketBook(marketId: number) {

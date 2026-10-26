@@ -139,6 +139,8 @@ Valores de `reason`:
 | `sell_proceeds` | El jugador vendió acciones antes del cierre |
 | `payout` | Premio: $1 por acción ganadora |
 | `void_refund` | Mercado anulado: $0,50 por acción, a Sí y a No |
+| `resolution_bond` (débito) | Fianza de $10 del jugador al proponer o disputar un resultado ([ORACULO.md](ORACULO.md)) |
+| `resolution_bond_refund`, `resolution_bond_reward` | Se devuelve la fianza; con premio si el jugador tenía razón en una disputa |
 
 ### `POST /rollback`
 
@@ -176,6 +178,8 @@ Ante un error se reintenta con espera exponencial, hasta 10 veces.
 | GET | `/v1/orders?status=open\|all` | Órdenes del jugador |
 | GET | `/v1/positions` | Posiciones con precio actual, valor y ganancia o pérdida |
 | GET | `/v1/me/activity` | Movimientos de dinero |
+| POST | `/v1/resolutions/:id/dispute` | Disputar un resultado propuesto, con fianza: `{ reason, evidence? }` |
+| POST | `/v1/events/:id/propose` | Proponer el resultado de un evento cerrado que nadie resolvió, con fianza: `{ outcome \| winningMarketId, explanation, evidence }` |
 
 Cuerpo de `POST /v1/orders`:
 
@@ -213,6 +217,7 @@ Respuesta:
 | `GET /v1/stats` | Indicadores: volumen, jugadores en línea, movimientos, volumen por categoría y por hora |
 | `GET /v1/trends` | Tendencias detectadas |
 | `GET /v1/stream` | Tiempo real (Server-Sent Events): `trade`, `price`, `book`, `market` |
+| `GET /v1/oracle/*` | Oráculo: probabilidades firmadas con Ed25519 e historial de calibración ([ORACULO.md](ORACULO.md)) |
 
 ## 8. Reportes para conciliación
 

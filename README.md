@@ -5,7 +5,8 @@ Plataforma de mercados de predicción al estilo Polymarket, pensada para integra
 - **Mercados Sí/No y de opción múltiple** con libro de órdenes central (CLOB), acciones que pagan $1 y precios que reflejan probabilidades.
 - **Billetera seamless**: el dinero sigue en el casino; la plataforma pide débitos y créditos firmados con HMAC.
 - **Información → preguntas**: ingesta de periódicos, revistas, Google Trends, GDELT y señales de redes sociales; detección de tendencias y preguntas generadas con IA (Claude) que pasan por moderación.
-- **Resolución** con propuesta, ventana de disputa y pago automático; la IA puede proponer resultados investigando en la web.
+- **Resolución con fianzas** al estilo del oráculo de UMA: la casa (IA o moderador) o un jugador propone el resultado con una fianza, cualquier jugador puede disputarlo con la suya, y quien tenía razón se queda con parte de la fianza del otro. La IA puede proponer resultados investigando en la web.
+- **Oráculo público**: `/v1/oracle` publica la probabilidad de cada mercado firmada con Ed25519, junto con su historial de calibración ([detalle](docs/ORACULO.md)).
 - **Market maker de la casa** para que siempre haya liquidez: precio que aprende del flujo (LMSR), spread Avellaneda-Stoikov, liquidez que baja cerca del cierre, límites de pérdida y botón de pánico. Protección contra apostadores informados: recargo según su markout, spread asimétrico y freno de emergencia. Probado con un simulador de jugadores ([detalle](docs/MARKET-MAKER.md)).
 - **Módulo embebible** (iframe) con dashboards, gráficas, libro de órdenes, apuestas en vivo y "Mis predicciones".
 
@@ -68,7 +69,7 @@ Sirve para mostrar el producto a casinos sin desplegar nada. Se reinicia al reca
 ```bash
 cd server
 createdb predicciones_test        # una sola vez
-npm test                          # 50 pruebas: motor, market maker, protección contra informados, trading, billetera, resolución, ingesta, IA (con cliente simulado), integridad y API
+npm test                          # 55 pruebas: motor, market maker, protección contra informados, trading, billetera, resolución, ingesta, IA (con cliente simulado), integridad y API
 npm run sim                       # simulador: market maker v1, v2 y v2 con protección en 8 escenarios
 npm run typecheck
 ```
@@ -83,9 +84,10 @@ npm run typecheck
 | Diseñar mercado | Crear preguntas Sí/No o de opción múltiple con probabilidades iniciales, criterio de resolución (con plantilla), fuente, imagen y portada; vista previa en vivo de la tarjeta del jugador y validación antes de publicar |
 | Moderación | Aprobar (una a una o en lote), editar en el diseñador o rechazar con motivo las preguntas que propone la IA |
 | Mercados | Buscar y filtrar, destacar, cerrar, proponer resolución y duplicar |
-| Resoluciones | Ver propuestas y evidencias, disputar, rechazar, finalizar y pagar; resolver con IA los eventos cerrados |
+| Resoluciones | Ver propuestas, disputas y evidencias de los dos lados con sus fianzas; decidir quién tenía razón (liquida las fianzas y paga), rechazar, finalizar; resolver con IA los eventos cerrados |
 | Tendencias y señales | Tendencias detectadas, generar preguntas desde una tendencia, cargar señales de Instagram/TikTok |
 | Fuentes | Estado de cada fuente, activar o desactivar, agregar nuevas y leer ahora |
+| Oráculo | Lo que se publica: Brier 24 h y 7 días antes, calibración, disputas y fianzas, endpoints públicos, clave pública y cómo verificar las firmas, y las probabilidades que se están publicando |
 | Calibración y sesgo | Si los precios predicen bien (gráfico de calibración y puntaje de Brier por categoría y volumen), sesgo favorito-batacazo, proporción Sí/No, precisión de la apertura (IA vs. catálogo), concentración del dinero, sesgo de hinchada por país, resultado de la casa según quién resolvió, alertas de compras tardías y comparación con referencias externas (Polymarket o precios manuales) |
 | Riesgo de la casa | Estado del market maker (v2), pérdida en el peor escenario por evento y total frente a sus límites, liquidez y spread por evento, inventario por mercado, recotizar y botón de pánico; apostadores con ventaja (markout, puntaje y recargo, ajustable a mano) y mercados en freno |
 | Casinos | Alta de operadores con sus credenciales (se muestran una sola vez) |
@@ -122,4 +124,5 @@ Las tareas programadas (ingesta, generación, cierre, resolución, market maker,
 - [Guía de integración para casinos](docs/INTEGRACION-CASINO.md)
 - [Arquitectura y comparación con Polymarket](docs/ARQUITECTURA.md)
 - [Market maker v2, protección contra informados y simulador](docs/MARKET-MAKER.md)
+- [Oráculo: probabilidades públicas y resolución con fianzas](docs/ORACULO.md)
 - [Despliegue en Easypanel](docs/DESPLIEGUE-EASYPANEL.md)

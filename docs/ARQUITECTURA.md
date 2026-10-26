@@ -113,6 +113,8 @@ stateDiagram-v2
   resolving --> void: propuesta VOID
 ```
 
+- **Fianzas** ([ORACULO.md](ORACULO.md)): la casa deja $100 al proponer y un jugador $10 al proponer (si el evento cerró hace 2 h y nadie lo hizo) o al disputar. Si hay disputa decide un administrador: quien tenía razón recupera su fianza y se lleva la mitad de la del otro.
+- **Oráculo público**: `/v1/oracle/*` publica las probabilidades (precio justo), la historia y cómo se resolvió cada mercado, más el historial de calibración. Todo va firmado con Ed25519 sobre el cuerpo exacto de la respuesta.
 - El **resolvedor con IA** (`server/src/ai/resolver.ts`) investiga con búsqueda web y decide con salida estructurada. Solo propone si su confianza es de 90% o más. La propuesta igual pasa por la ventana de disputa (`CHALLENGE_WINDOW_MINUTES`, 2 h por defecto).
 - Al finalizar: $1 por acción ganadora (o $0,50 si se anula), acreditado a cada jugador en su casino, más el webhook `event.resolved`.
 

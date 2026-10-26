@@ -24,6 +24,18 @@ export const config = {
   newsApiKey: process.env.NEWSAPI_KEY || "",
   takerFeeBps: num("TAKER_FEE_BPS", 200),
   challengeWindowMinutes: num("CHALLENGE_WINDOW_MINUTES", 120),
+  // Resolución con fianzas (docs/ORACULO.md)
+  resolution: {
+    playerBondUsd: num("RESOLUTION_BOND_USD", 10), // fianza de un jugador para proponer o disputar
+    houseBondUsd: num("HOUSE_BOND_USD", 100), // fianza de la casa cuando propone (IA o moderador)
+    rewardShare: num("BOND_REWARD_SHARE", 0.5), // parte de la fianza del que perdió que se lleva el que tenía razón
+    playerProposeAfterHours: num("PLAYER_PROPOSE_AFTER_HOURS", 2), // horas después del cierre en que un jugador puede proponer
+  },
+  oracle: {
+    name: str("ORACLE_NAME", "Predicciones"),
+    privateKeyPem: (process.env.ORACLE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
+    cacheSeconds: num("ORACLE_CACHE_SECONDS", 30),
+  },
   mm: {
     enabled: str("MM_ENABLED", "true") === "true",
     spreadCents: num("MM_SPREAD_CENTS", 4),
