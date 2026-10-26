@@ -671,7 +671,14 @@ function connectStream() {
     const price = t.outcome === "YES" ? t.yesPrice : 100 - t.yesPrice;
     S.feed.unshift({ player: t.player, side: t.side, outcome: t.outcome, outcomeLabel: e.kind === "multi" ? m?.label : null, eventTitle: e.title, amount: t.amount, price });
     S.feed = S.feed.slice(0, 20);
-    if (S.stats) S.stats.trades_24h++;
+    if (S.stats) {
+      // Mismo cálculo que /v1/stats (precio del Sí × cantidad), para que el tablero no espere al refresco de 60 s
+      const v = t.yesPrice * t.qty * 100, c = S.stats.byCategory.find((x) => x.category === e.category);
+      S.stats.trades_24h++; S.stats.volume_24h += v;
+      if (c) c.volume += v; else S.stats.byCategory.push({ category: e.category, name: catName(e.category), volume: v });
+      S.stats.byCategory.sort((a, b) => b.volume - a.volume);
+      boardDirty = true;
+    }
     renderFeed(true);
   });
   es.addEventListener("price", (ev) => {
@@ -682,8 +689,11 @@ function connectStream() {
     }
   });
 }
-let dirty = false;
-setInterval(() => { if (dirty) { dirty = false; renderTicker(); if (S.view === "markets") renderGrid(); } }, 2000);
+let dirty = false, boardDirty = false;
+setInterval(() => {
+  if (dirty) { dirty = false; renderTicker(); if (S.view === "markets") renderGrid(); }
+  if (boardDirty) { boardDirty = false; renderBoard(); renderKpis(); }
+}, 2000);
 setInterval(refreshMarkets, 60_000);
 setInterval(refreshMe, 20_000);
 
