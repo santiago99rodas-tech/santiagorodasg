@@ -936,7 +936,12 @@
   })();
 
   const canon = (v) => Array.isArray(v) ? `[${v.map(canon).join(",")}]` : v && typeof v === "object" ? `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canon(v[k])}`).join(",")}}` : JSON.stringify(v);
-  const T = { journal: [], settlements: [], bank: [], seq: 0, cfg: { settlementEveryHours: 24, paymentTermHours: 48, autoCollectGuarantee: false } };
+  const T = { journal: [], settlements: [], bank: [], seq: 0, usdcSim: 0, cfg: { settlementEveryHours: 24, paymentTermHours: 48, autoCollectGuarantee: false } };
+  // La demo corre la vía USDC en modo simulado (USDC_CHAIN=simulado): sin cadena, sin valor
+  const USDC = { enabled: true, chain: "simulado", token: "0x0000000000000000000000000000000000005d0c", vault: "0x00000000000000000000000000000000005afe00", confirmations: 0,
+    simulated: true, testnet: false, realMoney: false, label: "USDC simulado (sin cadena, sin valor)" };
+  const simVault = (d) => (T.usdcSim += d);
+  const acct = (opId) => (S.operators.find((o) => o.id === opId)?.settlement_rail === "usdc" ? "boveda_usdc" : "fideicomiso");
   function jpost(kind, ref, entries, memo, by = "sistema") {
     entries = entries.filter((e) => e.amount !== 0);
     const prev = T.journal.length ? T.journal[T.journal.length - 1].hash : "0".repeat(64);
@@ -973,11 +978,11 @@
     });
   }
   function tReserves() {
-    const fiduciary = jbal("fideicomiso"), guarantees = jsum("garantia:", (v) => -v), payable = jsum("casino:", (v) => Math.max(0, -v));
+    const bank = jbal("fideicomiso"), usdcBook = jbal("boveda_usdc"), fiduciary = bank + usdcBook, guarantees = jsum("garantia:", (v) => -v), payable = jsum("casino:", (v) => Math.max(0, -v));
     const houseRisk = Math.round(totalWorstLoss() * 1e6), obligations = guarantees + payable + houseRisk;
     const mmAcc = [...S.players.values()].filter((x) => x.isMM).reduce((a, x) => a + x.balance + [...S.orders.values()].filter((o) => o.playerId === x.id && o.status === "open" && o.side === "BUY").reduce((b, o) => b + o.reserved, 0)
       + [...S.positions.values()].filter((p) => p.playerId === x.id).reduce((b, p) => b + p.cost, 0), 0);
-    return { fiduciary, bank: fiduciary, usdc: { enabled: false }, guarantees, payableToCasinos: payable, receivableFromCasinos: jsum("casino:", (v) => Math.max(0, v)), houseReserve: -jbal("capital:reserva_casa"), houseRisk,
+    return { fiduciary, bank, usdc: { ...USDC, book: usdcBook, onChain: T.usdcSim, difference: T.usdcSim - usdcBook, error: null }, guarantees, payableToCasinos: payable, receivableFromCasinos: jsum("casino:", (v) => Math.max(0, v)), houseReserve: -jbal("capital:reserva_casa"), houseRisk,
       obligations, coverage: obligations ? fiduciary / obligations : null, ok: fiduciary >= obligations, marketMakers: { custody: jbal("custodia_mm"), accounts: mmAcc, ok: jbal("custodia_mm") >= mmAcc },
       journal: { id: T.journal.length, hash: T.journal.at(-1)?.hash ?? "0".repeat(64) }, note: "En la demo el libro vive en tu navegador. En el servidor se guarda en la base y se concilia con el extracto del fideicomiso." };
   }
@@ -1002,14 +1007,14 @@
     if (!["pending", "overdue"].includes(x.status)) throw conflict("not_payable", `La liquidación está ${x.status}`);
     const rem = x.amount - x.covered_from_guarantee;
     Object.assign(x, { status: "paid", paid_at: iso(now()), bank_ref: ref });
-    jpost("pago_liquidacion", ref, [{ account: "fideicomiso", amount: rem }, { account: `casino:${x.operator_id}`, amount: -rem }], `Pago de LIQ-${id}`, by);
+    jpost("pago_liquidacion", ref, [{ account: acct(x.operator_id), amount: rem }, { account: `casino:${x.operator_id}`, amount: -rem }], `Pago de LIQ-${id}`, by);
     return x;
   }
   setInterval(() => { for (const x of T.settlements) if (x.status === "pending" && new Date(x.due_at) < new Date(now())) x.status = "overdue"; }, 10000);
   route("GET", "/admin/treasury", () => {
     const casinos = tCasinos(), j = jverify();
     return { casinos, reserves: tReserves(), journal: { ...j, recent: T.journal.slice(-30).reverse() }, settlements: T.settlements.slice().reverse(),
-      unmatchedBankLines: T.bank.filter((b) => b.status === "unmatched").map((b) => ({ account: "fideicomiso", ...b })), anchors: [], usdc: { enabled: false }, config: { ...T.cfg, anchorEnabled: true, anchorEveryHours: 24 } };
+      unmatchedBankLines: T.bank.filter((b) => b.status === "unmatched").map((b) => ({ account: "fideicomiso", ...b })).reverse(), anchors: [], usdc: USDC, config: { ...T.cfg, anchorEnabled: true, anchorEveryHours: 24 } };
   });
   route("POST", "/admin/treasury/settle", () => ({ created: tSettle() }));
   route("POST", "/admin/treasury/settlements/:id/pay", ({ p, b, user }) => { if (!b.bankRef) throw bad("missing_bank_ref", "Indica la referencia de la transferencia"); return tPay(Number(p.id), b.bankRef, user); });
@@ -1024,12 +1029,12 @@
   route("POST", "/admin/treasury/guarantees/:id", ({ p, b, user }) => {
     const amt = Math.round(b.amountUsd * 1e6), sign = b.direction === "deposit" ? 1 : -1;
     if (sign < 0 && amt > -jbal(`garantia:${p.id}`)) throw conflict("insufficient_guarantee", "El retiro supera la garantía disponible");
-    jpost(sign > 0 ? "garantia_deposito" : "garantia_retiro", b.bankRef, [{ account: "fideicomiso", amount: sign * amt }, { account: `garantia:${p.id}`, amount: -sign * amt }], `Garantía de ${p.id}`, user);
+    jpost(sign > 0 ? "garantia_deposito" : "garantia_retiro", b.bankRef, [{ account: acct(p.id), amount: sign * amt }, { account: `garantia:${p.id}`, amount: -sign * amt }], `Garantía de ${p.id}`, user);
     return { operatorId: p.id, guarantee: -jbal(`garantia:${p.id}`) };
   });
   route("POST", "/admin/treasury/reserve", ({ b, user }) => {
     const amt = Math.round(b.amountUsd * 1e6), sign = b.direction === "deposit" ? 1 : -1;
-    jpost("reserva", b.bankRef, [{ account: "fideicomiso", amount: sign * amt }, { account: "capital:reserva_casa", amount: -sign * amt }], "Reserva de la casa", user);
+    jpost("reserva", b.bankRef, [{ account: b.rail === "usdc" ? "boveda_usdc" : "fideicomiso", amount: sign * amt }, { account: "capital:reserva_casa", amount: -sign * amt }], "Reserva de la casa", user);
     return { reserve: -jbal("capital:reserva_casa") };
   });
   route("PATCH", "/admin/treasury/casinos/:id", ({ p, b }) => {
@@ -1060,6 +1065,30 @@
       if (x) { if (["pending", "overdue"].includes(x.status)) tPay(x.id, reference, user); line.status = "matched"; matched++; }
     }
     return { lines: lines.length, imported, matched, unmatched: imported - matched };
+  });
+  route("POST", "/admin/treasury/usdc/simulate", ({ b, user }) => {
+    const amount = Math.round(Number(b.amountUsd) * 1e6), addr = String(b.address ?? "").toLowerCase();
+    if (!(amount > 0)) throw bad("invalid_amount", "Indica un monto positivo");
+    if (!/^0x[0-9a-f]{40}$/.test(addr)) throw bad("invalid_address", "Dirección inválida: debe ser 0x seguido de 40 caracteres hexadecimales");
+    if (b.direction === "out" && amount > T.usdcSim) throw bad("insufficient_vault", "La bóveda simulada no tiene ese saldo");
+    const signed = b.direction === "out" ? -amount : amount;
+    T.usdcSim += signed;
+    const txHash = "0x5151" + Date.now().toString(16).padStart(28, "0") + (T.bank.length + 1).toString(16).padStart(32, "0");
+    const line = { id: T.bank.length + 1, account: "usdc", date: iso(now()).slice(0, 10), reference: `${txHash}:0`, amount: signed, description: `${signed > 0 ? "de" : "a"} ${addr} · simulada`, status: "unmatched" };
+    T.bank.push(line);
+    const o = S.operators.find((k) => k.settlement_rail === "usdc" && k.usdc_address === addr);
+    const x = o && T.settlements.find((y) => y.operator_id === o.id && ["pending", "overdue"].includes(y.status) && y.amount - y.covered_from_guarantee === signed);
+    if (x) { tPay(x.id, txHash, "cadena"); line.status = "matched"; }
+    return { simulated: true, txHash, vaultBalance: T.usdcSim, matched: x ? 1 : 0 };
+  });
+  route("POST", "/admin/treasury/bank-lines/:id/guarantee", ({ p, b, user }) => {
+    const l = T.bank.find((x) => x.id === Number(p.id) && x.status === "unmatched"); if (!l) throw notFound("Línea sin conciliar no encontrada");
+    if (l.amount <= 0) throw bad("not_a_deposit", "Solo un ingreso puede ser un depósito de garantía");
+    const want = l.account === "usdc" ? "boveda_usdc" : "fideicomiso";
+    if (acct(b.operatorId) !== want) throw conflict("rail_mismatch", "La línea es de la otra vía de liquidación del casino");
+    jpost("garantia_deposito", l.reference.split(":")[0], [{ account: want, amount: l.amount }, { account: `garantia:${b.operatorId}`, amount: -l.amount }], `Garantía de ${b.operatorId}`, user);
+    l.status = "matched";
+    return { operatorId: b.operatorId, guarantee: -jbal(`garantia:${b.operatorId}`) };
   });
   route("POST", "/admin/treasury/bank-lines/:id/ignore", ({ p }) => { const l = T.bank.find((x) => x.id === Number(p.id)); if (l) l.status = "ignored"; return { ok: true }; });
   route("GET", "/admin/treasury/journal", () => ({ verify: jverify(), entries: T.journal.slice().reverse() }));
@@ -1202,7 +1231,10 @@
     // Tesorería de demostración: garantías en el fideicomiso, reserva de la casa y custodia del market maker externo
     S.operators[0].guarantee_required = 2000e6; S.operators[1].guarantee_required = 1000e6;
     jpost("garantia_deposito", "DEP-1001", [{ account: "fideicomiso", amount: 2000e6 }, { account: "garantia:demo-casino", amount: -2000e6 }], "Depósito de garantía de demo-casino", "Demo");
-    jpost("garantia_deposito", "DEP-1002", [{ account: "fideicomiso", amount: 1000e6 }, { account: "garantia:casino-aliado", amount: -1000e6 }], "Depósito de garantía de casino-aliado", "Demo");
+    // El casino aliado liquida por la vía USDC (simulada): su garantía está en la bóveda
+    Object.assign(S.operators[1], { settlement_rail: "usdc", usdc_address: "0x2222222222222222222222222222222222222222" });
+    jpost("garantia_deposito", "0x5151…demo", [{ account: "boveda_usdc", amount: 1000e6 }, { account: "garantia:casino-aliado", amount: -1000e6 }], "Depósito de garantía de casino-aliado (USDC simulado)", "Demo");
+    simVault(1000e6);
     jpost("reserva", "CAP-2001", [{ account: "fideicomiso", amount: 50000e6 }, { account: "capital:reserva_casa", amount: -50000e6 }], "Aporte a la reserva de la casa", "Demo");
     jpost("custodia_mm", "MM-3001", [{ account: "custodia_mm", amount: 25000e6 }, { account: `mm:${MMBOT}`, amount: -25000e6 }], "Depósito del market maker externo", "Demo");
     console.info(`demo lista en ${Math.round(performance.now() - t0)} ms: ${S.events.length} eventos, ${S.markets.size} mercados`);

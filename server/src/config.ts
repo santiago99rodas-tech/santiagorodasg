@@ -155,5 +155,7 @@ export function productionWarnings() {
   if (!process.env.PUBLIC_URL || /localhost|127\.0\.0\.1/.test(config.publicUrl)) out.push("PUBLIC_URL apunta a localhost: los enlaces del módulo para los casinos no van a funcionar");
   if (!config.oracle.privateKeyPem) out.push("sin ORACLE_PRIVATE_KEY: se usa una clave generada y guardada en la base (fíjala con npm run gen:secrets)");
   if (!config.anthropicApiKey) out.push("sin ANTHROPIC_API_KEY: la IA (generar y resolver preguntas) queda desactivada");
+  if (config.usdc.chain === "simulado") out.push("USDC_CHAIN=simulado: las transferencias USDC son simuladas desde el back-office; no usar con dinero real");
+  else if (/sepolia|amoy/.test(config.usdc.chain) && config.usdc.rpcUrl) out.push(`USDC en red de prueba (${config.usdc.chain}): el USDC no tiene valor`);
   return out;
 }

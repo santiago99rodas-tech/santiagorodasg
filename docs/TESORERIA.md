@@ -171,6 +171,37 @@ Para los casinos que prefieren no pasar por el banco, sobre todo entre países: 
 
 Para casinos 100% tradicionales, la vía bancaria con fideicomiso o póliza sigue siendo la más simple.
 
+### Probar la vía USDC sin dinero real
+
+Mientras están en pruebas hay dos modos. Ninguno mueve dinero con valor, y el back-office muestra un aviso de "Modo de prueba" en Tesorería.
+
+**a) Simulado: sin cadena, para empezar.** Pon solo `USDC_CHAIN=simulado`. No hace falta nodo, bóveda ni billetera.
+
+- Configura los casinos en USDC con cualquier dirección `0x` de 40 caracteres, por ejemplo `0x1111111111111111111111111111111111111111`.
+- En Tesorería aparece **Simular transferencia USDC**. Elige el casino, si entra o sale de la bóveda, y el monto.
+- Cada liquidación pendiente de un casino en USDC tiene además **Simular pago USDC**, con el monto exacto.
+- La transferencia simulada pasa por la misma conciliación que una real:
+  - si coincide con una liquidación, la marca pagada;
+  - si no coincide, queda en "Sin conciliar" y puedes marcarla con "Es garantía".
+- La bóveda simulada lleva su propio saldo. Así la sección Reservas compara libro contra bóveda igual que en real. Si registras a mano un movimiento que no simulaste, verás la diferencia.
+- Por API: `POST /admin/treasury/usdc/simulate { direction: "in" | "out", address, amountUsd }`. Solo responde con `USDC_CHAIN=simulado`.
+
+**b) Red de prueba: la cadena de verdad, con USDC sin valor.** Sirve para ensayar con los casinos el flujo completo: billeteras, firmas de la Safe y confirmaciones. Usa Base Sepolia:
+
+1. Crea una billetera de prueba, por ejemplo MetaMask con la red Base Sepolia, para cada casino de prueba y para los firmantes.
+2. Pide USDC de prueba gratis en [faucet.circle.com](https://faucet.circle.com), red Base Sepolia. Para el gas, pide ETH de prueba en un faucet de Base Sepolia.
+3. Crea la bóveda en [app.safe.global](https://app.safe.global) eligiendo Base Sepolia.
+4. Variables:
+   ```
+   USDC_CHAIN=base-sepolia
+   USDC_RPC_URL=https://sepolia.base.org
+   USDC_VAULT_ADDRESS=0x<Safe en Base Sepolia>
+   USDC_CONFIRMATIONS=2
+   ```
+   El contrato del USDC de prueba de Circle se pone solo. También funcionan `sepolia`, `polygon-amoy` y `arbitrum-sepolia`.
+
+**Al pasar a dinero real** cambia a la red real (`USDC_CHAIN=polygon` o `base`), con la URL de un proveedor de nodos y una Safe nueva en esa red. Lo registrado en pruebas no sirve en producción: empieza con una base limpia o anula esas liquidaciones.
+
 ## Configuración
 
 | Variable | Por defecto | Qué hace |
@@ -181,7 +212,7 @@ Para casinos 100% tradicionales, la vía bancaria con fideicomiso o póliza sigu
 | `TREASURY_JOB_EVERY_MIN` | 30 | Cada cuánto revisa liquidaciones, vencimientos y pausas |
 | `ANCHOR_ENABLED` / `ANCHOR_EVERY_HOURS` | true / 24 | Sello diario del libro en Bitcoin |
 | `ANCHOR_CALENDARS` | a.pool y b.pool de opentimestamps.org | Calendarios de OpenTimestamps |
-| `USDC_RPC_URL` / `USDC_CHAIN` / `USDC_VAULT_ADDRESS` | — / polygon / — | Vía USDC (se activa con las tres) |
+| `USDC_RPC_URL` / `USDC_CHAIN` / `USDC_VAULT_ADDRESS` | — / polygon / — | Vía USDC (se activa con las tres). `USDC_CHAIN=simulado` la activa sin cadena; `base-sepolia`, `sepolia`, `polygon-amoy` y `arbitrum-sepolia` son redes de prueba |
 | `USDC_TOKEN_ADDRESS` / `USDC_START_BLOCK` | USDC nativo / últimos 5.000 bloques | Contrato del token y desde qué bloque leer |
 | `USDC_CONFIRMATIONS` / `USDC_SYNC_EVERY_MIN` | 20 / 5 | Margen de bloques y cada cuánto leer la cadena |
 
@@ -194,7 +225,7 @@ La garantía exigida y el límite de deuda se fijan por casino en el back-office
 | Admin | `GET /admin/treasury` (resumen) · `POST /admin/treasury/settle` · `POST /admin/treasury/settlements/:id/pay { bankRef }` · `POST /admin/treasury/settlements/:id/collect` · `GET /admin/treasury/settlements/:id/statement` |
 | Admin | `POST /admin/treasury/guarantees/:casino { direction, amountUsd, bankRef? }` · `POST /admin/treasury/reserve { … }` · `PATCH /admin/treasury/casinos/:casino { guaranteeRequiredUsd?, debtLimitUsd?, paused? }` |
 | Admin | `POST /admin/treasury/bank-statements { csv }` · `GET /admin/treasury/journal` · `GET /admin/treasury/reserves` |
-| Admin | `POST /admin/treasury/anchor` (sellar ya) · `POST /admin/treasury/usdc/sync` (leer la bóveda ya) · `POST /admin/treasury/bank-lines/:id/guarantee { operatorId }` |
+| Admin | `POST /admin/treasury/anchor` (sellar ya) · `POST /admin/treasury/usdc/sync` (leer la bóveda ya) · `POST /admin/treasury/usdc/simulate { direction, address, amountUsd }` (solo modo simulado) · `POST /admin/treasury/bank-lines/:id/guarantee { operatorId }` |
 | Público | `GET /v1/oracle/anchors` · `GET /v1/oracle/anchors/:id.ots` |
 | Casino | `GET /operator/v1/treasury` · `GET /operator/v1/treasury/statements/:id` (firmado) |
 

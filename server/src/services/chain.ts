@@ -71,18 +71,28 @@ export async function anchorIfDue() {
 
 // ---------- USDC: lectura de la cadena (JSON-RPC, sin dependencias) ----------
 
-// Contrato de USDC nativo (Circle) en cada red, si no se indica USDC_TOKEN_ADDRESS
+// Contrato de USDC nativo (Circle) en cada red, si no se indica USDC_TOKEN_ADDRESS.
+// Las redes de prueba usan el USDC de prueba de Circle (gratis en faucet.circle.com, sin valor).
 const USDC_BY_CHAIN: Record<string, string> = {
   polygon: "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359",
   base: "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
   arbitrum: "0xaf88d065e77c8cc2239327c5edb3a432268e5831",
   ethereum: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+  "base-sepolia": "0x036cbd53842c5426634e7929541ec2318f3dcf7e",
+  sepolia: "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238",
+  "polygon-amoy": "0x41e94eb019c0762f9bfcf9fb1e58725bfb0e7582",
+  "arbitrum-sepolia": "0x75faf114eafb1bdbe2f0316df893fd58ce46aa4d",
 };
+const TESTNETS = new Set(["base-sepolia", "sepolia", "polygon-amoy", "arbitrum-sepolia"]);
+// Modo simulado (USDC_CHAIN=simulado): sin cadena; las transferencias se simulan desde el back-office
+export const usdcSimulated = () => config.usdc.chain === "simulado";
+const SIM_VAULT = "0x00000000000000000000000000000000005afe00";
 const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"; // keccak256("Transfer(address,address,uint256)")
 
 export const isAddress = (a: string) => /^0x[0-9a-fA-F]{40}$/.test(a);
-export const usdcToken = () => (config.usdc.token || USDC_BY_CHAIN[config.usdc.chain] || "").toLowerCase();
-export const usdcEnabled = () => !!(config.usdc.rpcUrl && isAddress(config.usdc.vault) && isAddress(usdcToken()));
+export const usdcToken = () => (usdcSimulated() ? "0x0000000000000000000000000000000000005d0c" : (config.usdc.token || USDC_BY_CHAIN[config.usdc.chain] || "").toLowerCase());
+const vaultAddress = () => (usdcSimulated() && !isAddress(config.usdc.vault) ? SIM_VAULT : config.usdc.vault);
+export const usdcEnabled = () => usdcSimulated() || !!(config.usdc.rpcUrl && isAddress(config.usdc.vault) && isAddress(usdcToken()));
 
 export type RpcTransport = (method: string, params: unknown[]) => Promise<any>;
 let rpcId = 0;
@@ -104,6 +114,7 @@ const unpad = (topic: string) => "0x" + topic.slice(-40).toLowerCase();
 /** Saldo de USDC de la bóveda, en micro-dólares (USDC tiene 6 decimales: 1 unidad = 1 micro-dólar). */
 export async function vaultBalance(): Promise<number | null> {
   if (!usdcEnabled()) return null;
+  if (usdcSimulated()) return Number((await one(pool, "SELECT value FROM treasury_kv WHERE key='usdc_sim_balance'"))?.value ?? 0);
   const data = "0x70a08231" + pad(config.usdc.vault).slice(2); // balanceOf(address)
   const res = await rpc("eth_call", [{ to: usdcToken(), data }, "latest"]);
   return Number(BigInt(res));
@@ -139,6 +150,7 @@ async function vaultTransfers(fromBlock: number, toBlock: number): Promise<Chain
  */
 export async function syncUsdc(ingest: (t: ChainTransfer[]) => Promise<{ matched: number }>) {
   if (!usdcEnabled()) return { enabled: false };
+  if (usdcSimulated()) return { enabled: true, simulated: true, transfers: 0, matched: 0 };
   const latest = Number(BigInt(await rpc("eth_blockNumber", []))) - config.usdc.confirmations;
   const saved = await one(pool, "SELECT value FROM treasury_kv WHERE key='usdc_block'");
   let from = saved ? Number(saved.value) + 1 : config.usdc.startBlock ?? Math.max(0, latest - 5000);
@@ -156,7 +168,33 @@ export async function syncUsdc(ingest: (t: ChainTransfer[]) => Promise<{ matched
 }
 
 export function usdcInfo() {
-  return { enabled: usdcEnabled(), chain: config.usdc.chain, token: usdcToken() || null, vault: config.usdc.vault || null, confirmations: config.usdc.confirmations };
+  const simulated = usdcSimulated(), testnet = TESTNETS.has(config.usdc.chain);
+  return { enabled: usdcEnabled(), chain: config.usdc.chain, token: usdcToken() || null, vault: vaultAddress() || null, confirmations: config.usdc.confirmations,
+    simulated, testnet, realMoney: usdcEnabled() && !simulated && !testnet,
+    label: simulated ? "USDC simulado (sin cadena, sin valor)" : testnet ? `USDC de prueba en ${config.usdc.chain} (sin valor)` : usdcEnabled() ? `USDC real en ${config.usdc.chain}` : null };
+}
+
+/**
+ * Solo en modo simulado: registra una transferencia como si hubiera llegado (o salido) de la bóveda,
+ * y la pasa por la misma conciliación que una real. Sirve para probar todo el flujo sin cadena.
+ */
+export async function simulateTransfer(input: { direction: "in" | "out"; address: string; amountUsd: number }, ingest: (t: ChainTransfer[]) => Promise<{ matched: number }>) {
+  if (!usdcSimulated()) throw bad("not_simulated", "Las transferencias simuladas solo existen con USDC_CHAIN=simulado");
+  const amount = Math.round(input.amountUsd * 1e6);
+  if (!(amount > 0)) throw bad("invalid_amount", "Indica un monto positivo");
+  const addr = assertAddress(input.address), vault = vaultAddress();
+  const bal = (await vaultBalance()) ?? 0;
+  if (input.direction === "out" && amount > bal) throw bad("insufficient_vault", "La bóveda simulada no tiene ese saldo");
+  const next = bal + (input.direction === "in" ? amount : -amount);
+  await pool.query(`INSERT INTO treasury_kv (key, value) VALUES ('usdc_sim_balance', $1) ON CONFLICT (key) DO UPDATE SET value=$1, updated_at=now()`, [String(next)]);
+  const n = Number((await one(pool, "SELECT COUNT(*)::int AS n FROM bank_lines WHERE account='usdc'"))?.n ?? 0) + 1;
+  const t: ChainTransfer = {
+    txHash: "0x" + "51".repeat(4) + Date.now().toString(16).padStart(24, "0") + n.toString(16).padStart(32, "0"),
+    logIndex: 0, block: n, date: new Date().toISOString().slice(0, 10),
+    from: input.direction === "in" ? addr : vault, to: input.direction === "in" ? vault : addr, amount: input.direction === "in" ? amount : -amount,
+  };
+  const r = await ingest([t]);
+  return { simulated: true, txHash: t.txHash, vaultBalance: next, matched: r.matched };
 }
 
 export function assertAddress(a: string) {

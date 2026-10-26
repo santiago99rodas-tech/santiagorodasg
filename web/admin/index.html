@@ -784,7 +784,8 @@ async function viewTesoreria(el) {
   const stPill = (x) => ({ pending: `<span class="pill proposed">Pendiente</span>`, paid: `<span class="pill resolved">Pagada</span>`, overdue: `<span class="pill void">Vencida</span>`, covered: `<span class="pill resolved">Cobrada de garantía</span>`, cancelled: `<span class="pill">Anulada</span>` }[x] ?? esc(x));
   const fday2 = (d) => (d ? new Date(d).toLocaleDateString("es-EC", { day: "numeric", month: "short" }) : "—");
   el.innerHTML = `<div class="head"><div><h1>Tesorería</h1><p>Dónde está el dinero real y quién le debe a quién. La plata de los jugadores sigue en cada casino; aquí se emite la liquidación de cada uno con su estado de cuenta firmado, se controlan sus garantías en el fideicomiso, se concilia con el extracto del banco y todo queda en un libro contable que no se puede alterar sin que se note.</p></div>
-    <div class="row"><button class="btn" id="tBank">Cargar extracto</button>${t.usdc?.enabled ? `<button class="btn" id="tUsdc">Leer bóveda USDC</button>` : ""}<button class="btn" id="tAnchor">Sellar en Bitcoin</button><button class="btn" id="tReserve">Reserva de la casa</button><button class="btn primary" id="tSettle">Liquidar ahora</button></div></div>
+    <div class="row"><button class="btn" id="tBank">Cargar extracto</button>${t.usdc?.enabled ? (t.usdc.simulated ? `<button class="btn" id="tUsdcSim">Simular transferencia USDC</button>` : `<button class="btn" id="tUsdc">Leer bóveda USDC</button>`) : ""}<button class="btn" id="tAnchor">Sellar en Bitcoin</button><button class="btn" id="tReserve">Reserva de la casa</button><button class="btn primary" id="tSettle">Liquidar ahora</button></div></div>
+    ${t.usdc?.enabled && !t.usdc.realMoney ? `<div class="panel" style="margin-bottom:14px;border-color:var(--warn,#c90)"><b>Modo de prueba:</b> ${esc(t.usdc.label)}. ${t.usdc.simulated ? "No hay cadena: las transferencias USDC se registran con “Simular transferencia USDC” y pasan por la misma conciliación que las reales." : "Los casinos pagan con USDC de prueba (gratis en faucet.circle.com) y la plataforma lee la cadena de prueba igual que leería la real."}</div>` : ""}
     <div class="kpis" style="margin-bottom:14px">
       <div class="kpi"><span class="k">Dinero (fideicomiso${t.usdc?.enabled ? " + USDC" : ""})</span><span class="v">${money(R.fiduciary)}</span><span class="d">garantías ${money(R.guarantees)} · reserva ${money(R.houseReserve)}</span></div>
       <div class="kpi ${R.ok ? "" : "alert"}"><span class="k">Cobertura</span><span class="v ${R.ok ? "ok" : "bad"}">${R.coverage == null ? "—" : Math.round(R.coverage * 100) + "%"}</span><span class="d">de ${money(R.obligations)} en obligaciones y riesgo de la casa</span></div>
@@ -805,7 +806,7 @@ async function viewTesoreria(el) {
         <td class="num"><b>${money(Math.abs(x.amount))}</b><br><span class="faint" style="font-size:11px">${x.amount > 0 ? "el casino paga" : x.amount < 0 ? "pagamos al casino" : "sin saldo"}</span></td>
         <td>${stPill(x.status)}${x.covered_from_guarantee > 0 && x.status !== "covered" ? `<div class="faint" style="font-size:11px">${money(x.covered_from_guarantee)} de garantía</div>` : ""}</td><td style="white-space:nowrap">${fday2(x.due_at)}</td>
         <td style="font-size:12px">${esc(x.bank_ref ?? "—")}</td>
-        <td><div class="row" style="flex-wrap:nowrap">${["pending", "overdue"].includes(x.status) && x.amount !== 0 ? `<button class="btn ok sm" data-pay="${x.id}">Pagada</button>` : ""}${["pending", "overdue"].includes(x.status) && x.amount > 0 ? `<button class="btn bad sm" data-col="${x.id}">Cobrar de garantía</button>` : ""}<button class="btn sm" data-stm="${x.id}">Estado firmado</button></div></td></tr>`).join("") || `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">Todavía no hay liquidaciones. Se emiten solas cada ${t.config.settlementEveryHours} h, o con "Liquidar ahora".</td></tr>`}
+        <td><div class="row" style="flex-wrap:nowrap">${["pending", "overdue"].includes(x.status) && x.amount !== 0 ? `<button class="btn ok sm" data-pay="${x.id}">Pagada</button>` : ""}${["pending", "overdue"].includes(x.status) && x.amount > 0 ? `<button class="btn bad sm" data-col="${x.id}">Cobrar de garantía</button>` : ""}${t.usdc?.simulated && ["pending", "overdue"].includes(x.status) && x.amount !== 0 && t.casinos.find((c) => c.operatorId === x.operator_id)?.rail === "usdc" ? `<button class="btn sm" data-simpay="${x.id}">Simular pago USDC</button>` : ""}<button class="btn sm" data-stm="${x.id}">Estado firmado</button></div></td></tr>`).join("") || `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">Todavía no hay liquidaciones. Se emiten solas cada ${t.config.settlementEveryHours} h, o con "Liquidar ahora".</td></tr>`}
       </tbody></table></div></div>
     <div class="grid2">
       <div class="panel"><h2>Sin conciliar <small>banco y cadena · ${t.unmatchedBankLines.length}</small></h2>
@@ -837,6 +838,18 @@ async function viewTesoreria(el) {
   el.querySelector("#tAnchor").onclick = (e) => run(e.target, () => api("/admin/treasury/anchor", { method: "POST", body: {} }), (x) => x.anchored ? `Asiento #${x.journalId} sellado en Bitcoin` : `Sin sellar: ${x.reason ?? (x.results ?? []).map((r) => r.error).join("; ")}`).then(after);
   const us = el.querySelector("#tUsdc");
   if (us) us.onclick = (e) => run(e.target, () => api("/admin/treasury/usdc/sync", { method: "POST", body: {} }), (x) => `${x.transfers} transferencias leídas · ${x.matched} conciliadas`).then(after);
+  const simUsdc = (body) => run(null, () => api("/admin/treasury/usdc/simulate", { method: "POST", body }), (x) => `Transferencia simulada · bóveda ${money(x.vaultBalance)}${x.matched ? " · liquidación conciliada" : " · quedó sin conciliar"}`).then(after);
+  const usim = el.querySelector("#tUsdcSim");
+  if (usim) usim.onclick = async () => {
+    const opts = [...t.casinos.filter((c) => c.rail === "usdc" && c.usdcAddress).map((c) => [c.usdcAddress, c.name]), ["", "Otra dirección"]];
+    const f = await modal({ title: "Simular transferencia USDC", text: "Registra una transferencia como si hubiera ocurrido en la cadena. Si el monto coincide con una liquidación pendiente del casino, se marca pagada; si no, queda en “Sin conciliar” (por ejemplo, para registrarla como garantía).", ok: "Simular",
+      fields: [{ id: "dir", label: "Movimiento", type: "select", options: [["in", "Entra a la bóveda (el casino paga)"], ["out", "Sale de la bóveda (pagamos al casino)"]] }, { id: "who", label: "Casino", type: "select", options: opts }, { id: "addr", label: "Otra dirección (si elegiste “Otra dirección”)", placeholder: "0x…" }, { id: "amt", label: "Monto (USDC)", type: "number" }] });
+    if (f) simUsdc({ direction: f.dir, address: f.who || f.addr, amountUsd: Number(f.amt) });
+  };
+  el.querySelectorAll("[data-simpay]").forEach((b) => (b.onclick = () => {
+    const x = t.settlements.find((s) => String(s.id) === b.dataset.simpay), c = t.casinos.find((k) => k.operatorId === x.operator_id);
+    simUsdc({ direction: x.amount > 0 ? "in" : "out", address: c.usdcAddress, amountUsd: Math.abs(x.amount - (x.covered_from_guarantee ?? 0)) / 1e6 });
+  }));
   el.querySelectorAll("[data-lg]").forEach((b) => (b.onclick = async () => {
     const rail = b.dataset.acc === "usdc" ? "usdc" : "bank";
     const opts = t.casinos.filter((c) => c.rail === rail).map((c) => [c.operatorId, c.name]);

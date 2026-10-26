@@ -93,7 +93,7 @@ if (!adminKey) {
     must(j.verify.ok, `cadena rota desde el asiento #${j.verify.brokenAt}: ${j.verify.reason}`);
     const r = (await get("/admin/treasury/reserves", h)).json();
     must(!r.usdc?.error, `no se pudo leer la bóveda USDC: ${r.usdc?.error}`);
-    const usdc = r.usdc?.enabled ? ` · bóveda USDC ${r.usdc.onChain / 1e6} en la cadena, ${r.usdc.book / 1e6} en el libro` : "";
+    const usdc = r.usdc?.enabled ? ` · bóveda USDC${r.usdc.simulated ? " (simulada)" : r.usdc.testnet ? ` (red de prueba ${r.usdc.chain})` : ""} ${r.usdc.onChain / 1e6} en la cadena, ${r.usdc.book / 1e6} en el libro` : "";
     return `${j.verify.entries} asientos íntegros · cobertura ${r.coverage == null ? "sin obligaciones" : Math.round(r.coverage * 100) + "%"}${usdc}`;
   });
   await check("market makers externos", async () => {

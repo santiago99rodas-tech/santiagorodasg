@@ -268,6 +268,10 @@ export async function adminRoutes(app: FastifyInstance) {
   // Modelo mixto: anclaje en Bitcoin y bóveda USDC
   app.post("/admin/treasury/anchor", async () => chain.anchorJournal({ force: true }));
   app.post("/admin/treasury/usdc/sync", async () => chain.syncUsdc(treasury.ingestChainTransfers));
+  app.post("/admin/treasury/usdc/simulate", async (req) => {
+    const b = parse(z.object({ direction: z.enum(["in", "out"]), address: z.string(), amountUsd: z.number().positive() }), req.body);
+    return chain.simulateTransfer(b, treasury.ingestChainTransfers);
+  });
 
   // ---------- Calibración, sesgo e integridad ----------
   app.get("/admin/integrity", async (req) => {
