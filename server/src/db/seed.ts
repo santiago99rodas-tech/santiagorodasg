@@ -56,7 +56,7 @@ export const SOURCES = [
   trends("PE", "Perú"), trends("CL", "Chile"), trends("VE", "Venezuela"), trends("US", "EE. UU."), trends("ES", "España"),
   { kind: "gdelt", name: "GDELT Latinoamérica", url: "https://api.gdeltproject.org/api/v2/doc/doc", category: null, country: "INT",
     config: { query: "(ecuador OR colombia OR venezuela OR \"miss universo\" OR farándula) sourcelang:spanish", timespan: "24h", maxrecords: 75 } },
-  { kind: "gdelt", name: "GDELT Ciencia y espacio", url: "https://api.gdeltproject.org/api/v2/doc/doc", category: null, country: "INT",
+  { kind: "gdelt", name: "GDELT Ciencia y espacio", url: "https://api.gdeltproject.org/api/v2/doc/doc#ciencia", category: null, country: "INT",
     config: { query: "(nasa OR spacex OR ovni OR \"vida extraterrestre\" OR extinción) sourcelang:spanish", timespan: "24h", maxrecords: 50 } },
 ];
 

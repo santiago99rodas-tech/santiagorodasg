@@ -41,3 +41,14 @@ test("fuentes: GDELT con 429 espera y reintenta una vez", async () => {
   await assert.rejects(fetchSource(src("https://api.gdeltproject.org/api/v2/doc/doc", "gdelt", { query: "ecuador" }), always), /GDELT limita las consultas/);
   ingestTiming.gdeltGapMs = 6000;
 });
+
+test("fuentes: GDELT no envía la parte '#…' de la URL y avisa claro si no responde a tiempo", async () => {
+  ingestTiming.gdeltGapMs = 0;
+  let asked = "";
+  const f: Fetcher = (url) => { asked = url; return reply(200, JSON.stringify({ articles: [] })); };
+  await fetchSource(src("https://api.gdeltproject.org/api/v2/doc/doc#ciencia", "gdelt", { query: "nasa" }), f);
+  assert.ok(asked.startsWith("https://api.gdeltproject.org/api/v2/doc/doc?query=nasa"), asked);
+  const slow: Fetcher = () => Promise.reject(Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" }));
+  await assert.rejects(fetchSource(src("https://api.gdeltproject.org/api/v2/doc/doc", "gdelt", { query: "x" }), slow), /no respondió en 45 s/);
+  ingestTiming.gdeltGapMs = 6000;
+});

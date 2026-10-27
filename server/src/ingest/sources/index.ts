@@ -96,8 +96,14 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const stripPublisher = (title: string) => title.replace(/\s+-\s+[^-]{2,60}$/, "");
 
 export async function fetchSource(s: SourceRow, fetcher: Fetcher = fetch as unknown as Fetcher): Promise<Item[]> {
-  const get = async (url: string, headers: Record<string, string> = {}) => {
-    const r = await fetcher(url, { headers: { "user-agent": "Mozilla/5.0 (compatible; PrediccionesBot/1.0; agregador de noticias)", accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, application/json;q=0.9, */*;q=0.8", ...headers }, signal: AbortSignal.timeout(15000) });
+  const get = async (url: string, headers: Record<string, string> = {}, timeoutMs = 15000) => {
+    let r: Awaited<ReturnType<Fetcher>>;
+    try {
+      r = await fetcher(url, { headers: { "user-agent": "Mozilla/5.0 (compatible; PrediccionesBot/1.0; agregador de noticias)", accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, application/json;q=0.9, */*;q=0.8", ...headers }, signal: AbortSignal.timeout(timeoutMs) });
+    } catch (e) {
+      if ((e as Error).name === "TimeoutError" || /aborted due to timeout/i.test((e as Error).message)) throw new Error(`no respondió en ${timeoutMs / 1000} s; se reintenta en la próxima lectura`);
+      throw e;
+    }
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return r.text();
   };
@@ -115,14 +121,17 @@ export async function fetchSource(s: SourceRow, fetcher: Fetcher = fetch as unkn
     }
     case "gdelt": {
       const q = new URLSearchParams({ query: s.config.query ?? "", mode: "artlist", format: "json", maxrecords: String(s.config.maxrecords ?? 50), timespan: s.config.timespan ?? "24h", sort: "datedesc" });
+      // La parte "#…" de la URL solo distingue varias consultas a la misma API (la base no admite dos fuentes con la misma URL); no se envía
+      const base = s.url.split("#")[0];
       const wait = lastGdelt + ingestTiming.gdeltGapMs - Date.now();
       if (wait > 0) await sleep(wait);
       let body: string;
-      try { body = await get(`${s.url}?${q}`); }
+      // GDELT suele tardar más que un feed: 45 s
+      try { body = await get(`${base}?${q}`, {}, 45000); }
       catch (e) {
         if ((e as Error).message !== "HTTP 429") throw e;
         await sleep(ingestTiming.gdeltGapMs * 2);
-        body = await get(`${s.url}?${q}`).catch((e2) => { throw new Error(e2.message === "HTTP 429" ? "HTTP 429: GDELT limita las consultas; se reintenta en la próxima lectura" : e2.message); });
+        body = await get(`${base}?${q}`, {}, 45000).catch((e2) => { throw new Error(e2.message === "HTTP 429" ? "HTTP 429: GDELT limita las consultas; se reintenta en la próxima lectura" : e2.message); });
       } finally { lastGdelt = Date.now(); }
       // Con la consulta mal formada GDELT responde texto, no JSON
       let json: any;
