@@ -1,332 +1,651 @@
 <title>Módulo Predicciones</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wght@0,500;0,600;0,700;0,800;1,800;1,900&family=JetBrains+Mono:wght@500;700&display=swap">
 <style>
-/* Layout: barra del casino arriba, pestañas de categoría, rejilla de mercados + boleto de apuesta lateral (abajo en móvil).
-   Tema oscuro único a propósito: hereda el look nocturno típico del casino anfitrión. */
+/* Layout: móvil primero. Encabezado del casino + cinta en vivo, banner, indicadores, categorías,
+   panel del mercado (movimientos, volumen por categoría, apuestas en vivo), Top 20 con minigráficas
+   y ficha de cada mercado con historial de probabilidad.
+   Tema oscuro único a propósito: negro con amarillo de marca del casino anfitrión. */
 :root {
-  --ink: #0f1424;       /* fondo */
-  --panel: #171e33;     /* tarjetas */
-  --panel-2: #1f2842;   /* controles */
-  --line: #2a3555;
-  --text: #e8ebf5;
-  --muted: #8d97b5;
-  --gold: #f2b544;      /* acento de marca del módulo */
-  --yes: #3fc6a5;
-  --no: #ef6f7c;
-  --display: "Unbounded", "Arial Black", system-ui, sans-serif;
-  --body: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --bg: #0b0b0c;
+  --card: #17171a;
+  --card-2: #212125;
+  --line: #2c2c31;
+  --grid: #26262b;
+  --text: #f4f4f5;
+  --muted: #a1a1aa;
+  --faint: #71717a;
+  --brand: #ffd400;      /* amarillo del casino; se reemplaza por el color de cada operador */
+  --brand-ink: #111;
+  --up: #2bb560;         /* sube / Sí, siempre acompañado de ▲ o "Sí" */
+  --down: #ef5350;       /* baja / No, siempre acompañado de ▼ o "No" */
+  --up-txt: #6ee08f;
+  --down-txt: #ff8a8c;
+  --sans: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-body { background: var(--ink); color: var(--text); font-family: var(--body); font-size: 14px; }
-body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--panel); }
-button { font: inherit; color: inherit; cursor: pointer; }
-button:focus-visible, input:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
-.wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); max-width: 1320px; margin: 0 auto; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px)); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 20; background: var(--bg); }
+button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+svg { display: block; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.up { color: var(--up-txt); } .down { color: var(--down-txt); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 
-/* Barra del casino anfitrión (simulada) */
-.host { background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; }
-.host .wrap { display: flex; align-items: center; gap: 20px; padding-block: 10px; flex-wrap: wrap; }
-.logo { font-family: var(--display); font-weight: 700; letter-spacing: .02em; font-size: 16px; color: var(--text); }
-.logo span { color: var(--gold); }
-.hostnav { display: flex; gap: 4px; flex: 1; overflow-x: auto; scrollbar-width: none; min-width: 0; }
-.hostnav a { padding: 8px 12px; border-radius: 8px; color: var(--muted); text-decoration: none; font-weight: 600; white-space: nowrap; }
-.hostnav a.on { color: var(--ink); background: var(--gold); }
-.hostnav a .new { font-size: 10px; margin-left: 6px; padding: 1px 5px; border-radius: 4px; background: var(--ink); color: var(--gold); letter-spacing: .06em; }
-.wallet { display: flex; align-items: center; gap: 10px; }
-.bal { font-family: var(--mono); background: var(--panel-2); border: 1px solid var(--line); padding: 7px 12px; border-radius: 8px; }
-.dep { background: var(--yes); color: var(--ink); border: 0; padding: 8px 14px; border-radius: 8px; font-weight: 700; }
+/* Encabezado */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); border-bottom: 1px solid var(--line); }
+.top .wrap { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding-block: 10px; }
+.icons { display: flex; gap: 10px; }
+.round { width: 42px; height: 42px; border-radius: 50%; background: var(--brand); color: var(--brand-ink); display: grid; place-items: center; }
+.logo { justify-self: center; font-weight: 900; font-style: italic; font-size: 26px; color: var(--brand); letter-spacing: -.01em; }
+.bal { font-family: var(--mono); font-size: 13px; background: var(--card); border: 1px solid var(--line); padding: 7px 10px; border-radius: 8px; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
+.bal small { color: var(--muted); font-family: var(--sans); font-size: 11px; }
+@media (max-width: 420px) { .bal small { display: none; } .logo { font-size: 22px; } }
 
-.demo { margin-top: 14px; font-size: 12px; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; }
+/* Cinta en vivo */
+.ticker { border-bottom: 1px solid var(--line); background: #0f0f11; overflow: hidden; position: relative; }
+.ticker .lbl { position: absolute; left: 0; top: 0; bottom: 0; z-index: 1; display: flex; align-items: center; gap: 6px; padding: 0 12px 0 max(12px, env(safe-area-inset-left, 0px)); background: var(--brand); color: var(--brand-ink); font-weight: 800; font-size: 11px; letter-spacing: .08em; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.ticker .lbl .dot { background: var(--down); }
+.track { display: flex; gap: 28px; white-space: nowrap; padding: 9px 0 9px 100px; width: max-content; font-size: 13px; }
+.track span b { font-weight: 600; color: var(--text); }
+@media (prefers-reduced-motion: no-preference) { .track { animation: tick 60s linear infinite; } .ticker:hover .track { animation-play-state: paused; } @keyframes tick { to { transform: translateX(-50%); } } .live .dot { animation: pulse 1.6s infinite; } @keyframes pulse { 50% { opacity: .3; } } }
 
-/* Encabezado del módulo */
-.head { display: flex; align-items: end; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-block: 22px 6px; }
-.head h1 { font-family: var(--display); font-weight: 700; font-size: clamp(22px, 3.4vw, 32px); margin: 0; text-wrap: balance; }
-.head p { margin: 6px 0 0; color: var(--muted); max-width: 60ch; }
-.search { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; color: var(--text); width: min(280px, 100%); font: inherit; }
+/* Banner */
+.hero { margin-top: 14px; position: relative; overflow: hidden; border-radius: 18px; border: 1px solid #3a3200;
+  background: radial-gradient(120% 140% at 85% 30%, #3a3000 0%, #151200 45%, #070707 75%); padding: 22px 20px; min-height: 220px; display: grid; }
+.hero h1 { margin: 0; font-weight: 900; font-style: italic; text-transform: uppercase; line-height: .92; letter-spacing: -.01em; font-size: clamp(30px, 7vw, 54px); position: relative; z-index: 1; max-width: 62%; text-wrap: balance; }
+.hero h1 b { display: block; color: var(--brand); font-size: 1.32em; }
+.hero .tag { position: relative; z-index: 1; display: inline-block; margin-top: 12px; border: 2px solid var(--brand); border-radius: 12px; padding: 6px 14px; font-weight: 700; font-size: clamp(13px, 2.6vw, 17px); transform: rotate(-2deg); justify-self: start; }
+.hero .tag em { color: var(--brand); font-style: normal; }
+.feats { position: relative; z-index: 1; display: flex; margin-top: 18px; align-self: end; }
+.feat { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 0 14px; text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; line-height: 1.15; }
+.feat + .feat { border-left: 1px solid #4a4220; }
+.feat:first-child { padding-left: 0; }
+.feat svg { color: var(--brand); }
+.art { position: absolute; right: -10px; bottom: 0; width: 52%; height: 100%; pointer-events: none; }
+.art svg { position: absolute; inset: 10% 4% 0 0; width: 96%; height: 90%; }
+.chip { position: absolute; font-weight: 900; font-style: italic; padding: 6px 14px; border-radius: 10px; font-size: clamp(14px, 3vw, 22px); box-shadow: 0 6px 20px rgba(0,0,0,.5); color: #fff; }
+.chip.y { background: var(--up); right: 46%; top: 16%; transform: rotate(-10deg); }
+.chip.n { background: var(--down); right: 10%; top: 50%; transform: rotate(10deg); }
+@media (max-width: 560px) { .art { opacity: .5; } .hero h1 { max-width: 82%; } }
 
-/* Pestañas de categoría */
-.cats { display: flex; gap: 8px; overflow-x: auto; padding-block: 14px; scrollbar-width: thin; }
-.cat { flex: none; display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); padding: 9px 14px; border-radius: 999px; font-weight: 600; color: var(--muted); }
-.cat .n { font-family: var(--mono); font-size: 11px; color: var(--muted); background: var(--panel-2); padding: 1px 6px; border-radius: 999px; }
-.cat.on { color: var(--text); border-color: var(--gold); background: var(--panel-2); }
-.cat.on .n { background: var(--gold); color: var(--ink); }
+/* Indicadores */
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+@media (max-width: 860px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpi { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; position: relative; }
+.kpi .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.kpi .v { font-family: var(--mono); font-size: clamp(20px, 3.4vw, 26px); font-weight: 700; letter-spacing: -.02em; }
+.kpi .d { font-size: 12px; font-family: var(--mono); }
+.kpi .spark { height: 44px; margin-top: 6px; position: relative; }
+.live .dot { color: var(--up); }
 
-.layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; align-items: start; padding-bottom: 40px; }
-@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+h2.sec { display: flex; align-items: center; gap: 10px; font-size: clamp(19px, 3.6vw, 24px); font-weight: 700; margin: 28px 0 12px; }
+h2.sec svg { color: var(--brand); flex: none; }
+h2.sec .aside { margin-left: auto; font-size: 13px; color: var(--brand); font-weight: 600; }
 
-.sortbar { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
-.sortbar button { background: transparent; border: 1px solid var(--line); color: var(--muted); padding: 6px 12px; border-radius: 8px; font-size: 13px; }
-.sortbar button.on { color: var(--text); background: var(--panel-2); }
+/* Carrusel */
+.carousel { position: relative; }
+.ctrack { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.ctrack::-webkit-scrollbar { display: none; }
+.ctile { flex: none; width: 132px; aspect-ratio: 1 / 1; max-width: 100%; border-radius: 12px; overflow: hidden; position: relative; scroll-snap-align: start; border: 1px solid var(--line); }
+.ctile .ill { position: absolute; inset: 0; display: grid; place-items: center; padding-bottom: 26px; }
+.ctile .ill svg { width: 54%; height: 54%; filter: drop-shadow(0 4px 10px rgba(0,0,0,.5)); }
+.ctile span { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(10,10,10,.82); padding: 7px 10px; font-weight: 700; font-size: 16px; text-align: left; }
+.ctile.on { outline: 2px solid var(--brand); outline-offset: -2px; }
+.arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 34px; height: 34px; border-radius: 50%; background: rgba(0,0,0,.7); color: var(--brand); display: grid; place-items: center; z-index: 2; }
+.arrow.l { left: -6px; } .arrow.r { right: -6px; }
+@media (hover: none) { .arrow { display: none; } }
 
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.meta { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
-.tag { text-transform: uppercase; letter-spacing: .08em; font-weight: 700; color: var(--gold); }
-.hot { color: var(--no); font-weight: 700; }
-.q { font-weight: 700; font-size: 16px; line-height: 1.35; margin: 0; text-wrap: balance; }
-.opts { display: flex; flex-direction: column; gap: 6px; }
-.opt { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; background: var(--panel-2); border: 1px solid transparent; border-radius: 10px; padding: 9px 10px; text-align: left; overflow: hidden; }
-.opt .bar { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--gold) 14%, transparent); pointer-events: none; }
-.opt > span { position: relative; }
-.opt .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.opt .pct { font-family: var(--mono); color: var(--muted); font-size: 13px; }
-.opt .odd { font-family: var(--mono); font-weight: 500; background: var(--ink); color: var(--gold); padding: 3px 8px; border-radius: 6px; min-width: 56px; text-align: center; }
-.opt:hover { border-color: var(--line); }
-.opt.sel { border-color: var(--gold); }
-.yn { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.yn .opt { grid-template-columns: minmax(0, 1fr) auto; }
-.yn .opt.y .odd { color: var(--yes); }
-.yn .opt.n .odd { color: var(--no); }
-.yn .opt.y .bar { background: color-mix(in srgb, var(--yes) 16%, transparent); }
-.yn .opt.n .bar { background: color-mix(in srgb, var(--no) 16%, transparent); }
-.foot { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; gap: 8px; flex-wrap: wrap; }
-.foot b { color: var(--text); font-family: var(--mono); font-weight: 500; }
-.src { font-size: 12px; color: var(--muted); }
-.empty { color: var(--muted); padding: 30px; text-align: center; border: 1px dashed var(--line); border-radius: 14px; }
+/* Panel del mercado */
+.board { display: grid; grid-template-columns: 1.1fr 1fr 1fr; gap: 10px; }
+@media (max-width: 960px) { .board { grid-template-columns: 1fr 1fr; } .board .feed { grid-column: 1 / -1; } }
+@media (max-width: 640px) { .board { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.panel h3 { margin: 0; font-size: 15px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.panel h3 small { font-weight: 500; color: var(--muted); font-size: 12px; }
+.seg { display: inline-flex; background: var(--card-2); border-radius: 8px; padding: 2px; }
+.seg button { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.seg button.on { background: var(--bg); color: var(--text); }
+.mv { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 90px 54px; align-items: center; gap: 10px; text-align: left; padding: 4px 0; font-size: 13px; }
+.mv .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv .t small { display: block; color: var(--faint); font-size: 11px; }
+.mv .b { height: 8px; background: var(--card-2); border-radius: 4px; position: relative; }
+.mv .b i { position: absolute; top: 0; bottom: 0; border-radius: 4px; }
+.mv .b::after { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--faint); }
+.mv .d { text-align: right; font-family: var(--mono); font-size: 12px; }
+.mv:hover .t { color: var(--brand); }
+.vb { width: 100%; display: grid; grid-template-columns: 104px minmax(0, 1fr) 62px; gap: 8px; align-items: center; font-size: 13px; text-align: left; padding: 2px 0; position: relative; }
+.vb .bar { height: 14px; background: var(--card-2); border-radius: 0 4px 4px 0; }
+.vb .bar i { display: block; height: 100%; background: var(--brand); border-radius: 0 4px 4px 0; opacity: .85; }
+.vb:hover .bar i { opacity: 1; }
+.vb .v { text-align: right; color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.vb .tipx { position: absolute; right: 0; top: -26px; }
+.feedlist { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow: hidden; }
+.fi { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 10px; align-items: center; background: var(--card-2); border-radius: 10px; padding: 8px 10px; font-size: 12px; }
+.fi .av { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 11px; color: var(--brand-ink); }
+.fi .w { overflow: hidden; }
+.fi .w div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fi .w small { color: var(--faint); }
+.fi .amt { font-family: var(--mono); font-weight: 700; text-align: right; }
+.fi .amt small { display: block; font-weight: 500; font-size: 11px; }
+@media (prefers-reduced-motion: no-preference) { .fi.new { animation: slide .5s ease-out; } @keyframes slide { from { opacity: 0; transform: translateY(-8px); } } }
 
-/* Boleto de apuesta */
-.slip { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 72px); display: flex; flex-direction: column; gap: 12px; }
-.slip h2 { font-family: var(--display); font-size: 15px; font-weight: 500; margin: 0; letter-spacing: .02em; }
-.slip .none { color: var(--muted); font-size: 13px; line-height: 1.5; }
-.pick { background: var(--panel-2); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
-.pick .pq { color: var(--muted); font-size: 12px; }
-.pick .pn { font-weight: 700; display: flex; justify-content: space-between; gap: 8px; }
-.pick .pn span:last-child { font-family: var(--mono); color: var(--gold); }
-.amt label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
-.amt input { width: 100%; background: var(--ink); border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 10px 12px; font-family: var(--mono); font-size: 15px; }
+/* Top 20 */
+.filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 960px) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.q { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; text-align: left; display: flex; flex-direction: column; min-width: 0; }
+.q:hover { border-color: #55551f; }
+.q .pic { position: relative; height: 84px; display: grid; place-items: center; }
+.q .pic svg.big { width: 42px; height: 42px; filter: drop-shadow(0 4px 10px rgba(0,0,0,.5)); }
+.rank { position: absolute; top: 8px; left: 8px; width: 26px; height: 26px; border-radius: 50%; background: var(--brand); color: var(--brand-ink); font-weight: 800; font-size: 13px; display: grid; place-items: center; font-family: var(--mono); }
+.hotb { position: absolute; top: 8px; right: 8px; font-size: 10px; font-weight: 800; padding: 3px 7px; border-radius: 999px; background: rgba(0,0,0,.6); color: var(--brand); letter-spacing: .04em; }
+.badge { position: absolute; left: 8px; bottom: -9px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; padding: 3px 8px; border-radius: 999px; color: #fff; }
+.q .body { padding: 14px 10px 10px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.q .txt { font-weight: 600; font-size: 14px; line-height: 1.25; }
+.q .pr { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.q .pr .p { font-family: var(--mono); font-weight: 700; font-size: 18px; }
+.q .pr .p small { font-size: 11px; color: var(--muted); font-weight: 500; font-family: var(--sans); margin-left: 3px; }
+.q .pr .d { font-family: var(--mono); font-size: 12px; }
+.q .mini { height: 32px; }
+.q .yn { margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-family: var(--mono); font-size: 12px; }
+.q .yn span { border-radius: 6px; padding: 5px 6px; text-align: center; }
+.q .yn .y { background: color-mix(in srgb, var(--up) 20%, transparent); color: var(--up-txt); }
+.q .yn .n { background: color-mix(in srgb, var(--down) 20%, transparent); color: var(--down-txt); }
+.q .vol { font-size: 11px; color: var(--faint); display: flex; justify-content: space-between; }
+.empty { grid-column: 1 / -1; color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; padding: 24px; text-align: center; }
+
+/* Categorías existentes */
+.cats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 960px) { .cats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .cats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.cat { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; font-weight: 600; font-size: 15px; text-align: left; min-width: 0; }
+.cat svg { color: var(--brand); flex: none; }
+.cat .n { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.cat.on { border-color: var(--brand); }
+.demo { margin: 26px 0 0; font-size: 12px; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; }
+
+/* Gráficas */
+.chart { position: relative; width: 100%; }
+.chart svg text { fill: var(--faint); font-family: var(--mono); font-size: 11px; }
+.tip { position: absolute; pointer-events: none; background: #000; border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 12px; white-space: nowrap; transform: translate(-50%, calc(-100% - 10px)); z-index: 3; box-shadow: 0 6px 18px rgba(0,0,0,.5); }
+.tip b { font-family: var(--mono); color: var(--text); }
+.tip small { display: block; color: var(--muted); font-size: 11px; }
+
+/* Ficha del mercado */
+[hidden] { display: none !important; }
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 30; display: grid; align-items: end; justify-items: center; }
+.sheet { width: min(860px, 100%); background: var(--card); border: 1px solid var(--line); border-radius: 18px 18px 0 0; padding: 18px; padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px)); padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 18px; max-height: 92%; overflow-y: auto; }
+@media (min-width: 700px) { .scrim { align-items: center; } .sheet { border-radius: 18px; } }
+@media (max-width: 760px) { .sheet { grid-template-columns: minmax(0, 1fr); } }
+.sh-head { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.sh-head .k { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--brand); }
+.sh-head h3 { margin: 4px 0 0; font-size: 21px; line-height: 1.25; text-wrap: balance; }
+.x { width: 34px; height: 34px; border-radius: 50%; background: var(--card-2); display: grid; place-items: center; flex: none; }
+.col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.bigp { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.bigp .p { font-family: var(--mono); font-size: 34px; font-weight: 700; letter-spacing: -.03em; }
+.bigp .l { color: var(--muted); }
+.chhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.stat { background: var(--card-2); border-radius: 10px; padding: 9px 10px; }
+.stat small { display: block; color: var(--muted); font-size: 11px; }
+.stat b { font-family: var(--mono); font-size: 14px; font-weight: 600; }
+.split { display: flex; flex-direction: column; gap: 6px; }
+.split .bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; gap: 2px; }
+.split .bar i:first-child { background: var(--up); } .split .bar i:last-child { background: var(--down); }
+.split .lg { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.pick2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.side { border-radius: 12px; padding: 12px; border: 2px solid transparent; display: flex; flex-direction: column; align-items: center; gap: 2px; font-weight: 800; font-size: 18px; }
+.side small { font-family: var(--mono); font-weight: 500; font-size: 12px; opacity: .85; }
+.side.y { background: color-mix(in srgb, var(--up) 22%, var(--card)); }
+.side.n { background: color-mix(in srgb, var(--down) 22%, var(--card)); }
+.side.sel { border-color: var(--brand); }
+.amt label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.amt input { width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 11px 12px; font-family: var(--mono); font-size: 16px; }
 .chips { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-.chips button { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 5px 10px; font-family: var(--mono); font-size: 12px; }
-.row { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
-.row b { color: var(--text); font-family: var(--mono); font-weight: 500; }
-.row.win b { color: var(--yes); font-size: 16px; }
-.place { background: var(--gold); color: var(--ink); border: 0; border-radius: 10px; padding: 12px; font-weight: 700; font-size: 15px; }
-.place:disabled { opacity: .45; cursor: not-allowed; }
-.msg { font-size: 13px; color: var(--yes); min-height: 1.2em; }
-.msg.err { color: var(--no); }
-.mybets { border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
-.mybets h3 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
-.mb { font-size: 12px; display: flex; justify-content: space-between; gap: 8px; }
-.mb span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.mb span:last-child { font-family: var(--mono); color: var(--muted); flex: none; }
-@media (prefers-reduced-motion: no-preference) { .opt, .cat { transition: border-color .15s, background .15s; } }
+.chips button { background: var(--card-2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-family: var(--mono); font-size: 12px; }
+.row { display: flex; justify-content: space-between; color: var(--muted); }
+.row b { color: var(--up-txt); font-family: var(--mono); font-size: 18px; }
+.place { background: var(--brand); color: var(--brand-ink); font-weight: 800; font-size: 16px; border-radius: 12px; padding: 14px; }
+.msg { min-height: 1.2em; font-size: 13px; color: var(--up-txt); }
+.msg.err { color: var(--down-txt); }
+.src { font-size: 12px; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { .q, .ctile, .cat { transition: border-color .15s, transform .15s; } .q:hover { transform: translateY(-2px); } }
 </style>
 
-<header class="host">
+<header class="top">
   <div class="wrap">
-    <div class="logo">TU<span>CASINO</span></div>
-    <nav class="hostnav" aria-label="Secciones del casino">
-      <a href="#">Inicio</a>
-      <a href="#">Casino</a>
-      <a href="#">Casino en vivo</a>
-      <a href="#">Deportes</a>
-      <a href="#" class="on">Predicciones<span class="new">NUEVO</span></a>
-      <a href="#">Promociones</a>
-    </nav>
-    <div class="wallet">
-      <span class="bal" id="bal">$ 250.000</span>
-      <button class="dep" type="button">Depositar</button>
+    <div class="icons">
+      <button class="round" type="button" aria-label="Menú"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 6h12M4 12h9M4 18h12M17 9l3 3-3 3"/></svg></button>
+      <button class="round" type="button" aria-label="Buscar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></button>
     </div>
+    <div class="logo">TuCasino</div>
+    <span class="bal"><small>Saldo</small><span id="bal"></span></span>
   </div>
 </header>
+<div class="ticker" aria-label="Movimientos en vivo">
+  <span class="lbl live"><span class="dot"></span>EN VIVO</span>
+  <div class="track" id="ticker"></div>
+</div>
 
 <main class="wrap">
-  <div class="demo">Prototipo con datos de ejemplo. La barra superior representa el casino existente; todo lo de abajo es el módulo que se integra.</div>
-
-  <div class="head">
-    <div>
-      <h1>Predicciones</h1>
-      <p>Apuesta a lo que va a pasar en el mundo: política, farándula, moda, música, ambiente y más. Las cuotas cambian según lo que apuestan los demás jugadores.</p>
+  <section class="hero" aria-label="Mercados de predicción">
+    <div class="art" aria-hidden="true">
+      <svg viewBox="0 0 300 200" preserveAspectRatio="none" fill="none">
+        <defs><linearGradient id="hg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd400" stop-opacity=".45"/><stop offset="1" stop-color="#ffd400" stop-opacity="0"/></linearGradient></defs>
+        <path d="M0 170 L40 150 L70 158 L105 120 L140 128 L175 90 L205 98 L240 52 L270 60 L300 18 L300 200 L0 200Z" fill="url(#hg)"/>
+        <path d="M0 170 L40 150 L70 158 L105 120 L140 128 L175 90 L205 98 L240 52 L270 60 L300 18" stroke="#ffd400" stroke-width="3" stroke-linejoin="round"/>
+      </svg>
+      <span class="chip y">▲ SÍ</span><span class="chip n">▼ NO</span>
     </div>
-    <input class="search" id="search" type="search" placeholder="Buscar mercado…" aria-label="Buscar mercado">
+    <h1>Mercados de <b>predicción</b></h1>
+    <span class="tag">Pronostica lo que viene <em>y gana</em></span>
+    <div class="feats">
+      <div class="feat"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="14" width="4" height="7" rx="1"/><rect x="10" y="9" width="4" height="12" rx="1"/><rect x="17" y="4" width="4" height="17" rx="1"/></svg>Eventos<br>reales</div>
+      <div class="feat"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/></svg>Múltiples<br>categorías</div>
+      <div class="feat"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Apuestas en<br>tiempo real</div>
+    </div>
+  </section>
+
+  <section class="kpis" aria-label="Indicadores del día">
+    <div class="kpi"><span class="k">Volumen apostado hoy</span><span class="v" id="kVol"></span><span class="d up">▲ 18,4% vs. ayer</span><div class="spark chart" id="sVol"></div></div>
+    <div class="kpi"><span class="k live"><span class="dot"></span>Jugadores en línea</span><span class="v" id="kUsers"></span><span class="d up">▲ 6,1% última hora</span><div class="spark chart" id="sUsers"></div></div>
+    <div class="kpi"><span class="k">Mercados abiertos</span><span class="v" id="kOpen"></span><span class="d" style="color:var(--muted)">12 nuevos hoy · 4 cierran hoy</span><div class="spark chart" id="sOpen"></div></div>
+    <div class="kpi"><span class="k">Mayor movimiento 24 h</span><span class="v" id="kMove"></span><span class="d" id="kMoveQ" style="color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span><div class="spark chart" id="sMove"></div></div>
+  </section>
+
+  <h2 class="sec"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c1 4 5 5.5 5 11a5 5 0 0 1-10 0c0-2.5 1.2-4 2.5-5 .2 2 1 3 2 3 0-3.5-1-6 .5-9z"/></svg>Categorías populares</h2>
+  <div class="carousel">
+    <button class="arrow l" type="button" aria-label="Anteriores" data-scroll="-1"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m15 5-7 7 7 7"/></svg></button>
+    <div class="ctrack" id="popular"></div>
+    <button class="arrow r" type="button" aria-label="Siguientes" data-scroll="1"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m9 5 7 7-7 7"/></svg></button>
   </div>
 
-  <div class="cats" id="cats" role="tablist" aria-label="Categorías"></div>
-
-  <div class="layout">
-    <section>
-      <div class="sortbar" id="sortbar">
-        <button type="button" data-sort="trend" class="on">Tendencia</button>
-        <button type="button" data-sort="vol">Más apostados</button>
-        <button type="button" data-sort="close">Cierran pronto</button>
-        <button type="button" data-sort="new">Nuevos</button>
-      </div>
-      <div class="grid" id="grid"></div>
-    </section>
-
-    <aside class="slip" aria-label="Boleto de apuesta">
-      <h2>Boleto de apuesta</h2>
-      <div id="slipBody"></div>
-      <div class="mybets" id="mybets" hidden>
-        <h3>Mis predicciones</h3>
-        <div id="mbList"></div>
-      </div>
-    </aside>
+  <h2 class="sec"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 6-7"/></svg>Panel del mercado</h2>
+  <div class="board">
+    <div class="panel">
+      <h3>Movimientos del día <span class="seg" id="mvSeg"><button type="button" class="on" data-mv="up">▲ Suben</button><button type="button" data-mv="down">▼ Bajan</button></span></h3>
+      <div id="movers"></div>
+      <small style="color:var(--faint);font-size:11px">Cambio en puntos de probabilidad del Sí en las últimas 24 h</small>
+    </div>
+    <div class="panel">
+      <h3>Volumen por categoría <small>hoy, USD</small></h3>
+      <div id="volcat"></div>
+    </div>
+    <div class="panel feed">
+      <h3><span style="display:flex;align-items:center;gap:8px" class="live"><span class="dot" style="color:var(--up)"></span>Apuestas en vivo</span><small id="feedCount"></small></h3>
+      <div class="feedlist" id="feed" aria-live="polite"></div>
+    </div>
   </div>
+
+  <h2 class="sec" id="topTitle"></h2>
+  <div class="filters"><span class="seg" id="sortSeg"><button type="button" class="on" data-sort="vol">Más apostadas</button><button type="button" data-sort="move">Más se mueven</button><button type="button" data-sort="close">Cierran pronto</button></span></div>
+  <div class="grid" id="grid"></div>
+
+  <h2 class="sec"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Categorías existentes</h2>
+  <div class="cats" id="cats"></div>
+
+  <p class="demo">Prototipo con datos simulados: precios, volúmenes, jugadores y apuestas en vivo son de ejemplo. El nombre "TuCasino", el logo y el amarillo se reemplazan por la marca de cada casino al integrar el módulo.</p>
 </main>
 
+<div class="scrim" id="scrim" hidden></div>
+
 <script>
-const CATS = [
-  { id: "todo", name: "Tendencias" },
-  { id: "politica", name: "Política" },
-  { id: "farandula", name: "Farándula" },
-  { id: "belleza", name: "Reinados" },
-  { id: "entretenimiento", name: "Cine y series" },
-  { id: "musica", name: "Música" },
-  { id: "moda", name: "Moda" },
-  { id: "ambiente", name: "Ambiente" },
-  { id: "deportes", name: "Deportes" },
-  { id: "redes", name: "Redes sociales" },
+const I = {
+  politica: '<path d="M3 21h18M5 18h14M6 18v-7M10 18v-7M14 18v-7M18 18v-7M3 11h18L12 4z"/>',
+  deportes: '<circle cx="12" cy="12" r="9"/><path d="m12 7 4 3-1.5 4.5h-5L8 10z"/><path d="M12 3v4M21 10h-5M18 19l-3.5-4.5M6 19l3.5-4.5M3 10h5"/>',
+  cripto: '<circle cx="12" cy="12" r="9"/><path d="M9.5 7v10M9.5 7h3.5a2.5 2.5 0 0 1 0 5H9.5h4a2.5 2.5 0 0 1 0 5H9.5M11 5.5V7M11 17v1.5M13 5.5V7M13 17v1.5"/>',
+  economia: '<path d="M3 21h18"/><rect x="5" y="13" width="3" height="6"/><rect x="10.5" y="9" width="3" height="10"/><rect x="16" y="5" width="3" height="14"/>',
+  entretenimiento: '<rect x="3" y="9" width="18" height="12" rx="1"/><path d="m3 9 2-5 16 3-1 2M8 5l2 3M13 6l2 3"/>',
+  tecnologia: '<rect x="6" y="6" width="12" height="12" rx="2"/><rect x="9.5" y="9.5" width="5" height="5"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
+  clima: '<path d="M7 15a4 4 0 1 1 1-7.9A5 5 0 0 1 17.6 8 3.5 3.5 0 0 1 17 15z"/><path d="M8 18l-1 3M12 18l-1 3M16 18l-1 3"/>',
+  internacional: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18"/>',
+  finanzas: '<ellipse cx="9" cy="7" rx="6" ry="2.5"/><path d="M3 7v4c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V7M3 11v4c0 1.4 2.7 2.5 6 2.5"/><ellipse cx="15" cy="15" rx="6" ry="2.5"/><path d="M9 15v3c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5v-3"/>',
+  sociedad: '<circle cx="12" cy="8" r="3"/><circle cx="5" cy="10" r="2.2"/><circle cx="19" cy="10" r="2.2"/><path d="M6 20a6 6 0 0 1 12 0M1.5 19a4 4 0 0 1 5-3.8M22.5 19a4 4 0 0 0-5-3.8"/>',
+};
+const svg = (k, size = 24, cls = "") => `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${I[k]}</svg>`;
+
+const CATS = {
+  politica:        { name: "Política",        chip: "#c81e1e", g: "linear-gradient(160deg,#5a6b8c,#1b2233 70%)", ic: "#f3e7c9" },
+  deportes:        { name: "Deportes",        chip: "#15803d", g: "radial-gradient(circle at 50% 30%,#2f7d3a,#0d2512 75%)", ic: "#ffffff" },
+  cripto:          { name: "Cripto",          chip: "#7c3aed", g: "radial-gradient(circle at 50% 40%,#8a6a10,#1c1404 75%)", ic: "#ffcf3a" },
+  economia:        { name: "Economía",        chip: "#0f766e", g: "linear-gradient(160deg,#0f4c5c,#081a20 75%)", ic: "#4ade80" },
+  entretenimiento: { name: "Entretenimiento", chip: "#c2410c", g: "radial-gradient(circle at 60% 30%,#7e22ce,#1b0b2e 75%)", ic: "#fde047" },
+  tecnologia:      { name: "Tecnología",      chip: "#0369a1", g: "radial-gradient(circle at 50% 40%,#1d4ed8,#07122e 75%)", ic: "#7dd3fc" },
+  clima:           { name: "Clima",           chip: "#0e7490", g: "linear-gradient(170deg,#3b5a7a,#0d1726 75%)", ic: "#e0f2fe" },
+  internacional:   { name: "Internacional",   chip: "#1d4ed8", g: "linear-gradient(120deg,#9f1d1d 0 50%,#1e3a8a 50% 100%)", ic: "#fde68a" },
+  finanzas:        { name: "Finanzas",        chip: "#a16207", g: "radial-gradient(circle at 50% 40%,#a37a12,#231802 75%)", ic: "#fde047" },
+  sociedad:        { name: "Sociedad",        chip: "#be185d", g: "linear-gradient(160deg,#6b2147,#1f0a16 75%)", ic: "#fbcfe8" },
+};
+const POPULAR = ["politica", "deportes", "cripto", "economia", "entretenimiento", "tecnologia", "clima", "finanzas"];
+
+// Generador pseudoaleatorio con semilla: los datos simulados son estables entre recargas
+function rng(seed) { return () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; }; }
+
+const RAW = [
+  ["cripto", "¿Subirá BTC esta semana?", .56, 48210, "2026-10-31", "Precio de cierre en CoinMarketCap"],
+  ["deportes", "¿Ganará Ecuador su próximo partido?", .48, 45120, "2026-11-14", "Resultado oficial FIFA / FEF"],
+  ["economia", "¿Bajará la inflación este trimestre?", .61, 39800, "2026-12-31", "INEC Ecuador"],
+  ["politica", "¿Ganará el candidato X las elecciones?", .44, 37450, "2027-02-07", "CNE Ecuador"],
+  ["economia", "¿Subirá el precio del petróleo?", .52, 33900, "2026-11-30", "Precio WTI de cierre"],
+  ["clima", "¿Lloverá en Quito mañana?", .67, 31200, "2026-10-25", "INAMHI"],
+  ["economia", "¿Habrá recorte de tasas en EE. UU.?", .58, 29870, "2026-12-16", "Reserva Federal"],
+  ["tecnologia", "¿Subirá NVIDIA este mes?", .54, 27400, "2026-10-31", "Cierre NASDAQ"],
+  ["tecnologia", "¿Elon Musk comprará otra red social?", .12, 25110, "2027-06-30", "Comunicado oficial"],
+  ["deportes", "¿Ganará el Real Madrid el próximo clásico?", .47, 24300, "2026-11-08", "Resultado oficial LaLiga"],
+  ["cripto", "¿Subirá ETH este mes?", .51, 22950, "2026-10-31", "Precio de cierre en CoinMarketCap"],
+  ["internacional", "¿Habrá acuerdo comercial entre EE. UU. y China?", .29, 21000, "2026-12-31", "Anuncio oficial de ambos gobiernos"],
+  ["finanzas", "¿Superará el oro los $2.500 este año?", .73, 19860, "2026-12-31", "Precio spot LBMA"],
+  ["entretenimiento", "¿Netflix lanzará un plan más barato?", .35, 18240, "2026-12-31", "Anuncio oficial de Netflix"],
+  ["clima", "¿Habrá huracán en el Caribe este año?", .82, 17500, "2026-11-30", "Centro Nacional de Huracanes (NHC)"],
+  ["tecnologia", "¿Subirá Tesla este mes?", .46, 16900, "2026-10-31", "Cierre NASDAQ"],
+  ["politica", "¿Se aprobará la reforma fiscal en Ecuador?", .39, 15420, "2027-01-31", "Registro Oficial / Asamblea Nacional"],
+  ["deportes", "¿Clasificará Ecuador a octavos del Mundial 2026?", .57, 14800, "2026-06-30", "FIFA"],
+  ["tecnologia", "¿Lanzará Apple un nuevo iPhone este año?", .91, 13900, "2026-12-31", "Evento oficial de Apple"],
+  ["finanzas", "¿El S&P 500 superará los 6.000 puntos?", .64, 12750, "2026-12-31", "Cierre S&P 500"],
 ];
 
-// Mercados de ejemplo. p = probabilidad implícita actual (0-1).
-const MARKETS = [
-  { id: 1, cat: "belleza", q: "¿Quién ganará Miss Universo 2027?", close: "2027-11-20", vol: 184200000, trend: 98, created: 3, src: "Organización Miss Universo",
-    opts: [["Colombia", .31], ["Venezuela", .28], ["Egipto", .12], ["Rusia", .09], ["Otro país", .20]] },
-  { id: 2, cat: "politica", q: "¿Quién ganará la segunda vuelta presidencial de Colombia 2026?", close: "2026-06-21", vol: 512000000, trend: 95, created: 20, src: "Registraduría Nacional",
-    opts: [["Candidato A", .46], ["Candidato B", .41], ["Voto en blanco gana", .03], ["Otro", .10]] },
-  { id: 3, cat: "farandula", q: "¿Shakira anunciará nueva gira mundial antes del 31 de diciembre?", close: "2026-12-31", vol: 38400000, trend: 88, created: 2, src: "Comunicado oficial o cuenta verificada", yn: .37 },
-  { id: 4, cat: "musica", q: "¿Qué artista latino tendrá más reproducciones en Spotify en 2026?", close: "2026-12-05", vol: 96100000, trend: 91, created: 8, src: "Spotify Wrapped",
-    opts: [["Bad Bunny", .52], ["Karol G", .18], ["Peso Pluma", .14], ["Feid", .09], ["Otro", .07]] },
-  { id: 5, cat: "ambiente", q: "¿Se declarará fenómeno de La Niña antes de febrero de 2027?", close: "2027-02-01", vol: 12700000, trend: 60, created: 5, src: "NOAA / IDEAM", yn: .58 },
-  { id: 6, cat: "entretenimiento", q: "¿Qué película ganará el Óscar a Mejor Película 2027?", close: "2027-03-14", vol: 74300000, trend: 79, created: 12, src: "Academia de Hollywood",
-    opts: [["Película A", .27], ["Película B", .22], ["Película C", .19], ["Otra", .32]] },
-  { id: 7, cat: "moda", q: "¿Qué color dominará las pasarelas de la temporada primavera 2027?", close: "2027-03-31", vol: 5900000, trend: 52, created: 1, src: "Informe de tendencias Pantone",
-    opts: [["Verde menta", .34], ["Rojo cereza", .29], ["Azul eléctrico", .21], ["Otro", .16]] },
-  { id: 8, cat: "redes", q: "¿El video más visto de TikTok en Colombia esta semana superará 50 millones de vistas?", close: "2026-11-01", vol: 21800000, trend: 93, created: 1, src: "TikTok Creative Center", yn: .44 },
-  { id: 9, cat: "deportes", q: "¿Colombia llegará a cuartos de final del Mundial 2026?", close: "2026-07-05", vol: 388000000, trend: 90, created: 30, src: "FIFA", yn: .41 },
-  { id: 10, cat: "farandula", q: "¿Cuál será la pareja de famosos que anuncie compromiso primero?", close: "2027-01-31", vol: 17400000, trend: 74, created: 4, src: "Anuncio oficial o cuenta verificada",
-    opts: [["Pareja A", .38], ["Pareja B", .33], ["Pareja C", .29]] },
-  { id: 11, cat: "politica", q: "¿El Banco de la República bajará su tasa en la próxima reunión?", close: "2026-12-18", vol: 44600000, trend: 66, created: 6, src: "Banco de la República", yn: .62 },
-  { id: 12, cat: "redes", q: "¿Qué creador colombiano llegará primero a 30 millones de seguidores en Instagram?", close: "2027-06-30", vol: 9300000, trend: 71, created: 2, src: "Perfil público de Instagram",
-    opts: [["Creador A", .45], ["Creador B", .35], ["Creador C", .20]] },
-];
-
-const MARGIN = 0.94; // la casa retiene ~6% en la cuota
-const cop = n => "$ " + Math.round(n).toLocaleString("es-CO");
-const short = n => n >= 1e6 ? "$ " + (n / 1e6).toLocaleString("es-CO", { maximumFractionDigits: 1 }) + " M" : cop(n);
-const odd = p => Math.max(1.01, MARGIN / p).toFixed(2);
-const daysLeft = d => Math.max(0, Math.ceil((new Date(d + "T23:59:59") - new Date()) / 864e5));
-const fmtDate = d => new Date(d + "T12:00:00").toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" });
-const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-
-let state = { cat: "todo", sort: "trend", q: "", pick: null, amount: 20000, balance: 250000, bets: [] };
-try { const c = localStorage.getItem("pred-cat"); if (c && CATS.some(x => x.id === c)) state.cat = c; } catch (e) {}
-
-function optionsOf(m) {
-  return m.yn != null ? [["Sí", m.yn], ["No", 1 - m.yn]] : m.opts;
-}
-
-function renderCats() {
-  const el = document.getElementById("cats");
-  el.innerHTML = CATS.map(c => {
-    const n = c.id === "todo" ? MARKETS.length : MARKETS.filter(m => m.cat === c.id).length;
-    return `<button type="button" role="tab" class="cat${c.id === state.cat ? " on" : ""}" aria-selected="${c.id === state.cat}" data-cat="${c.id}">${c.name}<span class="n">${n}</span></button>`;
-  }).join("");
-}
-
-function renderGrid() {
-  let list = MARKETS.filter(m => state.cat === "todo" || m.cat === state.cat);
-  if (state.q) list = list.filter(m => m.q.toLowerCase().includes(state.q) || optionsOf(m).some(o => o[0].toLowerCase().includes(state.q)));
-  const sorters = { trend: (a, b) => b.trend - a.trend, vol: (a, b) => b.vol - a.vol, close: (a, b) => a.close.localeCompare(b.close), new: (a, b) => a.created - b.created };
-  list.sort(sorters[state.sort]);
-  const grid = document.getElementById("grid");
-  if (!list.length) { grid.innerHTML = `<div class="empty">No hay mercados que coincidan con la búsqueda.</div>`; return; }
-  grid.innerHTML = list.map(m => {
-    const catName = CATS.find(c => c.id === m.cat).name;
-    const dl = daysLeft(m.close);
-    const opts = optionsOf(m);
-    const btn = (o, i, cls = "") => {
-      const sel = state.pick && state.pick.m === m.id && state.pick.i === i;
-      return `<button type="button" class="opt ${cls}${sel ? " sel" : ""}" data-m="${m.id}" data-i="${i}" aria-pressed="${sel}">
-        <span class="bar" style="width:${(o[1] * 100).toFixed(1)}%"></span>
-        <span class="name">${esc(o[0])}</span>
-        ${m.yn != null ? "" : `<span class="pct">${Math.round(o[1] * 100)}%</span>`}
-        <span class="odd">${m.yn != null ? Math.round(o[1] * 100) + "% · " : ""}${odd(o[1])}</span>
-      </button>`;
-    };
-    const body = m.yn != null
-      ? `<div class="yn">${btn(opts[0], 0, "y")}${btn(opts[1], 1, "n")}</div>`
-      : `<div class="opts">${opts.map((o, i) => btn(o, i)).join("")}</div>`;
-    return `<article class="card">
-      <div class="meta"><span class="tag">${catName}</span>${m.trend >= 90 ? `<span class="hot">En tendencia</span>` : `<span>${dl} días</span>`}</div>
-      <h3 class="q">${esc(m.q)}</h3>
-      ${body}
-      <div class="foot"><span>Apostado <b>${short(m.vol)}</b></span><span>Cierra <b>${fmtDate(m.close)}</b></span></div>
-      <div class="src">Se resuelve con: ${esc(m.src)}</div>
-    </article>`;
-  }).join("");
-}
-
-function renderSlip() {
-  const body = document.getElementById("slipBody");
-  if (!state.pick) {
-    body.innerHTML = `<p class="none">Elige una opción en cualquier mercado para armar tu apuesta. La cuota que ves es lo que multiplica tu dinero si aciertas.</p>`;
-  } else {
-    const m = MARKETS.find(x => x.id === state.pick.m);
-    const o = optionsOf(m)[state.pick.i];
-    const o_ = odd(o[1]);
-    body.innerHTML = `<div class="pick"><span class="pq">${esc(m.q)}</span><span class="pn"><span>${esc(o[0])}</span><span>${o_}</span></span></div>
-      <div class="amt"><label for="amount">Valor de la apuesta (COP)</label>
-        <input id="amount" type="number" min="1000" step="1000" inputmode="numeric" value="${state.amount}">
-        <div class="chips">${[10000, 20000, 50000, 100000].map(v => `<button type="button" data-amt="${v}">${short(v).replace("$ ", "")}</button>`).join("")}</div>
-      </div>
-      <div class="row"><span>Cuota</span><b>${o_}</b></div>
-      <div class="row win"><span>Ganancia posible</span><b id="win">${cop(state.amount * o_)}</b></div>
-      <button type="button" class="place" id="place">Apostar ${cop(state.amount)}</button>
-      <div class="msg" id="msg" role="status"></div>`;
+// Historial horario de 30 días (720 puntos) que termina en la probabilidad actual
+const HOURS = 720;
+const Q = RAW.map((r, i) => {
+  const rand = rng(1000 + i * 77);
+  const end = r[2], start = Math.min(.92, Math.max(.08, end + (rand() - .5) * .4));
+  const h = [];
+  let noise = 0;
+  for (let t = 0; t < HOURS; t++) {
+    noise = noise * .96 + (rand() - .5) * .025;
+    const base = start + (end - start) * Math.pow(t / (HOURS - 1), 1.3);
+    h.push(Math.min(.97, Math.max(.03, base + noise * (1 - t / HOURS))));
   }
-  const mb = document.getElementById("mybets");
-  mb.hidden = !state.bets.length;
-  document.getElementById("mbList").innerHTML = state.bets.map(b => `<div class="mb"><span>${esc(b.name)} · ${esc(b.q)}</span><span>${cop(b.amount)} @ ${b.odd}</span></div>`).join("");
-  document.getElementById("bal").textContent = cop(state.balance);
+  // Último día: un movimiento visible que termina exactamente en la probabilidad actual
+  const jump = (rand() - .5) * .16, base24 = end - jump, off = base24 - h[HOURS - 25];
+  for (let t = 0; t < HOURS - 24; t++) h[t] = Math.min(.97, Math.max(.03, h[t] + off * (t / (HOURS - 24))));
+  for (let k = 0; k < 24; k++) h[HOURS - 24 + k] = Math.min(.97, Math.max(.03, base24 + jump * (k + 1) / 24 + (k < 23 ? (rand() - .5) * .012 : 0)));
+  h[HOURS - 1] = end;
+  const yesShare = Math.min(.85, Math.max(.15, end + (rand() - .5) * .12));
+  return { id: i + 1, cat: r[0], q: r[1], p: end, vol: r[3], close: r[4], src: r[5], h, yesShare,
+    traders: Math.round(r[3] / (14 + rand() * 10)), liq: Math.round(r[3] * (1.6 + rand())) };
+});
+Q.forEach(q => q.d24 = q.p - q.h[HOURS - 25]);
+
+const MARGIN = 0.94;
+const odd = p => Math.max(1.01, MARGIN / p).toFixed(2);
+const usd = n => "$" + Math.round(n).toLocaleString("es-EC");
+const kusd = n => n >= 1e6 ? "$" + (n / 1e6).toLocaleString("es-EC", { maximumFractionDigits: 2 }) + " M" : n >= 1e4 ? "$" + (n / 1e3).toLocaleString("es-EC", { maximumFractionDigits: 1 }) + " k" : usd(n);
+const pts = d => (d >= 0 ? "▲ +" : "▼ ") + (d * 100).toFixed(1).replace(".", ",") + " pts";
+const pct = p => Math.round(p * 100) + "%";
+const fmtDate = d => new Date(d + "T12:00:00").toLocaleDateString("es-EC", { day: "numeric", month: "short", year: "numeric" });
+const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const NOW = Date.now();
+
+const S = { cat: null, sort: "vol", mv: "up", balance: 150, open: null, side: null, amount: 5, range: "7D" };
+
+// ---------- Gráfica de línea reutilizable (con cruz y tooltip) ----------
+// opts: { color, area, yMin, yMax, axis (bool), fmtY, fmtX, label }
+function lineChart(el, data, opts) {
+  const W = Math.max(120, el.clientWidth), H = el.clientHeight || 200;
+  const ax = opts.axis;
+  const pad = ax ? { l: 8, r: 40, t: 10, b: 22 } : { l: 2, r: 2, t: 4, b: 2 };
+  const ys = data.map(d => d[1]);
+  const yMin = opts.yMin ?? Math.min(...ys), yMax = opts.yMax ?? Math.max(...ys);
+  const span = (yMax - yMin) || 1;
+  const x = i => pad.l + (i / (data.length - 1)) * (W - pad.l - pad.r);
+  const y = v => pad.t + (1 - (v - yMin) / span) * (H - pad.t - pad.b);
+  const path = data.map((d, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(d[1]).toFixed(1)).join("");
+  const gid = "g" + Math.random().toString(36).slice(2, 8);
+  let grid = "";
+  if (ax) {
+    opts.ticks.forEach(t => { grid += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)" stroke-width="1"/><text x="${W - pad.r + 6}" y="${y(t) + 4}">${opts.fmtY(t)}</text>`; });
+    const n = 4;
+    for (let k = 0; k <= n; k++) { const i = Math.round(k * (data.length - 1) / n); grid += `<text x="${x(i)}" y="${H - 5}" text-anchor="${k === 0 ? "start" : k === n ? "end" : "middle"}">${opts.fmtX(data[i][0], true)}</text>`; }
+  }
+  const last = data[data.length - 1];
+  el.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.label || "")}">
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${opts.color}" stop-opacity=".28"/><stop offset="1" stop-color="${opts.color}" stop-opacity="0"/></linearGradient></defs>
+    ${grid}
+    ${opts.area !== false ? `<path d="${path}L${x(data.length - 1)} ${H - pad.b}L${x(0)} ${H - pad.b}Z" fill="url(#${gid})"/>` : ""}
+    <path d="${path}" fill="none" stroke="${opts.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${x(data.length - 1)}" cy="${y(last[1])}" r="4" fill="${opts.color}" stroke="var(--card)" stroke-width="2"/>
+    <g class="hov" style="display:none"><line y1="${pad.t}" y2="${H - pad.b}" stroke="var(--muted)" stroke-dasharray="3 3"/><circle r="4.5" fill="${opts.color}" stroke="var(--card)" stroke-width="2"/></g>
+  </svg><div class="tip" hidden></div>`;
+  const s = el.querySelector("svg"), g = s.querySelector(".hov"), tip = el.querySelector(".tip");
+  const move = e => {
+    const r = s.getBoundingClientRect();
+    const px = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+    const i = Math.max(0, Math.min(data.length - 1, Math.round((px - pad.l) / (W - pad.l - pad.r) * (data.length - 1))));
+    const cx = x(i), cy = y(data[i][1]);
+    g.style.display = ""; g.querySelector("line").setAttribute("x1", cx); g.querySelector("line").setAttribute("x2", cx);
+    g.querySelector("circle").setAttribute("cx", cx); g.querySelector("circle").setAttribute("cy", cy);
+    tip.hidden = false; tip.style.left = Math.max(60, Math.min(W - 60, cx)) + "px"; tip.style.top = cy + "px";
+    tip.innerHTML = `<b>${opts.fmtY(data[i][1], false)}</b><small>${opts.fmtX(data[i][0], false)}</small>`;
+  };
+  const leave = () => { g.style.display = "none"; tip.hidden = true; };
+  s.addEventListener("pointermove", move); s.addEventListener("pointerleave", leave);
+  s.addEventListener("touchmove", move, { passive: true }); s.addEventListener("touchend", leave);
+}
+// Minigráfica sin interacción para las tarjetas (la ficha del mercado tiene la versión completa)
+function miniLine(data, color) {
+  const W = 100, H = 32, mn = Math.min(...data), mx = Math.max(...data), sp = (mx - mn) || 1;
+  const p = data.map((v, i) => (i ? "L" : "M") + (i / (data.length - 1) * W).toFixed(1) + " " + (2 + (1 - (v - mn) / sp) * (H - 4)).toFixed(1)).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" width="100%" height="32" aria-hidden="true"><path d="${p}" fill="none" stroke="${color}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/></svg>`;
 }
 
-function updateAmount(v) {
-  state.amount = Math.max(0, Math.round(+v || 0));
-  const m = MARKETS.find(x => x.id === state.pick.m);
-  const o_ = odd(optionsOf(m)[state.pick.i][1]);
-  document.getElementById("win").textContent = cop(state.amount * o_);
-  document.getElementById("place").textContent = "Apostar " + cop(state.amount);
+const hourLabel = (hAgo, short) => {
+  const d = new Date(NOW - hAgo * 3600e3);
+  return short ? d.toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" }) : d.toLocaleString("es-EC", { weekday: "short", hour: "2-digit", minute: "2-digit" });
+};
+const dateLabel = (hAgo, short) => {
+  const d = new Date(NOW - hAgo * 3600e3);
+  return short ? d.toLocaleDateString("es-EC", { day: "numeric", month: "short" }) : d.toLocaleString("es-EC", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+};
+
+// ---------- Indicadores ----------
+function renderKpis() {
+  const r = rng(42);
+  const totalVol = Q.reduce((a, q) => a + q.vol, 0) * 3.1;
+  document.getElementById("kVol").textContent = kusd(totalVol);
+  document.getElementById("kUsers").textContent = (8421).toLocaleString("es-EC");
+  document.getElementById("kOpen").textContent = "214";
+  const top = [...Q].sort((a, b) => Math.abs(b.d24) - Math.abs(a.d24))[0];
+  const kMove = document.getElementById("kMove");
+  kMove.textContent = pts(top.d24); kMove.className = "v " + (top.d24 >= 0 ? "up" : "down");
+  document.getElementById("kMoveQ").textContent = top.q;
+
+  let acc = 0; const volH = [];
+  for (let h = 0; h < 24; h++) { acc += totalVol / 24 * (.6 + r() * .8) * (h > 17 ? 1.3 : 1); volH.push([23 - h, acc]); }
+  const scale = totalVol / acc; volH.forEach(d => d[1] *= scale);
+  lineChart(document.getElementById("sVol"), volH, { color: "#ffd400", fmtY: v => kusd(v) + " acumulado", fmtX: h => hourLabel(h), label: "Volumen acumulado hoy" });
+  const users = []; let u = 5200;
+  for (let h = 0; h < 24; h++) { u += (r() - .38) * 420; users.push([23 - h, Math.round(h === 23 ? 8421 : u)]); }
+  lineChart(document.getElementById("sUsers"), users, { color: "#ffd400", fmtY: v => Math.round(v).toLocaleString("es-EC") + " jugadores", fmtX: h => hourLabel(h), label: "Jugadores en línea, últimas 24 h" });
+  const open = []; let o = 170;
+  for (let d = 0; d < 30; d++) { o += (r() - .3) * 4; open.push([(29 - d) * 24, Math.round(d === 29 ? 214 : o)]); }
+  lineChart(document.getElementById("sOpen"), open, { color: "#ffd400", fmtY: v => v + " mercados", fmtX: h => dateLabel(h, true), label: "Mercados abiertos, últimos 30 días" });
+  const mv = top.h.slice(-24).map((v, i) => [23 - i, v]);
+  lineChart(document.getElementById("sMove"), mv, { color: top.d24 >= 0 ? "#2bb560" : "#ef5350", fmtY: v => pct(v) + " Sí", fmtX: h => hourLabel(h), label: "Probabilidad del mercado con mayor movimiento" });
 }
 
-document.getElementById("cats").addEventListener("click", e => {
-  const b = e.target.closest("[data-cat]"); if (!b) return;
-  state.cat = b.dataset.cat;
-  try { localStorage.setItem("pred-cat", state.cat); } catch (err) {}
-  renderCats(); renderGrid();
-});
-document.getElementById("sortbar").addEventListener("click", e => {
-  const b = e.target.closest("[data-sort]"); if (!b) return;
-  state.sort = b.dataset.sort;
-  document.querySelectorAll("#sortbar button").forEach(x => x.classList.toggle("on", x === b));
-  renderGrid();
-});
-document.getElementById("search").addEventListener("input", e => { state.q = e.target.value.trim().toLowerCase(); renderGrid(); });
-document.getElementById("grid").addEventListener("click", e => {
-  const b = e.target.closest(".opt"); if (!b) return;
-  state.pick = { m: +b.dataset.m, i: +b.dataset.i };
-  renderGrid(); renderSlip();
-});
-document.getElementById("slipBody").addEventListener("input", e => { if (e.target.id === "amount") updateAmount(e.target.value); });
-document.getElementById("slipBody").addEventListener("click", e => {
-  const chip = e.target.closest("[data-amt]");
-  if (chip) { document.getElementById("amount").value = chip.dataset.amt; updateAmount(chip.dataset.amt); return; }
-  if (e.target.id !== "place") return;
-  const msg = document.getElementById("msg");
-  if (state.amount < 1000) { msg.className = "msg err"; msg.textContent = "La apuesta mínima es $ 1.000."; return; }
-  if (state.amount > state.balance) { msg.className = "msg err"; msg.textContent = "Saldo insuficiente. Deposita o baja el valor."; return; }
-  const m = MARKETS.find(x => x.id === state.pick.m);
-  const o = optionsOf(m)[state.pick.i];
-  state.balance -= state.amount;
-  m.vol += state.amount;
-  state.bets.unshift({ name: o[0], q: m.q, amount: state.amount, odd: odd(o[1]) });
-  state.pick = null;
-  renderGrid(); renderSlip();
-});
+// ---------- Cinta ----------
+function renderTicker() {
+  const items = Q.map(q => `<span>${esc(q.q)} <b class="num">${pct(q.p)}</b> <span class="num ${q.d24 >= 0 ? "up" : "down"}">${pts(q.d24)}</span></span>`).join("");
+  document.getElementById("ticker").innerHTML = items + items;
+}
 
-renderCats(); renderGrid(); renderSlip();
+// ---------- Panel del mercado ----------
+function renderMovers() {
+  const list = [...Q].filter(q => S.mv === "up" ? q.d24 > 0 : q.d24 < 0).sort((a, b) => S.mv === "up" ? b.d24 - a.d24 : a.d24 - b.d24).slice(0, 6);
+  const max = Math.max(...Q.map(q => Math.abs(q.d24)));
+  document.getElementById("movers").innerHTML = list.map(q => {
+    const w = Math.abs(q.d24) / max * 50;
+    const bar = q.d24 >= 0 ? `left:50%;width:${w}%;background:var(--up)` : `right:50%;width:${w}%;background:var(--down)`;
+    return `<button type="button" class="mv" data-q="${q.id}"><span class="t">${esc(q.q)}<small>${CATS[q.cat].name} · ${pct(q.p)} Sí</small></span>
+      <span class="b" aria-hidden="true"><i style="${bar}"></i></span><span class="d ${q.d24 >= 0 ? "up" : "down"}">${(q.d24 >= 0 ? "▲ +" : "▼ ") + (q.d24 * 100).toFixed(1).replace(".", ",")}</span></button>`;
+  }).join("");
+}
+function renderVolCat() {
+  const sums = Object.keys(CATS).map(k => [k, Q.filter(q => q.cat === k).reduce((a, q) => a + q.vol, 0) * 3.1 + (k === "sociedad" ? 9400 : 0)]).sort((a, b) => b[1] - a[1]);
+  const max = sums[0][1], total = sums.reduce((a, s) => a + s[1], 0);
+  document.getElementById("volcat").innerHTML = sums.map(([k, v]) =>
+    `<button type="button" class="vb" data-cat="${k}" title="${CATS[k].name}: ${usd(v)} · ${Math.round(v / total * 100)}% del total"><span>${CATS[k].name}</span><span class="bar"><i style="width:${(v / max * 100).toFixed(1)}%"></i></span><span class="v">${kusd(v)}</span></button>`).join("");
+}
+
+// Apuestas en vivo (simuladas)
+const NAMES = ["Carlos M.", "Andrea P.", "Luis G.", "María F.", "Jorge R.", "Daniela V.", "Kevin A.", "Sofía L.", "Diego T.", "Valeria C.", "Miguel S.", "Paola N."];
+const AVC = ["#ffd400", "#7dd3fc", "#f9a8d4", "#86efac", "#fdba74", "#c4b5fd"];
+const feedR = rng(7);
+let feedItems = [], feedN = 1287;
+function newBet() {
+  const q = Q[Math.floor(feedR() * Q.length)], yes = feedR() < q.yesShare;
+  const amt = [1, 2, 5, 5, 10, 10, 20, 25, 50, 100][Math.floor(feedR() * 10)];
+  const nm = NAMES[Math.floor(feedR() * NAMES.length)];
+  return { q, yes, amt, nm, c: AVC[nm.length % AVC.length], o: odd(yes ? q.p : 1 - q.p) };
+}
+function renderFeed(fresh) {
+  document.getElementById("feed").innerHTML = feedItems.map((b, i) =>
+    `<div class="fi${fresh && i === 0 ? " new" : ""}"><span class="av" style="background:${b.c}">${b.nm.split(" ").map(s => s[0]).join("")}</span>
+      <div class="w"><div>${b.you ? "<b>Tú</b>" : esc(b.nm)} · <span class="${b.yes ? "up" : "down"}">${b.yes ? "Sí" : "No"}</span></div><div><small>${esc(b.q.q)}</small></div></div>
+      <span class="amt">${usd(b.amt)}<small class="${b.yes ? "up" : "down"}">@ ${b.o}</small></span></div>`).join("");
+  document.getElementById("feedCount").textContent = feedN.toLocaleString("es-EC") + " hoy";
+}
+for (let i = 0; i < 8; i++) feedItems.push(newBet());
+function pushBet(b) { feedItems.unshift(b); feedItems = feedItems.slice(0, 8); feedN++; b.q.vol += b.amt; renderFeed(true); }
+if (!matchMedia("(prefers-reduced-motion: reduce)").matches) setInterval(() => pushBet(newBet()), 2800);
+
+// ---------- Categorías y Top 20 ----------
+function renderPopular() {
+  document.getElementById("popular").innerHTML = POPULAR.map(k => {
+    const c = CATS[k];
+    return `<button type="button" class="ctile${S.cat === k ? " on" : ""}" data-cat="${k}" style="background:${c.g}"><div class="ill" style="color:${c.ic}">${svg(k, 64)}</div><span>${c.name}</span></button>`;
+  }).join("");
+}
+function renderGrid() {
+  const rank = new Map([...Q].sort((a, b) => b.vol - a.vol).map((q, i) => [q.id, i + 1]));
+  let list = S.cat ? Q.filter(q => q.cat === S.cat) : [...Q];
+  const sorters = { vol: (a, b) => b.vol - a.vol, move: (a, b) => Math.abs(b.d24) - Math.abs(a.d24), close: (a, b) => a.close.localeCompare(b.close) };
+  list.sort(sorters[S.sort]);
+  document.getElementById("topTitle").innerHTML = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4h10v5a5 5 0 0 1-10 0zM7 6H3c0 3 2 5 4 5M17 6h4c0 3-2 5-4 5M12 14v4M8 21h8M9 18h6"/></svg>`
+    + (S.cat ? `${CATS[S.cat].name}: preguntas abiertas<button type="button" class="aside" id="clear">Ver todas</button>` : "Top 20 preguntas más apostadas hoy");
+  document.getElementById("grid").innerHTML = list.length ? list.map(q => {
+    const c = CATS[q.cat], up = q.d24 >= 0;
+    return `<button type="button" class="q" data-q="${q.id}">
+      <div class="pic" style="background:${c.g};color:${c.ic}"><span class="rank">${rank.get(q.id)}</span>${Math.abs(q.d24) > .04 ? `<span class="hotb">🔥 MOVIÉNDOSE</span>` : ""}${svg(q.cat, 42, "big")}<span class="badge" style="background:${c.chip}">${c.name}</span></div>
+      <div class="body">
+        <div class="txt">${esc(q.q)}</div>
+        <div class="pr"><span class="p">${pct(q.p)}<small>Sí</small></span><span class="d ${up ? "up" : "down"}">${pts(q.d24).replace(" pts", "")}</span></div>
+        <div class="mini">${miniLine(q.h.slice(-168).filter((_, i) => i % 4 === 0), up ? "#2bb560" : "#ef5350")}</div>
+        <div class="yn"><span class="y">Sí ${odd(q.p)}</span><span class="n">No ${odd(1 - q.p)}</span></div>
+        <div class="vol"><span>${kusd(q.vol)} apostado</span><span>${q.traders.toLocaleString("es-EC")} jugadores</span></div>
+      </div></button>`;
+  }).join("") : `<div class="empty">Todavía no hay preguntas abiertas en esta categoría.</div>`;
+}
+function renderCats() {
+  document.getElementById("cats").innerHTML = Object.entries(CATS).map(([k, c]) =>
+    `<button type="button" class="cat${S.cat === k ? " on" : ""}" data-cat="${k}">${svg(k, 26)}<span>${c.name}</span><span class="n">${Q.filter(q => q.cat === k).length}</span></button>`).join("");
+}
+function renderBal() { document.getElementById("bal").textContent = usd(S.balance); }
+
+// ---------- Ficha del mercado ----------
+const RANGES = { "24H": [24, 1], "7D": [168, 3], "30D": [720, 12] };
+function renderSheet() {
+  const scrim = document.getElementById("scrim");
+  if (!S.open) { scrim.hidden = true; scrim.innerHTML = ""; document.body.style.overflow = ""; return; }
+  const q = Q.find(x => x.id === S.open), c = CATS[q.cat], up = q.d24 >= 0;
+  const o = S.side === "y" ? odd(q.p) : S.side === "n" ? odd(1 - q.p) : null;
+  scrim.hidden = false; document.body.style.overflow = "hidden";
+  scrim.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="shq">
+    <div class="sh-head"><div><div class="k">${c.name} · Cierra ${fmtDate(q.close)}</div><h3 id="shq">${esc(q.q)}</h3></div>
+      <button type="button" class="x" id="close" aria-label="Cerrar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+    <div class="col">
+      <div class="chhead"><div class="bigp"><span class="p">${pct(q.p)}</span><span class="l">probabilidad del Sí</span><span class="num ${up ? "up" : "down"}">${pts(q.d24)} hoy</span></div>
+        <span class="seg" id="rangeSeg">${Object.keys(RANGES).map(r => `<button type="button" data-range="${r}" class="${S.range === r ? "on" : ""}">${r}</button>`).join("")}</span></div>
+      <div class="chart" id="hist" style="height:220px"></div>
+      <div class="stats">
+        <div class="stat"><small>Apostado total</small><b>${kusd(q.vol * 4.2)}</b></div>
+        <div class="stat"><small>Jugadores</small><b>${q.traders.toLocaleString("es-EC")}</b></div>
+        <div class="stat"><small>Liquidez</small><b>${kusd(q.liq)}</b></div>
+      </div>
+      <div class="split"><div class="lg"><span>Dinero apostado por lado</span></div>
+        <div class="bar"><i style="flex:${q.yesShare}"></i><i style="flex:${1 - q.yesShare}"></i></div>
+        <div class="lg"><span class="up">Sí ${pct(q.yesShare)}</span><span class="down">No ${pct(1 - q.yesShare)}</span></div></div>
+      <div class="src">Se resuelve con: ${esc(q.src)}</div>
+    </div>
+    <div class="col">
+      <div class="pick2">
+        <button type="button" class="side y${S.side === "y" ? " sel" : ""}" data-side="y">Sí<small>cuota ${odd(q.p)}</small></button>
+        <button type="button" class="side n${S.side === "n" ? " sel" : ""}" data-side="n">No<small>cuota ${odd(1 - q.p)}</small></button>
+      </div>
+      <div class="amt"><label for="amount">Valor de la apuesta (USD)</label>
+        <input id="amount" type="number" min="1" step="1" inputmode="decimal" value="${S.amount}">
+        <div class="chips">${[1, 5, 10, 25, 50].map(v => `<button type="button" data-amt="${v}">$${v}</button>`).join("")}</div></div>
+      <div class="row"><span>Ganancia posible</span><b id="win" style="${o ? "" : "color:var(--muted);font-size:14px"}">${o ? usd(S.amount * o) : "Elige Sí o No"}</b></div>
+      <button type="button" class="place" id="place">Apostar ${usd(S.amount)}</button>
+      <div class="msg" id="msg" role="status"></div>
+    </div>
+  </div>`;
+  drawHist(q);
+}
+function drawHist(q) {
+  const [n, step] = RANGES[S.range];
+  const data = [];
+  for (let i = HOURS - n; i < HOURS; i += step) data.push([HOURS - 1 - i, q.h[i]]);
+  if (data[data.length - 1][0] !== 0) data.push([0, q.h[HOURS - 1]]);
+  const vals = data.map(d => d[1]);
+  const lo = Math.max(0, Math.floor((Math.min(...vals) - .03) * 20) / 20), hi = Math.min(1, Math.ceil((Math.max(...vals) + .03) * 20) / 20);
+  const ticks = []; const st = (hi - lo) > .3 ? .1 : .05;
+  for (let t = Math.ceil(lo / st) * st; t <= hi + 1e-9; t += st) ticks.push(+t.toFixed(2));
+  lineChart(document.getElementById("hist"), data, {
+    color: q.d24 >= 0 ? "#2bb560" : "#ef5350", axis: true, yMin: lo, yMax: hi, ticks,
+    fmtY: (v, ax) => ax === false ? pct(v) + " Sí" : pct(v), fmtX: (h, short) => S.range === "24H" ? hourLabel(h, short) : dateLabel(h, short),
+    label: "Historial de probabilidad del Sí",
+  });
+}
+
+function setCat(k) {
+  S.cat = S.cat === k ? null : k;
+  renderPopular(); renderGrid(); renderCats();
+  document.getElementById("topTitle").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+document.addEventListener("click", e => {
+  const t = e.target;
+  if (t.closest("#close") || t === document.getElementById("scrim")) { S.open = null; renderSheet(); return; }
+  const rg = t.closest("[data-range]"); if (rg) { S.range = rg.dataset.range; document.querySelectorAll("#rangeSeg button").forEach(b => b.classList.toggle("on", b === rg)); drawHist(Q.find(x => x.id === S.open)); return; }
+  const cat = t.closest("[data-cat]"); if (cat) return setCat(cat.dataset.cat);
+  if (t.closest("#clear")) { S.cat = null; renderPopular(); renderGrid(); renderCats(); return; }
+  const sc = t.closest("[data-scroll]"); if (sc) { document.getElementById("popular").scrollBy({ left: +sc.dataset.scroll * 290, behavior: "smooth" }); return; }
+  const mv = t.closest("[data-mv]"); if (mv) { S.mv = mv.dataset.mv; document.querySelectorAll("#mvSeg button").forEach(b => b.classList.toggle("on", b === mv)); renderMovers(); return; }
+  const so = t.closest("[data-sort]"); if (so) { S.sort = so.dataset.sort; document.querySelectorAll("#sortSeg button").forEach(b => b.classList.toggle("on", b === so)); renderGrid(); return; }
+  const qb = t.closest("[data-q]"); if (qb) { S.open = +qb.dataset.q; S.side = null; renderSheet(); return; }
+  const sd = t.closest("[data-side]"); if (sd) { S.side = sd.dataset.side; renderSheet(); return; }
+  const ch = t.closest("[data-amt]"); if (ch) { S.amount = +ch.dataset.amt; renderSheet(); return; }
+  if (t.closest("#place")) {
+    const msg = document.getElementById("msg");
+    if (!S.side) { msg.className = "msg err"; msg.textContent = "Elige Sí o No antes de apostar."; return; }
+    if (!(S.amount >= 1)) { msg.className = "msg err"; msg.textContent = "La apuesta mínima es $1."; return; }
+    if (S.amount > S.balance) { msg.className = "msg err"; msg.textContent = "Saldo insuficiente. Deposita o baja el valor."; return; }
+    const q = Q.find(x => x.id === S.open), yes = S.side === "y", amt = S.amount;
+    S.balance -= amt; renderBal();
+    pushBet({ q, yes, amt, nm: "Tú Tú", c: "#ffd400", o: odd(yes ? q.p : 1 - q.p), you: true });
+    renderSheet();
+    const m2 = document.getElementById("msg"); m2.className = "msg"; m2.textContent = `Listo: apostaste ${usd(amt)} al ${yes ? "Sí" : "No"}. Aparece en Apuestas en vivo.`;
+  }
+});
+document.addEventListener("input", e => {
+  if (e.target.id !== "amount") return;
+  S.amount = Math.max(0, +e.target.value || 0);
+  const q = Q.find(x => x.id === S.open);
+  const o = S.side === "y" ? odd(q.p) : S.side === "n" ? odd(1 - q.p) : null;
+  document.getElementById("win").textContent = o ? usd(S.amount * o) : "Elige Sí o No";
+  document.getElementById("place").textContent = "Apostar " + usd(S.amount);
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape" && S.open) { S.open = null; renderSheet(); } });
+let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { renderKpis(); if (S.open) drawHist(Q.find(x => x.id === S.open)); }, 150); });
+
+renderBal(); renderTicker(); renderKpis(); renderPopular(); renderMovers(); renderVolCat(); renderFeed(false); renderGrid(); renderCats();
 </script>

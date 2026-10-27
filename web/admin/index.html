@@ -1,0 +1,1121 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Predicciones · Back-office</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Back-office de Predicciones: barra lateral fija + área de trabajo. Se sirve en /admin/ o se aloja aparte
+   (por ejemplo en el dominio del back-office del casino) apuntando a la API con ?api=https://… */
+:root {
+  --bg: #0d0e11; --side: #121318; --card: #17181d; --card-2: #1f2027; --line: #2a2b33; --grid: #24252c;
+  --text: #f1f2f4; --muted: #9a9ca8; --faint: #6c6e79;
+  --brand: #ffd400; --brand-ink: #111;
+  --ok: #2bb560; --ok-txt: #6ee08f; --warn: #f2a93b; --bad: #ef5350; --bad-txt: #ff8a8c; --info: #60a5fa;
+  --sans: "Archivo", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; }
+[hidden] { display: none !important; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; border: 0; background: none; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+a { color: var(--info); }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); } .faint { color: var(--faint); }
+.ok { color: var(--ok-txt); } .bad { color: var(--bad-txt); } .warn { color: var(--warn); }
+
+.app { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100%; }
+@media (max-width: 860px) { .app { grid-template-columns: minmax(0, 1fr); } .side { position: static !important; height: auto !important; } .nav { flex-direction: row !important; overflow-x: auto; } .nav a { white-space: nowrap; } .side .foot { display: none; } }
+.side { background: var(--side); border-right: 1px solid var(--line); position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; padding: 16px 12px; gap: 18px; }
+.brand { font-weight: 800; font-size: 18px; padding: 0 8px; display: flex; align-items: center; gap: 8px; }
+.brand i { width: 26px; height: 26px; border-radius: 7px; background: var(--brand); color: var(--brand-ink); display: grid; place-items: center; font-style: normal; font-size: 14px; }
+.brand small { display: block; font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav a { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 10px; border-radius: 8px; color: var(--muted); text-decoration: none; font-weight: 600; }
+.nav a:hover { background: var(--card); color: var(--text); }
+.nav a.on { background: var(--card-2); color: var(--text); box-shadow: inset 3px 0 0 var(--brand); }
+.nav .count { font-family: var(--mono); font-size: 11px; background: var(--brand); color: var(--brand-ink); border-radius: 999px; padding: 1px 7px; }
+.side .foot { margin-top: auto; font-size: 12px; color: var(--faint); padding: 0 8px; display: flex; flex-direction: column; gap: 6px; }
+
+main { padding: 22px 26px 60px; min-width: 0; }
+@media (max-width: 560px) { main { padding: 16px; } }
+.head { display: flex; align-items: end; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+.head h1 { margin: 0; font-size: 24px; }
+.head p { margin: 4px 0 0; color: var(--muted); max-width: 70ch; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+.btn { background: var(--card-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-weight: 600; font-size: 13px; }
+.btn:hover:not(:disabled) { border-color: #3a3b45; }
+.btn.primary { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+.btn.ok { background: color-mix(in srgb, var(--ok) 22%, var(--card)); border-color: color-mix(in srgb, var(--ok) 45%, var(--line)); color: var(--ok-txt); }
+.btn.bad { background: color-mix(in srgb, var(--bad) 18%, var(--card)); border-color: color-mix(in srgb, var(--bad) 40%, var(--line)); color: var(--bad-txt); }
+.btn.sm { padding: 5px 9px; font-size: 12px; }
+.input, select.input, textarea.input { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
+textarea.input { min-height: 84px; resize: vertical; line-height: 1.45; }
+label.f { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 600; }
+label.f > span em { font-style: normal; color: var(--faint); font-weight: 500; }
+
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 1100px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpi { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.kpi .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .07em; font-weight: 700; }
+.kpi .v { font-family: var(--mono); font-size: 24px; font-weight: 700; }
+.kpi .d { font-size: 12px; color: var(--muted); }
+.kpi.alert { border-color: color-mix(in srgb, var(--bad) 50%, var(--line)); }
+.kpi.attn { border-color: color-mix(in srgb, var(--brand) 45%, var(--line)); }
+
+.grid2 { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; }
+@media (max-width: 1100px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+.panel h2 { margin: 0 0 12px; font-size: 15px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.panel h2 small { color: var(--muted); font-weight: 500; font-size: 12px; }
+
+.cov { display: grid; grid-template-columns: 150px minmax(0, 1fr) 70px; gap: 10px; align-items: center; font-size: 13px; padding: 3px 0; }
+.cov .bar { position: relative; height: 12px; background: var(--card-2); border-radius: 3px; }
+.cov .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--ok); }
+.cov .bar i.p { background: var(--brand); opacity: .55; }
+.cov .bar b { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); opacity: .7; }
+.cov .n { text-align: right; font-family: var(--mono); font-size: 12px; }
+
+.chart svg text { fill: var(--faint); font-family: var(--mono); font-size: 10px; }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 10px; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--card); position: sticky; top: 0; }
+td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+td .t { font-weight: 600; max-width: 460px; min-width: 240px; }
+a.btn { text-decoration: none; display: inline-block; }
+.pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--card-2); white-space: nowrap; }
+.pill.open { color: var(--ok-txt); } .pill.closed, .pill.resolving, .pill.proposed { color: var(--warn); } .pill.disputed, .pill.void, .pill.error { color: var(--bad-txt); } .pill.resolved, .pill.finalized { color: var(--info); }
+.opts { display: flex; flex-wrap: wrap; gap: 4px; }
+.opt { font-size: 11px; background: var(--card-2); border-radius: 6px; padding: 2px 6px; white-space: nowrap; }
+.opt b { font-family: var(--mono); }
+
+/* Diseñador */
+.designer { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr); gap: 16px; align-items: start; }
+@media (max-width: 1100px) { .designer { grid-template-columns: minmax(0, 1fr); } }
+.form { display: flex; flex-direction: column; gap: 14px; }
+.form .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 600px) { .form .two { grid-template-columns: 1fr; } }
+.seg { display: inline-flex; background: var(--card-2); border-radius: 8px; padding: 3px; }
+.seg button { padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.seg button.on { background: var(--bg); color: var(--text); }
+.outrow { display: grid; grid-template-columns: minmax(0, 1fr) 120px 34px; gap: 8px; align-items: center; }
+.outrow input[type=range] { width: 100%; accent-color: var(--brand); }
+.sum { font-size: 12px; font-family: var(--mono); }
+.checks { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.checks div::before { margin-right: 6px; }
+.checks .y::before { content: "✓"; color: var(--ok-txt); } .checks .n::before { content: "✕"; color: var(--bad-txt); }
+.preview { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 12px; }
+.pcard { background: #17171a; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.pcard .pic { height: 84px; display: grid; place-items: center; background: radial-gradient(circle at 50% 35%, #3a3000, #0b0b0c 75%); position: relative; }
+.pcard .pic img { width: 100%; height: 100%; object-fit: cover; }
+.pcard .badge { position: absolute; left: 8px; bottom: -9px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; padding: 3px 8px; border-radius: 999px; color: #111; background: var(--brand); }
+.pcard .body { padding: 14px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.pcard .q { font-weight: 600; font-size: 15px; line-height: 1.3; }
+.pcard .big { font-family: var(--mono); font-weight: 700; font-size: 20px; }
+.pcard .yn { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-family: var(--mono); font-size: 12px; }
+.pcard .yn span { border-radius: 6px; padding: 6px; text-align: center; }
+.pcard .yn .y { background: color-mix(in srgb, var(--ok) 20%, transparent); color: var(--ok-txt); }
+.pcard .yn .n { background: color-mix(in srgb, var(--bad) 20%, transparent); color: var(--bad-txt); }
+.pcard .mo { position: relative; display: flex; justify-content: space-between; font-size: 12px; padding: 5px 8px; border-radius: 6px; background: var(--card-2); overflow: hidden; }
+.pcard .mo i { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--brand) 16%, transparent); }
+.pcard .mo span, .pcard .mo b { position: relative; }
+.rules { font-size: 12px; color: var(--muted); line-height: 1.5; background: var(--card-2); border-radius: 10px; padding: 10px 12px; }
+.rules b { color: var(--text); }
+
+.cards { display: flex; flex-direction: column; gap: 10px; }
+.dcard { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.dcard h3 { margin: 0 0 6px; font-size: 15px; }
+.dcard .meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.dcard details { font-size: 12px; color: var(--muted); margin-top: 8px; }
+.dcard details p { margin: 6px 0; line-height: 1.45; }
+.dcard .acts { display: flex; flex-direction: column; gap: 6px; }
+@media (max-width: 700px) { .dcard { grid-template-columns: 22px minmax(0, 1fr); } .dcard .acts { grid-column: 2; flex-direction: row; flex-wrap: wrap; } }
+.empty { color: var(--muted); padding: 28px; text-align: center; border: 1px dashed var(--line); border-radius: 12px; }
+
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: grid; place-items: center; z-index: 50; padding: 16px; }
+.modal { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; width: min(560px, 100%); max-height: 90vh; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.modal h3 { margin: 0; font-size: 17px; }
+.toast { position: fixed; right: 18px; bottom: 18px; background: #000; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; z-index: 60; max-width: 420px; font-size: 13px; }
+.toast.err { border-color: var(--bad); }
+.login { min-height: 100%; display: grid; place-items: center; padding: 16px; }
+.login .panel { width: min(400px, 100%); display: flex; flex-direction: column; gap: 12px; }
+.creds { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; word-break: break-all; display: flex; flex-direction: column; gap: 6px; }
+.bars2 { display: grid; grid-template-columns: 150px minmax(0, 1fr) 64px 40px; gap: 10px; align-items: center; font-size: 13px; padding: 3px 0; }
+.bars2 .bar { position: relative; height: 12px; background: var(--card-2); border-radius: 3px; }
+.bars2 .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--brand); opacity: .85; }
+.bars2 .bar b { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); opacity: .6; }
+.calib text { fill: var(--faint); font-family: var(--mono); font-size: 11px; }
+.banner { border: 1px dashed var(--line); border-radius: 10px; padding: 10px 14px; color: var(--muted); font-size: 13px; line-height: 1.5; margin-bottom: 14px; }
+.banner b { color: var(--text); }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
+@media (max-width: 1100px) { .grid3 { grid-template-columns: minmax(0, 1fr); } }
+.help { font-size: 12px; color: var(--faint); line-height: 1.5; margin: 8px 0 0; }
+</style>
+</head>
+<body>
+<div class="login" id="login" hidden>
+  <form class="panel" id="loginForm">
+    <div class="brand"><i>P</i><div>Predicciones<small>Back-office</small></div></div>
+    <label class="f"><span>Clave de administración (ADMIN_API_KEY)</span><input class="input" id="lkKey" type="password" required autocomplete="current-password"></label>
+    <label class="f"><span>Tu nombre <em>(queda registrado en aprobaciones y resoluciones)</em></span><input class="input" id="lkUser" required autocomplete="username"></label>
+    <label class="f"><span>URL de la API <em>(vacío = este mismo servidor)</em></span><input class="input" id="lkApi" placeholder="https://api.predicciones.tu-dominio.com"></label>
+    <button class="btn primary" type="submit">Entrar</button>
+    <div class="bad" id="lkErr" role="alert"></div>
+  </form>
+</div>
+
+<div class="app" id="app" hidden>
+  <aside class="side">
+    <div class="brand"><i>P</i><div>Predicciones<small>Back-office</small></div></div>
+    <nav class="nav" id="nav">
+      <a href="#resumen" data-v="resumen">Resumen</a>
+      <a href="#disenar" data-v="disenar">Diseñar mercado</a>
+      <a href="#moderacion" data-v="moderacion">Moderación <span class="count" id="cDrafts" hidden></span></a>
+      <a href="#mercados" data-v="mercados">Mercados</a>
+      <a href="#resoluciones" data-v="resoluciones">Resoluciones <span class="count" id="cRes" hidden></span></a>
+      <a href="#tendencias" data-v="tendencias">Tendencias y señales</a>
+      <a href="#fuentes" data-v="fuentes">Fuentes</a>
+      <a href="#calibracion" data-v="calibracion">Calibración y sesgo</a>
+      <a href="#oraculo" data-v="oraculo">Oráculo</a>
+      <a href="#riesgo" data-v="riesgo">Riesgo de la casa</a>
+      <a href="#operadores" data-v="operadores">Casinos</a>
+      <a href="#mms" data-v="mms">Market makers</a>
+      <a href="#liquidacion" data-v="liquidacion">Liquidación</a>
+      <a href="#tesoreria" data-v="tesoreria">Tesorería</a>
+    </nav>
+    <div class="foot"><span id="whoami"></span><span id="apiInfo"></span><button class="btn sm" id="logout" type="button">Salir</button></div>
+  </aside>
+  <main id="main"></main>
+</div>
+<div id="modalRoot"></div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>
+// ---------- Estado y utilidades ----------
+const qs = new URLSearchParams(location.search);
+const store = { get: (k) => { try { return sessionStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch {} }, del: (k) => { try { sessionStorage.removeItem(k); } catch {} } };
+// La URL de la API puede venir fijada en el HTML (<meta name="predicciones-api">) cuando el panel se aloja en otro dominio
+const DEFAULT_API = document.querySelector('meta[name="predicciones-api"]')?.content ?? "";
+const A = { key: store.get("pa_key"), user: store.get("pa_user"), api: qs.get("api") ?? store.get("pa_api") ?? DEFAULT_API };
+let CATS = [], OV = null, VIEW = "resumen", DESIGN = null;
+
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const money = (m) => "$" + (Number(m) / 1e6).toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const kmoney = (m) => { const u = Number(m) / 1e6; return u >= 1e6 ? "$" + (u / 1e6).toLocaleString("es-EC", { maximumFractionDigits: 2 }) + " M" : u >= 1e4 ? "$" + (u / 1e3).toLocaleString("es-EC", { maximumFractionDigits: 1 }) + " k" : "$" + u.toLocaleString("es-EC", { maximumFractionDigits: 2 }); };
+const fdate = (d) => d ? new Date(d).toLocaleString("es-EC", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
+const fday = (d) => d ? new Date(d).toLocaleDateString("es-EC", { day: "numeric", month: "short", year: "numeric" }) : "—";
+const catName = (s) => CATS.find((c) => c.slug === s)?.name ?? s;
+const ago = (d) => { const m = Math.round((Date.now() - new Date(d)) / 60000); return m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} d`; };
+const until = (d) => { const m = Math.round((new Date(d) - Date.now()) / 60000); return m <= 0 ? "terminó" : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
+const STATUS = { open: "Abierto", closed: "Cerrado", resolving: "En resolución", resolved: "Resuelto", void: "Anulado", proposed: "Propuesta", disputed: "Disputada", finalized: "Finalizada", rejected: "Rechazada", pending: "Pendiente", approved: "Aprobado" };
+const pill = (s) => `<span class="pill ${esc(s)}">${esc(STATUS[s] ?? s)}</span>`;
+
+function toast(msg, err) { const t = document.getElementById("toast"); t.textContent = msg; t.className = "toast" + (err ? " err" : ""); t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => (t.hidden = true), 4500); }
+
+async function api(path, opts = {}) {
+  const r = await fetch(A.api.replace(/\/$/, "") + path, { ...opts, headers: { "content-type": "application/json", "x-admin-key": A.key ?? "", "x-admin-user": A.user ?? "", ...(opts.headers ?? {}) }, body: opts.body && typeof opts.body !== "string" ? JSON.stringify(opts.body) : opts.body });
+  const body = await r.json().catch(() => ({}));
+  if (r.status === 401) { logout(); throw new Error("Sesión de administración inválida"); }
+  if (!r.ok) throw new Error(body.message ?? `Error ${r.status}`);
+  return body;
+}
+async function run(btn, fn, okMsg) {
+  if (btn) btn.disabled = true;
+  try { const r = await fn(); if (okMsg) toast(typeof okMsg === "function" ? okMsg(r) : okMsg); return r; }
+  catch (e) { toast(e.message, true); }
+  finally { if (btn) btn.disabled = false; }
+}
+
+/** Ventana modal con formulario. fields: [{id,label,type,options,value,placeholder}] -> devuelve objeto o null. */
+function modal({ title, text = "", fields = [], ok = "Confirmar", danger = false }) {
+  return new Promise((resolve) => {
+    const root = document.getElementById("modalRoot");
+    root.innerHTML = `<div class="modal-bg"><form class="modal" role="dialog" aria-modal="true"><h3>${esc(title)}</h3>${text ? `<div class="muted" style="line-height:1.5">${text}</div>` : ""}
+      ${fields.map((f) => `<label class="f"><span>${esc(f.label)}</span>${f.type === "select" ? `<select class="input" id="m_${f.id}">${f.options.map(([v, l]) => `<option value="${esc(v)}" ${v === f.value ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>` : f.type === "textarea" ? `<textarea class="input" id="m_${f.id}" placeholder="${esc(f.placeholder ?? "")}">${esc(f.value ?? "")}</textarea>` : f.type === "checkbox" ? `<span class="row"><input type="checkbox" id="m_${f.id}" ${f.value ? "checked" : ""}> ${esc(f.hint ?? "")}</span>` : `<input class="input" id="m_${f.id}" type="${f.type ?? "text"}" value="${esc(f.value ?? "")}" placeholder="${esc(f.placeholder ?? "")}">`}</label>`).join("")}
+      <div class="row" style="justify-content:flex-end"><button class="btn" type="button" data-x>Cancelar</button><button class="btn ${danger ? "bad" : "primary"}" type="submit">${esc(ok)}</button></div></form></div>`;
+    const form = root.querySelector("form");
+    const close = (v) => { root.innerHTML = ""; resolve(v); };
+    root.querySelector("[data-x]").onclick = () => close(null);
+    root.querySelector(".modal-bg").onclick = (e) => { if (e.target.classList.contains("modal-bg")) close(null); };
+    form.onsubmit = (e) => { e.preventDefault(); const out = {}; for (const f of fields) { const el = document.getElementById("m_" + f.id); out[f.id] = f.type === "checkbox" ? el.checked : el.value; } close(out); };
+    (form.querySelector("input,select,textarea") ?? form.querySelector("button[type=submit]")).focus();
+  });
+}
+
+function barChart(data, { h = 140, fmt = (v) => v, label = "" } = {}) {
+  const W = 600, pad = { l: 4, r: 4, t: 8, b: 18 }, max = Math.max(1, ...data.map((d) => d.v));
+  const bw = (W - pad.l - pad.r) / data.length;
+  const bars = data.map((d, i) => { const bh = (d.v / max) * (h - pad.t - pad.b); return `<rect x="${pad.l + i * bw + 1}" y="${h - pad.b - bh}" width="${Math.max(1, bw - 2)}" height="${bh}" rx="2" fill="var(--brand)" opacity="${d.v ? .85 : .2}"><title>${esc(d.l)}: ${esc(fmt(d.v))}</title></rect>`; }).join("");
+  const ticks = data.map((d, i) => i % 4 === 0 ? `<text x="${pad.l + i * bw + bw / 2}" y="${h - 4}" text-anchor="middle">${esc(d.short)}</text>` : "").join("");
+  return `<div class="chart"><svg viewBox="0 0 ${W} ${h}" width="100%" height="${h}" preserveAspectRatio="none" role="img" aria-label="${esc(label)}">${bars}${ticks}</svg></div>`;
+}
+
+// ---------- Sesión ----------
+function logout() { store.del("pa_key"); A.key = null; document.getElementById("app").hidden = true; document.getElementById("login").hidden = false; }
+document.getElementById("logout").onclick = logout;
+document.getElementById("loginForm").onsubmit = async (e) => {
+  e.preventDefault();
+  A.key = document.getElementById("lkKey").value.trim(); A.user = document.getElementById("lkUser").value.trim(); A.api = document.getElementById("lkApi").value.trim();
+  try { await fetch(A.api.replace(/\/$/, "") + "/admin/overview", { headers: { "x-admin-key": A.key } }).then((r) => { if (!r.ok) throw new Error(r.status === 401 ? "Clave incorrecta" : `No se pudo conectar (${r.status})`); }); }
+  catch (err) { document.getElementById("lkErr").textContent = err.message.includes("fetch") ? "No se pudo conectar con la API. Revisa la URL." : err.message; return; }
+  store.set("pa_key", A.key); store.set("pa_user", A.user); store.set("pa_api", A.api);
+  start();
+};
+
+async function start() {
+  document.getElementById("login").hidden = true; document.getElementById("app").hidden = false;
+  document.getElementById("whoami").textContent = `Sesión: ${A.user}`;
+  document.getElementById("apiInfo").textContent = `API: ${A.api || location.host}`;
+  CATS = await fetch(A.api.replace(/\/$/, "") + "/v1/categories").then((r) => r.json()).catch(() => []);
+  await refreshCounts();
+  route();
+}
+async function refreshCounts() {
+  OV = await api("/admin/overview").catch(() => OV);
+  if (!OV) return;
+  const set = (id, n) => { const el = document.getElementById(id); el.hidden = !n; el.textContent = n; };
+  set("cDrafts", OV.pending_drafts); set("cRes", OV.open_resolutions + (OV.closed_unproposed ?? 0));
+}
+setInterval(() => { if (A.key) refreshCounts(); }, 30000);
+
+const VIEWS = { resumen: viewResumen, disenar: viewDisenar, moderacion: viewModeracion, mercados: viewMercados, resoluciones: viewResoluciones, tendencias: viewTendencias, fuentes: viewFuentes, riesgo: viewRiesgo, operadores: viewOperadores, calibracion: viewCalibracion, oraculo: viewOraculo, mms: viewMms, liquidacion: viewLiquidacion, tesoreria: viewTesoreria };
+function route() {
+  VIEW = (location.hash.slice(1) || "resumen"); if (!VIEWS[VIEW]) VIEW = "resumen";
+  document.querySelectorAll("#nav a").forEach((a) => a.classList.toggle("on", a.dataset.v === VIEW));
+  const main = document.getElementById("main");
+  main.innerHTML = `<div class="muted">Cargando…</div>`;
+  VIEWS[VIEW](main).catch((e) => { main.innerHTML = `<div class="empty">No se pudo cargar: ${esc(e.message)}</div>`; });
+}
+addEventListener("hashchange", route);
+
+// ---------- Resumen ----------
+async function viewResumen(el) {
+  await refreshCounts();
+  const o = OV, cov = await api("/admin/categories/coverage");
+  const short = cov.filter((c) => c.open_events + c.pending_drafts < c.minimum);
+  const alerts = [
+    o.failed_credits && `<div class="bad">${o.failed_credits} crédito(s) al casino fallaron y se están reintentando.</div>`,
+    o.sources_failing && `<div class="warn">${o.sources_failing} fuente(s) con error en la última lectura. <a href="#fuentes">Ver fuentes</a></div>`,
+    o.awaiting_resolution && `<div class="warn">${o.awaiting_resolution} evento(s) cerrados esperan resolución. <a href="#resoluciones">Resolverlos</a></div>`,
+    short.length && `<div class="warn">${short.length} categoría(s) por debajo del mínimo de ${short[0].minimum} mercados.</div>`,
+    !o.aiEnabled && `<div class="muted">La IA está desactivada: configura ANTHROPIC_API_KEY para generar y resolver preguntas automáticamente.</div>`,
+  ].filter(Boolean);
+  const maxCov = Math.max(...cov.map((c) => Math.max(c.minimum, c.open_events + c.pending_drafts)), 1);
+  el.innerHTML = `<div class="head"><div><h1>Resumen</h1><p>Estado de la plataforma en las últimas 24 horas.</p></div><div class="row"><a class="btn primary" href="#disenar">+ Diseñar mercado</a></div></div>
+    <div class="kpis">
+      <div class="kpi"><span class="k">Volumen 24 h</span><span class="v">${kmoney(o.volume_24h)}</span><span class="d">${o.trades_24h.toLocaleString("es-EC")} apuestas · total ${kmoney(o.volume_total)}</span></div>
+      <div class="kpi"><span class="k">Comisiones 24 h</span><span class="v">${money(o.fees_24h)}</span><span class="d">Total ${money(o.fees_total)}</span></div>
+      <div class="kpi"><span class="k">Mercados abiertos</span><span class="v">${o.open_events}</span><span class="d">${o.awaiting_resolution} esperando resolución</span></div>
+      <div class="kpi"><span class="k">Jugadores en línea</span><span class="v">${o.players_online}</span><span class="d">${o.players_total.toLocaleString("es-EC")} registrados</span></div>
+      <a class="kpi ${o.pending_drafts ? "attn" : ""}" href="#moderacion" style="text-decoration:none;color:inherit"><span class="k">Por moderar</span><span class="v">${o.pending_drafts}</span><span class="d">${o.autoApprove ? "Autoaprobación de IA activa" : "Preguntas de la IA y manuales"}</span></a>
+      <a class="kpi ${o.open_resolutions ? "attn" : ""}" href="#resoluciones" style="text-decoration:none;color:inherit"><span class="k">Resoluciones abiertas</span><span class="v">${o.open_resolutions}</span><span class="d">Propuestas o disputadas</span></a>
+      <div class="kpi ${o.failed_credits ? "alert" : ""}"><span class="k">Créditos fallidos</span><span class="v">${o.failed_credits}</span><span class="d">${o.pending_webhooks} webhooks pendientes</span></div>
+      <a class="kpi" href="#riesgo" style="text-decoration:none;color:inherit"><span class="k">Riesgo de la casa</span><span class="v">${kmoney(o.house_open_cost)}</span><span class="d">Realizado ${money(o.house_realized)}</span></a>
+    </div>
+    <div class="grid2">
+      <div class="panel"><h2>Volumen por hora <small>últimas 24 h</small></h2>${barChart(o.hourly.map((h) => ({ v: Number(h.volume), l: fdate(h.t), short: new Date(h.t).toLocaleTimeString("es-EC", { hour: "2-digit" }) })), { fmt: kmoney, label: "Volumen por hora" })}
+        ${alerts.length ? `<h2 style="margin-top:16px">Alertas</h2><div style="display:flex;flex-direction:column;gap:8px;font-size:13px">${alerts.join("")}</div>` : `<p class="ok" style="margin:14px 0 0">Sin alertas.</p>`}</div>
+      <div class="panel"><h2>Cobertura por categoría <span class="row"><small>mínimo ${cov[0]?.minimum ?? 25}</small><button class="btn sm" id="refill" ${o.aiEnabled ? "" : "disabled title='Requiere ANTHROPIC_API_KEY'"}>Rellenar con IA</button></span></h2>
+        ${cov.map((c) => { const tot = c.open_events + c.pending_drafts; return `<div class="cov"><span>${esc(c.name)}</span><span class="bar" title="${c.open_events} abiertos + ${c.pending_drafts} pendientes"><i style="width:${(c.open_events / maxCov) * 100}%"></i><i class="p" style="left:${(c.open_events / maxCov) * 100}%;width:${(c.pending_drafts / maxCov) * 100}%"></i><b style="left:${(c.minimum / maxCov) * 100}%"></b></span><span class="n ${tot < c.minimum ? "warn" : ""}">${c.open_events}${c.pending_drafts ? `+${c.pending_drafts}` : ""}</span></div>`; }).join("")}
+        <p class="faint" style="font-size:11px;margin:8px 0 0">Verde: abiertos · Amarillo: borradores pendientes · Línea: mínimo</p></div>
+    </div>`;
+  el.querySelector("#refill")?.addEventListener("click", (e) => run(e.target, () => api("/admin/categories/refill", { method: "POST", body: {} }), (r) => `Relleno lanzado: ${r.reduce((a, x) => a + (x.created?.length ?? 0), 0)} borradores nuevos`).then(() => route()));
+}
+
+// ---------- Diseñador ----------
+const blankDesign = () => ({ title: "", description: "", category: CATS[0]?.slug ?? "politica", kind: "binary", yes: 0.5,
+  outcomes: [{ label: "", probability: 0.34 }, { label: "", probability: 0.33 }, { label: "Otro", probability: 0.33 }],
+  closeTime: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 16), resolutionCriteria: "", resolutionSource: "", imageUrl: "", tags: "", featured: false, draftId: null });
+
+function designFromPayload(p, draftId = null) {
+  const multi = p.kind === "multi";
+  return { ...blankDesign(), title: p.title ?? "", description: p.description ?? "", category: p.category, kind: p.kind ?? "binary",
+    yes: multi ? 0.5 : p.outcomes?.[0]?.probability ?? 0.5, outcomes: multi ? p.outcomes.map((o) => ({ label: o.label, probability: o.probability })) : blankDesign().outcomes,
+    closeTime: p.closeTime ? new Date(new Date(p.closeTime).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : blankDesign().closeTime,
+    resolutionCriteria: p.resolutionCriteria ?? "", resolutionSource: p.resolutionSource ?? "", imageUrl: p.imageUrl ?? "", tags: (p.tags ?? []).join(", "), featured: !!p.featured, draftId };
+}
+function designPayload(d) {
+  return { title: d.title.trim(), description: d.description.trim(), category: d.category, kind: d.kind,
+    outcomes: d.kind === "binary" ? [{ label: "Sí", probability: Number(d.yes) }] : d.outcomes.filter((o) => o.label.trim()).map((o) => ({ label: o.label.trim(), probability: Number(o.probability) })),
+    closeTime: new Date(d.closeTime).toISOString(), resolutionCriteria: d.resolutionCriteria.trim(), resolutionSource: d.resolutionSource.trim(),
+    ...(d.imageUrl.trim() ? { imageUrl: d.imageUrl.trim() } : {}), tags: d.tags.split(",").map((t) => t.trim()).filter(Boolean), featured: d.featured };
+}
+function designChecks(d) {
+  const p = designPayload(d), close = new Date(d.closeTime);
+  const sum = p.outcomes.reduce((a, o) => a + o.probability, 0);
+  return [
+    [/^¿.{6,}\?$/.test(p.title), "La pregunta empieza con ¿ y termina con ?"],
+    [p.title.length <= 200, "Máximo 200 caracteres"],
+    [close > new Date(Date.now() + 3600e3), "Cierra al menos 1 hora en el futuro"],
+    [p.kind === "binary" || (p.outcomes.length >= 2 && p.outcomes.length <= 20), "Opción múltiple: entre 2 y 20 opciones con nombre"],
+    [p.kind === "binary" || Math.abs(sum - 1) <= 0.02, `Las probabilidades suman 100% (ahora ${Math.round(sum * 100)}%)`],
+    [p.outcomes.every((o) => o.probability >= 0.01 && o.probability <= 0.99), "Cada probabilidad entre 1% y 99%"],
+    [p.resolutionCriteria.length >= 10, "Criterio de resolución claro (mín. 10 caracteres)"],
+    [p.resolutionSource.length >= 3, "Fuente oficial que decide"],
+  ];
+}
+
+async function viewDisenar(el) {
+  DESIGN ??= blankDesign();
+  const d = DESIGN;
+  el.innerHTML = `<div class="head"><div><h1>${d.draftId ? `Editar borrador #${d.draftId}` : "Diseñar mercado"}</h1><p>Crea una pregunta Sí/No o de opción múltiple. A la derecha ves cómo la verá el jugador.</p></div>
+    <div class="row"><button class="btn" id="dReset" type="button">Empezar de cero</button>${OV?.aiEnabled ? `<button class="btn" id="dAi" type="button">Generar con IA…</button>` : ""}</div></div>
+    <div class="designer">
+      <div class="panel form" id="dForm">
+        <label class="f"><span>Pregunta</span><input class="input" id="d_title" value="${esc(d.title)}" placeholder="¿Quién ganará Miss Universo 2026?" maxlength="200"></label>
+        <label class="f"><span>Contexto para el jugador <em>(opcional)</em></span><textarea class="input" id="d_description" style="min-height:60px" placeholder="Una o dos frases que expliquen por qué importa.">${esc(d.description)}</textarea></label>
+        <div class="two">
+          <label class="f"><span>Categoría</span><select class="input" id="d_category">${CATS.map((c) => `<option value="${c.slug}" ${c.slug === d.category ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label>
+          <label class="f"><span>Cierre de apuestas <em>(hora local)</em></span><input class="input" id="d_closeTime" type="datetime-local" value="${esc(d.closeTime)}"></label>
+        </div>
+        <div class="f"><span class="muted" style="font-size:12px;font-weight:600">Tipo de mercado</span>
+          <span class="seg" id="d_kind"><button type="button" data-k="binary" class="${d.kind === "binary" ? "on" : ""}">Sí / No</button><button type="button" data-k="multi" class="${d.kind === "multi" ? "on" : ""}">Opción múltiple</button></span></div>
+        <div id="d_outcomes"></div>
+        <label class="f"><span>Criterio de resolución</span><textarea class="input" id="d_resolutionCriteria" placeholder="Se resuelve Sí si…; empate, aplazamiento o cancelación se resuelven…">${esc(d.resolutionCriteria)}</textarea>
+          <button class="btn sm" type="button" id="dTpl" style="align-self:flex-start">Usar plantilla estándar</button></label>
+        <div class="two">
+          <label class="f"><span>Fuente oficial que decide</span><input class="input" id="d_resolutionSource" value="${esc(d.resolutionSource)}" placeholder="Organización Miss Universo"></label>
+          <label class="f"><span>Imagen <em>(URL, opcional)</em></span><input class="input" id="d_imageUrl" value="${esc(d.imageUrl)}" placeholder="https://…/imagen.jpg"></label>
+        </div>
+        <div class="two">
+          <label class="f"><span>Etiquetas <em>(separadas por coma)</em></span><input class="input" id="d_tags" value="${esc(d.tags)}" placeholder="miss universo, reinados"></label>
+          <label class="f"><span>Portada</span><span class="row" style="height:38px"><input type="checkbox" id="d_featured" ${d.featured ? "checked" : ""}> Destacar en la portada del módulo</span></label>
+        </div>
+      </div>
+      <div class="preview">
+        <div class="panel"><h2>Vista previa <small>tarjeta del jugador</small></h2><div id="dPreview"></div></div>
+        <div class="panel"><h2>Revisión</h2><div class="checks" id="dChecks"></div>
+          <div class="row" style="margin-top:14px">${d.draftId ? `<button class="btn primary" id="dApprove" type="button">Aprobar y publicar</button>` : `<button class="btn primary" id="dPublish" type="button">Publicar mercado</button><button class="btn" id="dDraft" type="button">Guardar como borrador</button>`}</div>
+          <p class="faint" style="font-size:12px;margin:10px 0 0">Al publicar, el market maker de la casa empieza a cotizar con las probabilidades iniciales.</p></div>
+      </div>
+    </div>`;
+  const read = () => {
+    for (const k of ["title", "description", "category", "closeTime", "resolutionCriteria", "resolutionSource", "imageUrl", "tags"]) d[k] = document.getElementById("d_" + k).value;
+    d.featured = document.getElementById("d_featured").checked;
+  };
+  const renderOutcomes = () => {
+    const box = document.getElementById("d_outcomes");
+    if (d.kind === "binary") {
+      box.innerHTML = `<label class="f"><span>Probabilidad inicial del Sí: <b class="num" id="d_yesv">${Math.round(d.yes * 100)}%</b> <em>(precio de apertura ${Math.round(d.yes * 100)}¢ / No ${100 - Math.round(d.yes * 100)}¢)</em></span><input type="range" min="1" max="99" value="${Math.round(d.yes * 100)}" id="d_yes" style="accent-color:var(--brand)"></label>`;
+      box.querySelector("#d_yes").oninput = (e) => { d.yes = e.target.value / 100; box.querySelector("#d_yesv").textContent = e.target.value + "%"; refresh(); };
+    } else {
+      const sum = d.outcomes.reduce((a, o) => a + Number(o.probability || 0), 0);
+      box.innerHTML = `<div class="f"><span class="muted" style="font-size:12px;font-weight:600">Opciones y probabilidad inicial</span>
+        ${d.outcomes.map((o, i) => `<div class="outrow"><input class="input" data-ol="${i}" value="${esc(o.label)}" placeholder="Opción ${i + 1}"><span class="row" style="flex-wrap:nowrap"><input class="input num" data-op="${i}" type="number" min="1" max="99" step="1" value="${Math.round(o.probability * 100)}" style="text-align:right"><span class="muted">%</span></span><button type="button" class="btn sm" data-od="${i}" aria-label="Quitar opción" ${d.outcomes.length <= 2 ? "disabled" : ""}>✕</button></div>`).join("")}
+        <div class="row" style="justify-content:space-between"><span class="row"><button type="button" class="btn sm" id="d_add">+ Agregar opción</button><button type="button" class="btn sm" id="d_norm">Normalizar a 100%</button></span><span class="sum ${Math.abs(sum - 1) > 0.02 ? "warn" : "ok"}">Suma: ${Math.round(sum * 100)}%</span></div></div>`;
+      box.querySelectorAll("[data-ol]").forEach((inp) => (inp.oninput = () => { d.outcomes[inp.dataset.ol].label = inp.value; refresh(); }));
+      box.querySelectorAll("[data-op]").forEach((inp) => (inp.oninput = () => { d.outcomes[inp.dataset.op].probability = Number(inp.value) / 100; refresh(true); }));
+      box.querySelectorAll("[data-od]").forEach((b) => (b.onclick = () => { d.outcomes.splice(Number(b.dataset.od), 1); renderOutcomes(); refresh(); }));
+      box.querySelector("#d_add").onclick = () => { d.outcomes.push({ label: "", probability: 0.05 }); renderOutcomes(); refresh(); };
+      box.querySelector("#d_norm").onclick = () => {
+        const s = d.outcomes.reduce((a, o) => a + Number(o.probability || 0), 0) || 1;
+        const pct = d.outcomes.map((o) => Math.max(1, Math.round((Number(o.probability || 0) / s) * 100)));
+        // El redondeo puede dejar 99% o 101%: el ajuste va a la opción más probable
+        pct[pct.indexOf(Math.max(...pct))] += 100 - pct.reduce((a, b) => a + b, 0);
+        d.outcomes.forEach((o, i) => (o.probability = pct[i] / 100));
+        renderOutcomes(); refresh();
+      };
+    }
+  };
+  const refresh = (sumOnly) => {
+    read();
+    if (sumOnly && d.kind === "multi") { const s = d.outcomes.reduce((a, o) => a + Number(o.probability || 0), 0); const el2 = document.querySelector("#d_outcomes .sum"); el2.textContent = `Suma: ${Math.round(s * 100)}%`; el2.className = "sum " + (Math.abs(s - 1) > 0.02 ? "warn" : "ok"); }
+    const p = designPayload(d);
+    const yes = Math.round((p.outcomes[0]?.probability ?? 0.5) * 100);
+    document.getElementById("dPreview").innerHTML = `<div class="pcard"><div class="pic">${p.imageUrl ? `<img src="${esc(p.imageUrl)}" alt="">` : ""}<span class="badge">${esc(catName(p.category))}</span></div><div class="body">
+      <div class="q">${esc(p.title || "Escribe la pregunta…")}</div>
+      ${p.kind === "binary" ? `<div class="big">${yes}% <span class="muted" style="font-size:12px;font-family:var(--sans)">Sí</span></div><div class="yn"><span class="y">Sí ${yes}¢</span><span class="n">No ${100 - yes}¢</span></div>`
+        : [...p.outcomes].sort((a, b) => b.probability - a.probability).slice(0, 4).map((o) => `<div class="mo"><i style="width:${o.probability * 100}%"></i><span>${esc(o.label)}</span><b class="num">${Math.round(o.probability * 100)}%</b></div>`).join("") || `<span class="faint">Agrega opciones…</span>`}
+      <div class="faint" style="font-size:11px">Cierra ${fdate(d.closeTime)}</div></div></div>
+      <div class="rules" style="margin-top:10px"><b>Cómo se resuelve:</b> ${esc(p.resolutionCriteria || "—")}<br><b>Fuente:</b> ${esc(p.resolutionSource || "—")}</div>`;
+    const checks = designChecks(d);
+    document.getElementById("dChecks").innerHTML = checks.map(([ok, t]) => `<div class="${ok ? "y" : "n"}">${esc(t)}</div>`).join("");
+    const allOk = checks.every(([ok]) => ok);
+    ["dPublish", "dDraft", "dApprove"].forEach((id) => { const b = document.getElementById(id); if (b) b.disabled = !allOk && id !== "dDraft"; });
+  };
+  el.querySelector("#dForm").addEventListener("input", () => refresh());
+  el.querySelectorAll("#d_kind button").forEach((b) => (b.onclick = () => { d.kind = b.dataset.k; el.querySelectorAll("#d_kind button").forEach((x) => x.classList.toggle("on", x === b)); renderOutcomes(); refresh(); }));
+  el.querySelector("#dTpl").onclick = () => {
+    read();
+    const src = d.resolutionSource || "la fuente oficial";
+    document.getElementById("d_resolutionCriteria").value = d.kind === "binary"
+      ? `Se resuelve "Sí" si ${src} confirma lo que plantea la pregunta antes del cierre (${fdate(d.closeTime)}). En cualquier otro caso se resuelve "No". Si el evento se cancela o se aplaza más allá de 60 días, el mercado se anula y se devuelve $0,50 por acción.`
+      : `Gana la opción que coincida con el resultado oficial publicado por ${src}. Si el resultado no corresponde a ninguna opción con nombre, gana "Otro" (si existe). Si el evento se cancela o no se define dentro de los 60 días posteriores al cierre, el mercado se anula y se devuelve $0,50 por acción.`;
+    refresh();
+  };
+  el.querySelector("#dReset").onclick = () => { DESIGN = blankDesign(); route(); };
+  el.querySelector("#dAi")?.addEventListener("click", async (e) => {
+    const r = await modal({ title: "Generar preguntas con IA", text: "La IA investiga en la web la categoría y deja las propuestas en Moderación.", ok: "Generar",
+      fields: [{ id: "category", label: "Categoría", type: "select", options: CATS.map((c) => [c.slug, c.name]), value: d.category }, { id: "count", label: "Cantidad", type: "number", value: 5 }] });
+    if (r) run(e.target, () => api("/admin/drafts/generate", { method: "POST", body: { category: r.category, count: Number(r.count) } }), (x) => `${x.created?.length ?? 0} borradores creados. Revísalos en Moderación.`).then(refreshCounts);
+  });
+  el.querySelector("#dPublish")?.addEventListener("click", (e) => run(e.target, () => api("/admin/events", { method: "POST", body: designPayload(d) }), (ev) => `Publicado: ${ev.title}`).then((ev) => { if (ev) { DESIGN = null; location.hash = "#mercados"; } }));
+  el.querySelector("#dDraft")?.addEventListener("click", (e) => run(e.target, () => api("/admin/drafts", { method: "POST", body: designPayload(d) }), "Guardado en Moderación").then((r) => { if (r) { DESIGN = null; refreshCounts(); location.hash = "#moderacion"; } }));
+  el.querySelector("#dApprove")?.addEventListener("click", (e) => run(e.target, () => api(`/admin/drafts/${d.draftId}/approve`, { method: "POST", body: { edits: designPayload(d) } }), (ev) => `Publicado: ${ev.title}`).then((ev) => { if (ev) { DESIGN = null; refreshCounts(); location.hash = "#moderacion"; } }));
+  renderOutcomes(); refresh();
+}
+
+// ---------- Moderación ----------
+async function viewModeracion(el) {
+  const status = viewModeracion.status ?? "pending";
+  const drafts = await api(`/admin/drafts?status=${status}`);
+  el.innerHTML = `<div class="head"><div><h1>Moderación</h1><p>Preguntas propuestas por la IA (a partir de tendencias o del relleno por categoría) y borradores manuales. Nada se publica sin aprobación${OV?.autoApprove ? ", salvo que la autoaprobación de IA esté activa" : ""}.</p></div>
+    <div class="row"><span class="seg" id="mStatus">${[["pending", "Pendientes"], ["approved", "Aprobados"], ["rejected", "Rechazados"]].map(([k, l]) => `<button type="button" data-s="${k}" class="${k === status ? "on" : ""}">${l}</button>`).join("")}</span>
+    ${status === "pending" ? `<button class="btn ok" id="mBulk" type="button" disabled>Aprobar seleccionados</button>` : ""}</div></div>
+    <div class="cards">${drafts.length ? drafts.map((dr) => { const p = dr.payload; return `<div class="dcard">
+      ${status === "pending" ? `<input type="checkbox" data-sel="${dr.id}" aria-label="Seleccionar">` : `<span></span>`}
+      <div><h3>${esc(p.title)}</h3>
+        <div class="meta"><span>${esc(catName(p.category))}</span><span>${p.kind === "multi" ? "Opción múltiple" : "Sí / No"}</span><span>Cierra ${fday(p.closeTime)}</span><span>${esc(dr.created_by)}</span><span>${ago(dr.created_at)}</span>${dr.trend_label ? `<span>Tendencia: ${esc(dr.trend_label)}</span>` : ""}</div>
+        <div class="opts">${(p.kind === "multi" ? p.outcomes : [{ label: "Sí", probability: p.outcomes?.[0]?.probability }]).map((o) => `<span class="opt">${esc(o.label)} <b>${Math.round((o.probability ?? 0) * 100)}%</b></span>`).join("")}</div>
+        <details><summary>Criterio, fuente y razonamiento</summary><p><b>Resolución:</b> ${esc(p.resolutionCriteria)}</p><p><b>Fuente:</b> ${esc(p.resolutionSource)}</p>${p.rationale ? `<p><b>Por qué:</b> ${esc(p.rationale)}</p>` : ""}${(p.sourceUrls ?? []).length ? `<p>${p.sourceUrls.map((u) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`).join("<br>")}</p>` : ""}${dr.review_note ? `<p><b>Nota de revisión:</b> ${esc(dr.review_note)}</p>` : ""}</details></div>
+      <div class="acts">${status === "pending" ? `<button class="btn ok sm" data-ap="${dr.id}">Aprobar</button><button class="btn sm" data-ed="${dr.id}">Editar</button><button class="btn bad sm" data-rj="${dr.id}">Rechazar</button>` : dr.event_id ? `<span class="faint" style="font-size:12px">Evento #${dr.event_id}</span>` : ""}</div></div>`; }).join("") : `<div class="empty">No hay borradores ${status === "pending" ? "pendientes" : STATUS[status]?.toLowerCase() + "s"}.</div>`}</div>`;
+  el.querySelectorAll("#mStatus button").forEach((b) => (b.onclick = () => { viewModeracion.status = b.dataset.s; route(); }));
+  const sel = () => [...el.querySelectorAll("[data-sel]:checked")].map((c) => c.dataset.sel);
+  el.querySelectorAll("[data-sel]").forEach((c) => (c.onchange = () => { document.getElementById("mBulk").disabled = !sel().length; }));
+  el.querySelector("#mBulk")?.addEventListener("click", async (e) => {
+    const ids = sel(); let ok = 0;
+    await run(e.target, async () => { for (const id of ids) { await api(`/admin/drafts/${id}/approve`, { method: "POST", body: { edits: {} } }).then(() => ok++).catch((err) => toast(`#${id}: ${err.message}`, true)); } });
+    toast(`${ok} de ${ids.length} publicados`); await refreshCounts(); route();
+  });
+  el.querySelectorAll("[data-ap]").forEach((b) => (b.onclick = () => run(b, () => api(`/admin/drafts/${b.dataset.ap}/approve`, { method: "POST", body: { edits: {} } }), (ev) => `Publicado: ${ev.title}`).then(async (r) => { if (r) { await refreshCounts(); route(); } })));
+  el.querySelectorAll("[data-ed]").forEach((b) => (b.onclick = () => { const dr = drafts.find((x) => String(x.id) === b.dataset.ed); DESIGN = designFromPayload(dr.payload, dr.id); location.hash = "#disenar"; }));
+  el.querySelectorAll("[data-rj]").forEach((b) => (b.onclick = async () => {
+    const r = await modal({ title: "Rechazar borrador", fields: [{ id: "note", label: "Motivo (queda registrado)", type: "textarea", placeholder: "Ambigua, duplicada, tema no permitido…" }], ok: "Rechazar", danger: true });
+    if (r) run(b, () => api(`/admin/drafts/${b.dataset.rj}/reject`, { method: "POST", body: { note: r.note } }), "Borrador rechazado").then(async () => { await refreshCounts(); route(); });
+  }));
+}
+
+// ---------- Mercados ----------
+const MK = { status: "open", category: "", q: "", sort: "new", offset: 0 };
+async function viewMercados(el) {
+  const params = new URLSearchParams({ status: MK.status, sort: MK.sort, limit: "50", offset: String(MK.offset) });
+  if (MK.category) params.set("category", MK.category);
+  if (MK.q) params.set("q", MK.q);
+  const events = await api(`/admin/events?${params}`);
+  el.innerHTML = `<div class="head"><div><h1>Mercados</h1><p>Todos los eventos publicados. Desde aquí se destacan, cierran, resuelven o duplican.</p></div><a class="btn primary" href="#disenar">+ Diseñar mercado</a></div>
+    <div class="row" style="margin-bottom:12px">
+      <select class="input" id="fStatus" style="width:auto">${[["open", "Abiertos"], ["closed,resolving", "Por resolver"], ["resolved,void", "Resueltos y anulados"], ["open,closed,resolving,resolved,void", "Todos"]].map(([v, l]) => `<option value="${v}" ${v === MK.status ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <select class="input" id="fCat" style="width:auto"><option value="">Todas las categorías</option>${CATS.map((c) => `<option value="${c.slug}" ${c.slug === MK.category ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>
+      <select class="input" id="fSort" style="width:auto">${[["new", "Más nuevos"], ["volume", "Más volumen"], ["volume24h", "Volumen 24 h"], ["closing", "Cierran pronto"]].map(([v, l]) => `<option value="${v}" ${v === MK.sort ? "selected" : ""}>${l}</option>`).join("")}</select>
+      <input class="input" id="fQ" type="search" placeholder="Buscar…" value="${esc(MK.q)}" style="width:min(260px,100%)">
+    </div>
+    <div class="tablewrap"><table><thead><tr><th>Mercado</th><th>Categoría</th><th>Precios</th><th class="num">Volumen</th><th class="num">Jugadores</th><th>Cierre</th><th>Estado</th><th></th></tr></thead><tbody>
+    ${events.length ? events.map((e) => `<tr><td><div class="t">${e.featured ? "★ " : ""}${esc(e.title)}</div><span class="faint" style="font-size:11px">#${e.id} · ${e.kind === "multi" ? `${e.markets.length} opciones` : "Sí / No"}</span></td>
+      <td>${esc(catName(e.category))}</td>
+      <td><div class="opts">${(e.kind === "multi" ? [...e.markets].sort((a, b) => b.price - a.price).slice(0, 3) : e.markets).map((m) => `<span class="opt">${esc(e.kind === "multi" ? m.label : "Sí")} <b>${m.price}%</b>${m.resolvedOutcome ? ` → ${m.resolvedOutcome}` : ""}</span>`).join("")}</div></td>
+      <td class="num">${kmoney(e.volume)}</td><td class="num">${e.traders}</td><td style="white-space:nowrap">${fday(e.closeTime)}</td><td>${pill(e.status)}</td>
+      <td><div class="row" style="flex-wrap:nowrap">
+        ${["open", "closed", "resolving"].includes(e.status) ? `<button class="btn sm" data-res="${e.id}">Resolver</button>` : ""}
+        ${e.status === "open" ? `<button class="btn sm" data-feat="${e.id}" data-v="${e.featured ? 0 : 1}">${e.featured ? "Quitar ★" : "Destacar"}</button><button class="btn sm" data-close="${e.id}">Cerrar</button>` : ""}
+        <button class="btn sm" data-dup="${e.id}">Duplicar</button><button class="btn sm" data-ref="${e.id}">Referencia</button></div></td></tr>`).join("") : `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">No hay mercados con estos filtros.</td></tr>`}
+    </tbody></table></div>
+    <div class="row" style="justify-content:space-between;margin-top:10px"><button class="btn sm" id="pPrev" ${MK.offset ? "" : "disabled"}>← Anteriores</button><span class="faint">Mostrando ${MK.offset + 1}–${MK.offset + events.length}</span><button class="btn sm" id="pNext" ${events.length === 50 ? "" : "disabled"}>Siguientes →</button></div>`;
+  const reload = () => { MK.offset = 0; route(); };
+  el.querySelector("#fStatus").onchange = (e) => { MK.status = e.target.value; reload(); };
+  el.querySelector("#fCat").onchange = (e) => { MK.category = e.target.value; reload(); };
+  el.querySelector("#fSort").onchange = (e) => { MK.sort = e.target.value; reload(); };
+  el.querySelector("#fQ").oninput = (e) => { clearTimeout(viewMercados.t); viewMercados.t = setTimeout(() => { MK.q = e.target.value.trim(); reload(); }, 350); };
+  el.querySelector("#pPrev").onclick = () => { MK.offset = Math.max(0, MK.offset - 50); route(); };
+  el.querySelector("#pNext").onclick = () => { MK.offset += 50; route(); };
+  const ev = (id) => events.find((x) => String(x.id) === String(id));
+  el.querySelectorAll("[data-feat]").forEach((b) => (b.onclick = () => run(b, () => api(`/admin/events/${b.dataset.feat}`, { method: "PATCH", body: { featured: b.dataset.v === "1" } }), "Actualizado").then(() => route())));
+  el.querySelectorAll("[data-close]").forEach((b) => (b.onclick = async () => {
+    const r = await modal({ title: "Cerrar mercado", text: `Se detienen las apuestas de <b>${esc(ev(b.dataset.close).title)}</b> y se devuelven las órdenes pendientes. Después hay que resolverlo.`, ok: "Cerrar ahora", danger: true });
+    if (r) run(b, () => api(`/admin/events/${b.dataset.close}/close`, { method: "POST", body: {} }), "Mercado cerrado").then(() => route());
+  }));
+  el.querySelectorAll("[data-dup]").forEach((b) => (b.onclick = () => { const e = ev(b.dataset.dup);
+    DESIGN = designFromPayload({ title: e.title, description: e.description, category: e.category, kind: e.kind, outcomes: e.kind === "multi" ? e.markets.map((m) => ({ label: m.label, probability: m.price / 100 })) : [{ label: "Sí", probability: e.markets[0].price / 100 }], resolutionCriteria: e.resolutionCriteria, resolutionSource: e.resolutionSource, imageUrl: e.imageUrl ?? "", tags: e.tags });
+    location.hash = "#disenar"; }));
+  el.querySelectorAll("[data-res]").forEach((b) => (b.onclick = () => resolveDialog(ev(b.dataset.res), b)));
+  el.querySelectorAll("[data-ref]").forEach((b) => (b.onclick = () => referenceDialog(ev(b.dataset.ref), b)));
+}
+async function resolveDialog(e, btn) {
+  const options = e.kind === "multi" ? [...e.markets.map((m) => [String(m.id), `Gana: ${m.label}`]), ["VOID", "Anular (paga $0,50 por acción)"]] : [["YES", "Sí"], ["NO", "No"], ["VOID", "Anular (paga $0,50 por acción)"]];
+  const fields = [{ id: "result", label: "Resultado", type: "select", options }, { id: "explanation", label: "Explicación (la verán los jugadores)", type: "textarea" }, { id: "url", label: "Evidencia (URL de la fuente oficial)", type: "url", placeholder: "https://" }];
+  const r = await modal({ title: "Proponer resolución", text: `<b>${esc(e.title)}</b><br>Fuente: ${esc(e.resolutionSource)}<br>Se detiene el trading y corre la ventana de disputa antes de pagar.${OV?.aiEnabled ? "" : ""}`, fields, ok: "Proponer" });
+  if (!r) return;
+  const body = { explanation: r.explanation, evidence: r.url ? [{ url: r.url }] : [] };
+  if (r.result === "VOID" || r.result === "YES" || r.result === "NO") body.outcome = r.result; else body.winningMarketId = Number(r.result);
+  run(btn, () => api(`/admin/events/${e.id}/resolve`, { method: "POST", body }), "Propuesta creada. Corre la ventana de disputa.").then(async (x) => { if (x) { await refreshCounts(); route(); } });
+}
+
+// ---------- Resoluciones ----------
+async function viewResoluciones(el) {
+  const status = viewResoluciones.status ?? "proposed,disputed";
+  const list = await api(`/admin/resolutions?status=${status}`);
+  const [closed, next] = await Promise.all([api("/admin/events?status=closed&sort=closing&limit=50").then((l) => l.filter((e) => !e.resolution)), api("/admin/events?status=open&sort=closing&limit=3")]);
+  el.innerHTML = `<div class="head"><div><h1>Resoluciones</h1><p>Como el oráculo optimista de Polymarket: alguien propone el resultado con una fianza, corre la ventana de disputa y, si nadie disputa, se paga $1 por acción ganadora. Si hay disputa, decides tú: quien tenía razón recupera su fianza y se lleva la mitad de la del otro.</p></div>
+    <span class="seg" id="rStatus">${[["proposed,disputed", "Abiertas"], ["finalized", "Finalizadas"], ["rejected", "Rechazadas"]].map(([k, l]) => `<button type="button" data-s="${k}" class="${k === status ? "on" : ""}">${l}</button>`).join("")}</span></div>
+    <div class="cards">${list.length ? list.map((r) => `<div class="dcard"><span></span><div><h3>${esc(r.title)}</h3>
+      <div class="meta">${pill(r.status)}<span>Resultado: <b>${r.outcome === "VOID" ? "Anulado" : r.winning_market_id ? `mercado #${r.winning_market_id}` : r.outcome === "YES" ? "Sí" : "No"}</b></span><span>Propuso: ${esc(r.proposer)}</span><span>${ago(r.created_at)}</span>${r.status === "proposed" ? `<span>Ventana: ${until(r.challenge_ends_at)}</span>` : ""}</div>
+      ${r.explanation ? `<div class="muted" style="font-size:13px">${esc(r.explanation)}</div>` : ""}
+      ${(r.evidence ?? []).length ? `<details><summary>Evidencia</summary><p>${r.evidence.map((x) => `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title || x.url)}</a>${x.quote ? ` — “${esc(x.quote)}”` : ""}`).join("<br>")}</p></details>` : ""}
+      ${r.dispute_reason ? `<div class="bad" style="font-size:13px;margin-top:6px">Disputa (${esc(r.disputed_by)}): ${esc(r.dispute_reason)}${(r.dispute_evidence ?? []).map((x) => ` · <a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title || "evidencia")}</a>`).join("")}</div>` : ""}
+      ${r.dispute_result ? `<div class="muted" style="font-size:12px;margin-top:4px">${r.dispute_result === "dispute_upheld" ? "Tenía razón quien disputó" : "Tenía razón quien propuso"}${r.decided_by ? ` · decidió ${esc(r.decided_by)}` : ""}</div>` : ""}
+      ${(r.bonds ?? []).length ? `<div class="faint" style="font-size:12px;margin-top:4px">Fianzas: ${r.bonds.map((b) => `${b.role === "proposer" ? "propuso" : "disputó"} ${b.playerId ? "jugador" : "la casa"} $${(b.amount / 1e6).toFixed(0)} · ${{ held: "retenida", returned: "devuelta", rewarded: `devuelta con premio ($${(b.payout / 1e6).toFixed(0)})`, forfeited: "perdida" }[b.status]}`).join(" · ")}</div>` : ""}</div>
+      <div class="acts">${r.status === "proposed" ? `<button class="btn sm" data-dis="${r.id}">Disputar</button><button class="btn ok sm" data-fin="${r.id}" data-force="${new Date(r.challenge_ends_at) > new Date() ? 1 : 0}">Finalizar${new Date(r.challenge_ends_at) > new Date() ? " ya" : ""}</button>` : ""}
+        ${r.status === "proposed" ? `<button class="btn bad sm" data-rej="${r.id}">Rechazar</button>` : ""}
+        ${r.status === "disputed" ? `<button class="btn ok sm" data-keep="${r.id}">Tenía razón quien propuso</button><button class="btn bad sm" data-upheld="${r.id}" data-ev="${r.event_id}">Tenía razón quien disputó</button>` : ""}</div></div>`).join("") : `<div class="empty">No hay resoluciones en este estado.</div>`}</div>
+    ${closed.length && status !== "finalized" ? `<h2 style="font-size:16px;margin:24px 0 10px">Cerrados sin propuesta · ${closed.length} <span class="faint" style="font-size:12px;font-weight:500">esperan que alguien proponga el resultado${OV?.aiEnabled ? "; la IA puede investigarlo" : ""}</span></h2>
+      <div class="tablewrap"><table><tbody>${closed.map((e) => `<tr><td><div class="t">${esc(e.title)}</div><span class="faint" style="font-size:11px">Cerró ${fday(e.closeTime)} · Fuente: ${esc(e.resolutionSource)}</span>${e.resolutionCriteria ? `<div class="faint" style="font-size:11px;max-width:640px">${esc(e.resolutionCriteria)}</div>` : ""}</td><td style="width:1%"><div class="row" style="flex-wrap:nowrap"><button class="btn primary sm" data-res="${e.id}">Resolver</button>${OV?.aiEnabled ? `<button class="btn sm" data-ai="${e.id}">Resolver con IA</button>` : ""}</div></td></tr>`).join("")}</tbody></table></div>`
+      : status !== "finalized" ? `<p class="muted" style="font-size:13px;margin-top:18px">Ningún mercado cerrado espera resultado.${next.length ? ` Próximos cierres: ${next.map((e) => `<b>${esc(e.title)}</b> (${new Date(e.closeTime).toLocaleString("es-EC", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })})`).join(" · ")}. Al cerrar aparecerán aquí con el botón Resolver.` : ""}</p>` : ""}`;
+  el.querySelectorAll("#rStatus button").forEach((b) => (b.onclick = () => { viewResoluciones.status = b.dataset.s; route(); }));
+  el.querySelectorAll("[data-dis]").forEach((b) => (b.onclick = async () => { const r = await modal({ title: "Disputar propuesta", fields: [{ id: "reason", label: "Motivo", type: "textarea" }], ok: "Disputar", danger: true }); if (r) run(b, () => api(`/admin/resolutions/${b.dataset.dis}/dispute`, { method: "POST", body: { reason: r.reason } }), "Propuesta disputada").then(() => route()); }));
+  el.querySelectorAll("[data-keep]").forEach((b) => (b.onclick = async () => {
+    const r = list.find((x) => String(x.id) === b.dataset.keep);
+    if (!(await modal({ title: "Mantener la propuesta", text: "Se paga el resultado propuesto. Quien propuso recupera su fianza y se lleva la mitad de la de quien disputó.", ok: "Confirmar y pagar" }))) return;
+    run(b, () => api(`/admin/resolutions/${r.id}/decide`, { method: "POST", body: r.outcome === "VOID" || !r.winning_market_id ? { outcome: r.outcome } : { winningMarketId: r.winning_market_id } }), (x) => `Finalizada. ${x.payouts ?? 0} pagos enviados.`).then(async () => { await refreshCounts(); route(); });
+  }));
+  el.querySelectorAll("[data-upheld]").forEach((b) => (b.onclick = async () => {
+    const ev = await api(`/v1/events/${b.dataset.ev}`);
+    const options = ev.kind === "multi" ? ev.markets.map((m) => [`m${m.id}`, m.label]) : [["YES", "Sí"], ["NO", "No"]];
+    const f = await modal({ title: "Dar la razón a la disputa", text: "Se paga el resultado correcto. Quien disputó recupera su fianza y se lleva la mitad de la de quien propuso (si propuso la casa, la paga la casa).", ok: "Resolver y pagar", danger: true,
+      fields: [{ id: "out", label: "Resultado correcto", type: "select", options: [...options, ["VOID", "Anulado"]] }, { id: "note", label: "Nota (opcional)", type: "textarea" }] });
+    if (!f) return;
+    const body = f.out.startsWith("m") ? { winningMarketId: Number(f.out.slice(1)) } : { outcome: f.out };
+    run(b, () => api(`/admin/resolutions/${b.dataset.upheld}/decide`, { method: "POST", body: { ...body, note: f.note || undefined } }), (x) => `Resuelto. ${x.payouts ?? 0} pagos enviados.`).then(async () => { await refreshCounts(); route(); });
+  }));
+  el.querySelectorAll("[data-rej]").forEach((b) => (b.onclick = async () => {
+    if (!(await modal({ title: "Rechazar propuesta", text: "Si la propuso un jugador, pierde su fianza. Después puedes proponer otro resultado desde Mercados.", ok: "Rechazar", danger: true }))) return;
+    run(b, () => api(`/admin/resolutions/${b.dataset.rej}/reject`, { method: "POST", body: {} }), "Propuesta rechazada").then(() => route());
+  }));
+  el.querySelectorAll("[data-fin]").forEach((b) => (b.onclick = async () => {
+    if (b.dataset.force === "1") { const r = await modal({ title: "Finalizar y pagar", text: "Se pagará a los ganadores en sus casinos. Esta acción no se puede deshacer.", ok: "Finalizar" }); if (!r) return; }
+    run(b, () => api(`/admin/resolutions/${b.dataset.fin}/finalize`, { method: "POST", body: { force: b.dataset.force === "1" } }), (x) => `Finalizada. ${x.payouts ?? 0} pagos enviados.`).then(async () => { await refreshCounts(); route(); });
+  }));
+  el.querySelectorAll("[data-res]").forEach((b) => (b.onclick = () => resolveDialog(closed.find((e) => String(e.id) === b.dataset.res), b)));
+  el.querySelectorAll("[data-ai]").forEach((b) => (b.onclick = () => run(b, () => api(`/admin/events/${b.dataset.ai}/ai-resolve`, { method: "POST", body: {} }), (x) => x.proposed ? `La IA propuso: ${x.decision} (${Math.round(x.confidence * 100)}%)` : `Sin propuesta: ${x.explanation ?? x.decision}`).then(() => route())));
+}
+
+// ---------- Tendencias y señales ----------
+async function viewTendencias(el) {
+  const trends = await api("/admin/trends?status=active,used");
+  el.innerHTML = `<div class="head"><div><h1>Tendencias y señales</h1><p>Temas que se repiten en varias fuentes en las últimas 48 h. Las señales de Instagram, TikTok y otras redes suman puntaje.</p></div>
+    <div class="row"><button class="btn" id="tDetect">Recalcular tendencias</button><button class="btn primary" id="tSignal">+ Señal social</button></div></div>
+    <div class="tablewrap"><table><thead><tr><th>Tendencia</th><th>Categoría</th><th class="num">Puntaje</th><th class="num">Artículos</th><th class="num">Fuentes</th><th class="num">Redes</th><th>Visto</th><th>Estado</th><th></th></tr></thead><tbody>
+    ${trends.length ? trends.map((t) => `<tr><td><div class="t">${esc(t.label)}</div><div class="opts" style="margin-top:4px">${t.keywords.slice(0, 6).map((k) => `<span class="opt">${esc(k)}</span>`).join("")}</div></td><td>${esc(catName(t.category))}</td><td class="num">${Number(t.score).toFixed(1)}</td><td class="num">${t.article_count}</td><td class="num">${t.source_count}</td><td class="num">${t.social_count}</td><td style="white-space:nowrap">${ago(t.last_seen)}</td><td>${t.status === "used" ? `<span class="pill resolved">Usada</span>` : `<span class="pill open">Activa</span>`}</td>
+      <td><div class="row" style="flex-wrap:nowrap">${OV?.aiEnabled ? `<button class="btn sm" data-gen="${t.id}">Generar preguntas</button>` : ""}<button class="btn sm" data-ign="${t.id}">Ignorar</button></div></td></tr>`).join("") : `<tr><td colspan="9" class="muted" style="text-align:center;padding:24px">Aún no hay tendencias. Ejecuta la ingesta desde Fuentes.</td></tr>`}
+    </tbody></table></div>`;
+  el.querySelector("#tDetect").onclick = (e) => run(e.target, () => api("/admin/trends/detect", { method: "POST", body: {} }), (r) => `${r.trends} tendencias detectadas`).then(() => route());
+  el.querySelector("#tSignal").onclick = async () => {
+    const r = await modal({ title: "Agregar señal social", text: "Lo que el equipo (o el agente de navegador) vio en Instagram, TikTok, X o YouTube.", ok: "Guardar",
+      fields: [{ id: "platform", label: "Plataforma", type: "select", options: [["instagram", "Instagram"], ["tiktok", "TikTok"], ["x", "X"], ["youtube", "YouTube"], ["otra", "Otra"]] }, { id: "text", label: "Qué se está viralizando", type: "textarea" }, { id: "url", label: "Enlace", type: "url", placeholder: "https://" }, { id: "views", label: "Vistas o interacciones (aprox.)", type: "number" }] });
+    if (r) run(null, () => api("/admin/social-signals", { method: "POST", body: { platform: r.platform, text: r.text, ...(r.url ? { url: r.url } : {}), metrics: r.views ? { views: Number(r.views) } : {}, capturedBy: A.user } }), "Señal guardada");
+  };
+  el.querySelectorAll("[data-gen]").forEach((b) => (b.onclick = () => run(b, () => api("/admin/drafts/generate", { method: "POST", body: { trendId: Number(b.dataset.gen) } }), (x) => `${x.created?.length ?? 0} borradores en Moderación`).then(async () => { await refreshCounts(); route(); })));
+  el.querySelectorAll("[data-ign]").forEach((b) => (b.onclick = () => run(b, () => api(`/admin/trends/${b.dataset.ign}`, { method: "PATCH", body: { status: "ignored" } }), "Tendencia ignorada").then(() => route())));
+}
+
+// ---------- Fuentes ----------
+async function viewFuentes(el) {
+  const sources = await api("/admin/sources");
+  el.innerHTML = `<div class="head"><div><h1>Fuentes de información</h1><p>Periódicos, revistas, Google Trends por país, GDELT y feeds JSON (por ejemplo TikTok Creative Center vía proveedor). Se leen cada ${esc("INGEST_EVERY_MIN")} minutos.</p></div>
+    <div class="row"><button class="btn" id="sRun">Leer fuentes ahora</button><button class="btn primary" id="sAdd">+ Agregar fuente</button></div></div>
+    <div class="tablewrap"><table><thead><tr><th>Fuente</th><th>Tipo</th><th>Categoría</th><th>Última lectura</th><th>Resultado</th><th>Activa</th></tr></thead><tbody>
+    ${sources.map((s) => `<tr><td><div class="t">${esc(s.name)}</div><span class="faint" style="font-size:11px;word-break:break-all">${esc(s.url)}</span></td><td>${esc(s.kind)}</td><td>${esc(s.category ? catName(s.category) : "Automática")}</td><td style="white-space:nowrap">${s.last_fetched_at ? ago(s.last_fetched_at) : "Nunca"}</td>
+      <td class="${(s.last_status ?? "").startsWith("error") ? "bad" : "muted"}" style="font-size:12px">${esc(s.last_status ?? "—")}</td><td><input type="checkbox" data-en="${s.id}" ${s.enabled ? "checked" : ""} aria-label="Activa"></td></tr>`).join("")}
+    </tbody></table></div>`;
+  el.querySelector("#sRun").onclick = (e) => run(e.target, () => api("/admin/ingest/run", { method: "POST", body: {} }), (r) => `${r.sources.reduce((a, s) => a + s.inserted, 0)} artículos nuevos · ${r.trends} tendencias`).then(() => route());
+  el.querySelector("#sAdd").onclick = async () => {
+    const r = await modal({ title: "Agregar fuente", ok: "Agregar", fields: [
+      { id: "kind", label: "Tipo", type: "select", options: [["rss", "RSS / Atom"], ["google_trends", "Google Trends (RSS por país)"], ["gdelt", "GDELT"], ["newsapi", "NewsAPI"], ["json_feed", "Feed JSON"], ["tiktok_cc", "TikTok Creative Center (feed JSON)"]] },
+      { id: "name", label: "Nombre", placeholder: "El Comercio" }, { id: "url", label: "URL", type: "url", placeholder: "https://…/rss" },
+      { id: "category", label: "Categoría fija (opcional)", type: "select", options: [["", "Automática (por palabras clave)"], ...CATS.map((c) => [c.slug, c.name])] }] });
+    if (r) run(null, () => api("/admin/sources", { method: "POST", body: { kind: r.kind, name: r.name, url: r.url, category: r.category || null } }), "Fuente agregada").then(() => route());
+  };
+  el.querySelectorAll("[data-en]").forEach((c) => (c.onchange = () => run(null, () => api(`/admin/sources/${c.dataset.en}`, { method: "PATCH", body: { enabled: c.checked } }), c.checked ? "Fuente activada" : "Fuente desactivada")));
+}
+
+// ---------- Riesgo ----------
+async function viewRiesgo(el) {
+  const [r, mm, tox] = await Promise.all([api("/admin/exposure"), api("/admin/mm/status").catch(() => null), api("/admin/toxicity").catch(() => null)]);
+  const rows = r.markets.filter((m) => m.house_cost > 0 || m.players_yes > 0 || m.players_no > 0);
+  el.innerHTML = `<div class="head"><div><h1>Riesgo de la casa</h1><p>El market maker de la casa da liquidez a ambos lados. Aquí ves su inventario y dinero comprometido por mercado.</p></div><div class="row"><button class="btn" id="mmRefresh">Recotizar ahora</button>${mm ? `<button class="btn ${mm.killed ? "ok" : "bad"}" id="mmKill">${mm.killed ? "Reanudar market maker" : "Botón de pánico"}</button>` : ""}</div></div>
+    ${mm ? mmPanel(mm) : ""}
+    ${tox ? toxPanel(tox) : ""}
+    <div class="kpis" style="margin-bottom:14px"><div class="kpi"><span class="k">Comprometido en posiciones</span><span class="v">${kmoney(r.house.open_cost)}</span></div><div class="kpi"><span class="k">Resultado realizado</span><span class="v ${r.house.realized >= 0 ? "ok" : "bad"}">${money(r.house.realized)}</span></div><div class="kpi"><span class="k">Comisiones cobradas</span><span class="v">${money(r.house.fees)}</span></div><div class="kpi"><span class="k">Mercados con exposición</span><span class="v">${rows.filter((m) => m.house_cost > 0).length}</span></div></div>
+    <div class="tablewrap"><table><thead><tr><th>Mercado</th><th>Estado</th><th class="num">Precio</th><th class="num">Justo</th><th class="num">Casa Sí</th><th class="num">Casa No</th><th class="num">Comprometido</th><th class="num">Jugadores Sí / No</th><th class="num">Volumen</th></tr></thead><tbody>
+    ${rows.length ? rows.slice(0, 200).map((m) => `<tr><td><div class="t">${esc(m.question)}</div></td><td>${pill(m.status)}</td><td class="num">${m.last_price}¢</td><td class="num">${m.fair_price}¢</td><td class="num">${(m.house_yes / 100).toLocaleString("es-EC")}</td><td class="num">${(m.house_no / 100).toLocaleString("es-EC")}</td><td class="num">${money(m.house_cost)}</td><td class="num">${(m.players_yes / 100).toLocaleString("es-EC")} / ${(m.players_no / 100).toLocaleString("es-EC")}</td><td class="num">${kmoney(m.volume)}</td></tr>`).join("") : `<tr><td colspan="9" class="muted" style="text-align:center;padding:24px">Sin exposición todavía.</td></tr>`}
+    </tbody></table></div>`;
+  el.querySelector("#mmRefresh").onclick = (e) => run(e.target, () => api("/admin/mm/refresh", { method: "POST", body: {} }), (x) => `${x.markets} mercados recotizados`).then(() => route());
+  el.querySelectorAll("[data-sur]").forEach((b) => (b.onclick = async () => {
+    const p = tox.players.find((x) => String(x.playerId) === b.dataset.sur);
+    const f = await modal({ title: `Recargo de ${p.name}`, text: `Automático: ${(p.automaticBps / 100).toFixed(2)}%. Deja el campo vacío para volver al automático.`, ok: "Guardar",
+      fields: [{ id: "pct", label: "Recargo manual (%)", type: "number", value: p.override == null ? "" : String(p.override / 100) }] });
+    if (!f) return;
+    const bps = f.pct === "" ? null : Math.round(Number(f.pct) * 100);
+    run(null, () => api(`/admin/players/${p.playerId}/surcharge`, { method: "POST", body: { bps } }), bps == null ? "Recargo automático" : `Recargo fijado en ${(bps / 100).toFixed(2)}%`).then(() => route());
+  }));
+  const kill = el.querySelector("#mmKill");
+  if (kill) kill.onclick = async () => {
+    const on = !mm.killed;
+    if (on && !(await modal({ title: "Botón de pánico", text: "La casa retira todas sus cotizaciones y deja de dar liquidez hasta que la reanudes. Las apuestas entre jugadores siguen funcionando.", ok: "Retirar cotizaciones", danger: true }))) return;
+    run(kill, () => api("/admin/mm/kill", { method: "POST", body: { on } }), on ? (x) => `Market maker detenido · ${x.marketsCleared} mercados retirados` : "Market maker reanudado").then(() => route());
+  };
+}
+
+function toxPanel(t) {
+  const usd = (v) => "$" + Math.round(v).toLocaleString("es-EC");
+  const until = (d) => d ? new Date(d).toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" }) : "—";
+  return `<div style="display:grid;gap:14px;margin:0 0 14px">
+    <div class="panel"><h2>Apostadores con ventaja <small>${t.flagged} con recargo de ${t.tracked} medidos${t.enabled ? "" : " · protección apagada"}</small></h2>
+      ${t.players.length ? `<div class="tablewrap"><table><thead><tr><th>Jugador</th><th class="num">Apuestas</th><th class="num">Volumen</th><th class="num">Markout medio</th><th class="num">Puntaje</th><th class="num">Recargo</th><th></th></tr></thead><tbody>
+      ${t.players.slice(0, 12).map((p) => `<tr><td><div class="t">${esc(p.name)}</div><span class="faint" style="font-size:11px">${esc(p.operatorId ?? "")} · ${esc(p.externalId)}</span></td><td class="num">${p.trades}</td><td class="num">${usd(p.volumeUsd)}</td><td class="num ${p.meanMarkoutCents > 0 ? "warn" : ""}">${p.meanMarkoutCents > 0 ? "+" : ""}${p.meanMarkoutCents}¢</td><td class="num">${p.scoreCents}¢</td><td class="num ${p.surchargeBps ? "bad" : ""}">${(p.surchargeBps / 100).toFixed(2)}%${p.override != null ? " (manual)" : ""}</td><td><button class="btn sm" data-sur="${p.playerId}">Ajustar</button></td></tr>`).join("")}
+      </tbody></table></div>` : `<p class="muted">Todavía no hay apuestas medidas.</p>`}
+      <p class="faint" style="font-size:12px;margin:10px 0 0">Markout: cuánto le ganó cada apuesta a la casa frente al precio que pagó, medido con el precio justo una hora después y con el resultado final. Puntaje: el promedio menos dos errores estándar, así la suerte no marca a nadie. Con puntaje sobre ${t.params.startCents}¢ paga un recargo de hasta ${(t.params.maxSurchargeBps / 100).toFixed(0)}% en lo que le compra a la casa. Avisa este recargo en los términos del casino.</p></div>
+    <div class="panel"><h2>Mercados en freno o con spread ancho <small>${t.markets.length}</small></h2>
+      ${t.markets.length ? `<div class="tablewrap"><table><thead><tr><th>Mercado</th><th>Motivo</th><th class="num">Casa vuelve</th><th class="num">Spread normal</th></tr></thead><tbody>
+      ${t.markets.slice(0, 12).map((m) => `<tr><td><div class="t">${esc(m.title)}</div></td><td style="font-size:12px">${esc(m.reason ?? "")}</td><td class="num">${m.pausedUntil && new Date(m.pausedUntil) > new Date() ? until(m.pausedUntil) : "Cotizando"}</td><td class="num">${until(m.shockUntil)}</td></tr>`).join("")}
+      </tbody></table></div>` : `<p class="muted">Ningún mercado en freno. Se activa si el precio salta ${t.params.breakerCents}¢ o más en ${t.params.breakerWindowMinutes ?? 10} minutos, o si llega una noticia sobre un mercado abierto.</p>`}</div>
+  </div>`;
+}
+
+function mmPanel(mm) {
+  const t = mm.totals, use = mm.limits.maxTotalLossUsd ? t.worstCaseLossUsd / mm.limits.maxTotalLossUsd : 0;
+  const usd = (v) => "$" + Math.round(v).toLocaleString("es-EC");
+  const p = mm.params ?? {};
+  return `<div class="kpis" style="margin-bottom:14px">
+      <div class="kpi ${mm.killed ? "alert" : ""}"><span class="k">Market maker</span><span class="v ${mm.killed ? "bad" : "ok"}">${mm.killed ? "Detenido" : mm.strategy.toUpperCase()}</span><span class="d">${mm.killed ? "Botón de pánico activo" : mm.strategy === "v2" ? "LMSR + spread Avellaneda-Stoikov" : "Spread fijo"}</span></div>
+      <div class="kpi ${use > 0.8 ? "alert" : use > 0.5 ? "attn" : ""}"><span class="k">Pérdida en el peor escenario</span><span class="v">${usd(t.worstCaseLossUsd)}</span><span class="d">${Math.round(use * 100)}% del límite total de ${usd(mm.limits.maxTotalLossUsd)}</span></div>
+      <div class="kpi ${t.limitedEvents ? "attn" : ""}"><span class="k">Eventos en su límite</span><span class="v">${t.limitedEvents}</span><span class="d">de ${t.events} · límite ${usd(mm.limits.maxLossUsd)} por evento</span></div>
+      <div class="kpi"><span class="k">Parámetros</span><span class="v" style="font-size:15px">b ${p.bShares ?? "—"} · γ ${p.gamma ?? "—"} · κ ${p.kappa ?? "—"}</span><span class="d">Liquidez completa con más de ${p.tauRefDays ?? "—"} días al cierre</span></div>
+    </div>
+    ${mm.events?.length ? `<div class="panel" style="margin-bottom:14px"><h2>Riesgo por evento <small>v2 · ordenado por pérdida en el peor escenario</small></h2><div class="tablewrap"><table><thead><tr><th>Evento</th><th class="num">Días al cierre</th><th class="num">Liquidez</th><th class="num">Medio spread</th><th class="num">Peor escenario</th><th class="num">Techo LMSR</th><th>Estado</th></tr></thead><tbody>
+      ${mm.events.slice(0, 15).map((e) => `<tr><td><div class="t">${esc(e.title)}</div><span class="faint" style="font-size:11px">${e.kind === "multi" ? `${e.marketIds.length} opciones` : "Sí / No"} · b ${e.b.toLocaleString("es-EC")}</span></td><td class="num">${e.tauDays}</td><td class="num">${Math.round(e.liquidity * 100)}%</td><td class="num">${e.halfSpreadCents}¢</td><td class="num ${e.worstCaseLossUsd > mm.limits.maxLossUsd * 0.8 ? "bad" : ""}">${usd(e.worstCaseLossUsd)}</td><td class="num">${usd(e.lmsrMaxLossUsd)}</td><td>${e.paused ? `<span class="pill void">Freno</span>` : e.limited ? `<span class="pill void">Solo reduce riesgo</span>` : e.shock ? `<span class="pill proposed">Spread ancho</span>` : e.backstop ? `<span class="pill resolved">Respaldo</span>` : e.imbalance >= 0.5 ? `<span class="pill proposed">Flujo a un lado</span>` : `<span class="pill open">Normal</span>`}</td></tr>`).join("")}
+      </tbody></table></div><p class="faint" style="font-size:12px;margin:10px 0 0">Peor escenario: lo que perdería la casa si gana la opción que más le cuesta. Techo LMSR: lo máximo que puede perder desde ahora siguiendo la curva, aunque todos los que compren tengan razón. Con menos de ${p.tauRefDays ?? 7} días al cierre la liquidez baja con la raíz del tiempo que falta.</p></div>` : ""}`;
+}
+
+// ---------- Casinos ----------
+async function viewOperadores(el) {
+  const ops = await api("/admin/operators");
+  el.innerHTML = `<div class="head"><div><h1>Casinos</h1><p>Operadores integrados por API. Cada uno usa su propia billetera, marca y comisión.</p></div><button class="btn primary" id="oAdd">+ Agregar casino</button></div>
+    <div id="oCreds"></div>
+    <div class="tablewrap"><table><thead><tr><th>Casino</th><th>Clave pública</th><th>Billetera</th><th>Webhook</th><th class="num">Comisión</th><th class="num">Revenue share</th><th>Moneda</th><th>Estado</th></tr></thead><tbody>
+    ${ops.length ? ops.map((o) => `<tr><td><div class="t">${esc(o.theme?.brandName ?? o.name)}</div><span class="faint" style="font-size:11px">${esc(o.id)}</span></td><td class="num" style="font-size:12px">${esc(o.api_key)}</td><td style="font-size:12px;word-break:break-all">${esc(o.wallet_url)}</td><td style="font-size:12px;word-break:break-all">${esc(o.webhook_url ?? "—")}</td><td class="num">${o.fee_bps == null ? "Global" : (o.fee_bps / 100).toFixed(2) + "%"}</td><td class="num"><button class="btn sm" data-rs="${esc(o.id)}" data-v="${o.revenue_share_bps ?? 0}">${((o.revenue_share_bps ?? 0) / 100).toFixed(0)}%</button></td><td>${esc(o.currency)}</td><td>${o.active ? `<span class="pill open">Activo</span>` : `<span class="pill void">Inactivo</span>`}</td></tr>`).join("") : `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">Aún no hay casinos.</td></tr>`}
+    </tbody></table></div>`;
+  el.querySelectorAll("[data-rs]").forEach((b) => (b.onclick = async () => {
+    const f = await modal({ title: "Revenue share", text: "Parte de las comisiones que generan los jugadores de este casino y que se le devuelve en la liquidación.", ok: "Guardar",
+      fields: [{ id: "pct", label: "Porcentaje (0 a 100)", type: "number", value: String(Number(b.dataset.v) / 100) }] });
+    if (f) run(null, () => api(`/admin/operators/${b.dataset.rs}`, { method: "PATCH", body: { revenueShareBps: Math.round(Number(f.pct) * 100) } }), "Revenue share actualizado").then(() => route());
+  }));
+  el.querySelector("#oAdd").onclick = async () => {
+    const r = await modal({ title: "Agregar casino", ok: "Crear credenciales", fields: [
+      { id: "id", label: "Identificador (minúsculas y guiones)", placeholder: "ecuabet" }, { id: "name", label: "Nombre", placeholder: "Ecuabet" },
+      { id: "walletUrl", label: "URL de la billetera", type: "url", placeholder: "https://api.casino.com/predicciones/wallet" }, { id: "webhookUrl", label: "URL de webhooks (opcional)", type: "url" },
+      { id: "feeBps", label: "Comisión en puntos básicos (200 = 2%, vacío = global)", type: "number" }, { id: "revenueShare", label: "Revenue share: % de las comisiones de sus jugadores que se le devuelve", type: "number", value: "0" }, { id: "primary", label: "Color de marca", type: "color", value: "#ffd400" }] });
+    if (!r) return;
+    const out = await run(null, () => api("/admin/operators", { method: "POST", body: { id: r.id, name: r.name, walletUrl: r.walletUrl, ...(r.webhookUrl ? { webhookUrl: r.webhookUrl } : {}), ...(r.feeBps ? { feeBps: Number(r.feeBps) } : {}), revenueShareBps: Math.round(Number(r.revenueShare || 0) * 100), theme: { brandName: r.name, primary: r.primary } } }), "Casino creado");
+    if (!out) return;
+    await viewOperadores(el);
+    el.querySelector("#oCreds").innerHTML = `<div class="panel" style="margin-bottom:14px;border-color:var(--brand)"><h2>Credenciales de ${esc(out.id)} <small>se muestran una sola vez</small></h2>
+      <div class="creds"><span>X-Operator-Key: <b>${esc(out.apiKey)}</b></span><span>API secret: <b>${esc(out.apiSecret)}</b></span><span>Wallet secret: <b>${esc(out.walletSecret)}</b></span></div>
+      <div class="row" style="margin-top:10px"><button class="btn sm" id="oCopy">Copiar</button><span class="faint" style="font-size:12px">Envíalas al casino por un canal seguro junto con la guía de integración.</span></div></div>`;
+    el.querySelector("#oCopy").onclick = () => navigator.clipboard?.writeText(`X-Operator-Key: ${out.apiKey}\nAPI secret: ${out.apiSecret}\nWallet secret: ${out.walletSecret}`).then(() => toast("Copiado"), () => toast("Selecciona y copia el texto manualmente", true));
+  };
+}
+
+
+// ---------- Calibración y sesgo ----------
+async function referenceDialog(e, btn) {
+  const fields = [];
+  if (e.kind === "multi") fields.push({ id: "market", label: "Opción", type: "select", options: e.markets.map((m) => [String(m.id), m.label]) });
+  fields.push({ id: "type", label: "Tipo de referencia", type: "select", options: [["manual", "Precio manual (casa de apuestas, encuesta…)"], ["polymarket", "Polymarket (se actualiza solo cada 30 min)"]] });
+  fields.push({ id: "source", label: "Fuente (para precio manual)", placeholder: "Betplay, Bet365, encuesta Invamer…" });
+  fields.push({ id: "value", label: "Probabilidad del Sí en % (manual) o slug del mercado en Polymarket", placeholder: "62  ·  will-colombia-win-miss-universe-2026" });
+  const r = await modal({ title: "Precio de referencia externo", text: `<b>${esc(e.title)}</b><br>Compara nuestro precio con otra fuente para detectar sesgos.`, fields, ok: "Guardar" });
+  if (!r) return;
+  const mid = Number(r.market ?? e.markets[0].id);
+  if (r.type === "polymarket") run(btn, async () => { await api(`/admin/markets/${mid}`, { method: "PATCH", body: { externalRef: `polymarket:${r.value.trim()}` } }); return api("/admin/references/refresh", { method: "POST", body: {} }); }, "Referencia de Polymarket guardada");
+  else run(btn, () => api(`/admin/markets/${mid}/reference`, { method: "POST", body: { source: r.source || "Manual", price: Number(r.value) } }), "Precio de referencia guardado");
+}
+
+// ---------- Market makers externos ----------
+async function viewMms(el) {
+  const [list, rw] = await Promise.all([api("/admin/market-makers"), api("/admin/liquidity-rewards").catch(() => null)]);
+  const usd = (m) => money(m);
+  el.innerHTML = `<div class="head"><div><h1>Market makers externos</h1><p>Empresas o traders que dan liquidez en el mismo libro que los jugadores de todos los casinos. Operan por API con un saldo que custodia la plataforma y cobran un reembolso cuando un jugador toma sus órdenes. Si ya dan buen precio, la casa queda de respaldo y abre su spread.</p></div><button class="btn primary" id="mAdd">+ Agregar market maker</button></div>
+    <div id="mCreds"></div>
+    <div class="tablewrap"><table><thead><tr><th>Market maker</th><th class="num">Saldo</th><th class="num">En órdenes / posiciones</th><th class="num">Volumen maker</th><th class="num">Reembolsos</th><th class="num">Resultado</th><th>Estado</th><th></th></tr></thead><tbody>
+    ${list.length ? list.map((m) => `<tr><td><div class="t">${esc(m.name)}</div><span class="faint" style="font-size:11px">${m.openOrders} órdenes abiertas · reembolso ${(m.rebateBps / 100).toFixed(2)}%</span></td>
+      <td class="num">${usd(m.balance)}</td><td class="num">${usd(m.reservedInOrders)}<br><span class="faint" style="font-size:11px">${usd(m.positionsCost)}</span></td><td class="num">${kmoney(m.makerVolume)}</td><td class="num">${usd(m.rebates)}</td>
+      <td class="num ${m.realizedPnl >= 0 ? "ok" : "bad"}">${usd(m.realizedPnl)}</td><td>${m.active ? `<span class="pill open">Activo</span>` : `<span class="pill void">Suspendido</span>`}</td>
+      <td><div class="row" style="flex-wrap:nowrap"><button class="btn sm" data-fund="${m.playerId}">Fondos</button><button class="btn sm ${m.active ? "bad" : "ok"}" data-act="${m.playerId}" data-on="${m.active ? 0 : 1}">${m.active ? "Suspender" : "Activar"}</button></div></td></tr>`).join("")
+      : `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">Aún no hay market makers externos. La casa da toda la liquidez.</td></tr>`}
+    </tbody></table></div>
+    ${rw ? `<div class="panel" style="margin-top:14px"><h2>Incentivos de liquidez <span class="row"><small>${rw.config.enabled ? `${rw.rewardedMarkets} mercado(s) con pozo · ${money(rw.dailyBudgetUsd * 1e6)} por día · tope ${money(rw.config.maxDailyUsd * 1e6)}` : "desactivados (LIQ_REWARDS_ENABLED=false)"}</small><button class="btn sm" id="rwAdd">Asignar pozo</button><button class="btn sm" id="rwPay">Pagar días cerrados</button></span></h2>
+      <p class="muted" style="font-size:13px;margin:0 0 10px">Cada ${rw.config.sampleSec} s se puntúan las órdenes de los market makers a ${rw.config.maxSpreadCents}¢ o menos del precio medio y de ${rw.config.minShares} acciones o más: más ajustado vale mucho más (cuadrático) y cotizar de un solo lado vale 1/${rw.config.singleSidedFactor}. Al terminar el día, el pozo de cada mercado se reparte según la parte de cada uno. La casa también compite por la parte, pero lo suyo no se paga.</p>
+      ${rw.current.length ? `<div class="tablewrap"><table><thead><tr><th>Mercado</th><th class="num">Pozo diario</th><th>Parte de hoy</th><th></th></tr></thead><tbody>${rw.current.map((m) => { const t = rw.today.find((x) => x.marketId === m.marketId);
+        return `<tr><td><div class="t">${esc(m.title ?? "")}${m.label && m.label !== "Sí" ? ` · ${esc(m.label)}` : ""}</div><span class="faint" style="font-size:11px">medio ${String(m.midCents).replace(".", ",")}¢${t ? ` · ${t.samples} muestras hoy` : ""}${m.own ? "" : " · pozo general"}</span></td><td class="num">${money(m.poolUsd * 1e6)}</td>
+        <td style="min-width:220px">${t && t.participants.length ? t.participants.slice(0, 4).map((p) => `<div class="row" style="gap:6px;flex-wrap:nowrap;font-size:12px"><span style="width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" class="${p.house ? "faint" : ""}">${esc(p.name)}</span><span class="bar" style="flex:1;height:6px;background:var(--line);border-radius:3px;overflow:hidden"><i style="display:block;height:100%;width:${(p.share * 100).toFixed(1)}%;background:${p.house ? "var(--muted)" : "var(--brand)"}"></i></span><span style="width:40px;text-align:right">${Math.round(p.share * 100)}%</span></div>`).join("") : `<span class="faint" style="font-size:12px">nadie puntúa todavía</span>`}</td>
+        <td><button class="btn sm" data-rwset="${m.marketId}" data-pool="${m.poolUsd}">Cambiar</button></td></tr>`; }).join("")}</tbody></table></div>`
+        : `<p class="muted" style="font-size:13px">Ningún mercado tiene pozo. Asigna uno a los mercados donde quieres más liquidez (por ejemplo, los destacados), o fija un pozo general con <code>LIQ_REWARD_DAILY_USD</code>.</p>`}
+      ${rw.byMarketMaker.length || rw.paidByDay.length ? `<div class="grid2" style="margin-top:12px"><div><h3 style="font-size:13px;margin:0 0 6px">Cobrado por market maker</h3><div class="tablewrap"><table><thead><tr><th>Market maker</th><th class="num">7 días</th><th class="num">30 días</th></tr></thead><tbody>${rw.byMarketMaker.map((m) => `<tr><td>${esc(m.name)}</td><td class="num">${money(m.last7dUsd * 1e6)}</td><td class="num">${money(m.last30dUsd * 1e6)}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">—</td></tr>`}</tbody></table></div></div>
+        <div><h3 style="font-size:13px;margin:0 0 6px">Pagado por día</h3><div class="tablewrap"><table><thead><tr><th>Día</th><th class="num">Monto</th><th class="num">Market makers</th></tr></thead><tbody>${rw.paidByDay.slice(0, 10).map((d) => `<tr><td>${esc(d.day)}</td><td class="num">${money(d.amountUsd * 1e6)}</td><td class="num">${d.makers}</td></tr>`).join("") || `<tr><td colspan="3" class="muted">—</td></tr>`}</tbody></table></div></div></div>` : ""}
+    </div>` : ""}
+    <div class="panel" style="margin-top:14px"><h2>API para market makers <small>firmada con HMAC, igual que la de casinos</small></h2>
+      <div class="tablewrap"><table><tbody>
+        <tr><td><code>GET /mm/v1/account</code></td><td>Saldo, órdenes, posiciones, volumen como maker y reembolsos</td></tr>
+        <tr><td><code>POST /mm/v1/orders</code></td><td>Orden límite (<code>postOnly: true</code> para solo agregar liquidez)</td></tr>
+        <tr><td><code>POST /mm/v1/orders/batch</code></td><td>Hasta 50 operaciones: <code>place</code>, <code>cancel</code>, <code>cancelAll</code></td></tr>
+        <tr><td><code>DELETE /mm/v1/orders?marketId=</code></td><td>Retirar todo (de un mercado o de todos)</td></tr>
+        <tr><td><code>GET /mm/v1/orders</code> · <code>/positions</code> · <code>/fills</code></td><td>Estado, con rol maker o taker, comisión y reembolso de cada cruce</td></tr>
+        <tr><td><code>GET /mm/v1/rewards</code></td><td>Incentivos de liquidez: reglas, mercados con pozo, su parte estimada de hoy y lo cobrado</td></tr>
+      </tbody></table></div>
+      <p class="faint" style="font-size:12px;margin:10px 0 0">Cabeceras: <code>X-MM-Key</code>, <code>X-Timestamp</code> y <code>X-Signature</code> = HMAC-SHA256 de "timestamp\nMÉTODO\nruta\ncuerpo" con el secreto. Los precios y el libro salen de la API pública (<code>/v1/markets/:id/book</code> y <code>/v1/stream</code>). Todo va 100% garantizado con su saldo: no hay crédito.</p></div>`;
+  el.querySelector("#mAdd").onclick = async () => {
+    const f = await modal({ title: "Agregar market maker", ok: "Crear credenciales", fields: [{ id: "name", label: "Nombre", placeholder: "Liquidez Andina S.A." }, { id: "rebate", label: "Reembolso en puntos básicos (vacío = global; 50 = 0,5%)", type: "number" }] });
+    if (!f) return;
+    const r = await run(null, () => api("/admin/market-makers", { method: "POST", body: { name: f.name, ...(f.rebate ? { rebateBps: Number(f.rebate) } : {}) } }), "Market maker creado");
+    if (!r) return;
+    await route();
+    document.getElementById("mCreds").innerHTML = `<div class="panel" style="margin-bottom:14px;border-color:color-mix(in srgb,var(--brand) 45%,var(--line))"><h2>Credenciales de ${esc(r.name)} <small>se muestran una sola vez</small></h2>
+      <div style="font-family:var(--mono);font-size:12px;word-break:break-all">X-MM-Key: ${esc(r.apiKey)}<br>Secreto: ${esc(r.apiSecret)}</div><p class="muted" style="font-size:12px;margin:8px 0 0">Después deposita su saldo con "Fondos" (la transferencia real se hace por fuera: banco o USDC).</p></div>`;
+  };
+  const setPool = (marketId, current) => modal({ title: "Pozo diario de incentivos", text: "Lo que se reparte por día entre los market makers que den liquidez en este mercado. 0 lo quita.", ok: "Guardar",
+      fields: [{ id: "usd", label: "USD por día", type: "number", value: current ?? "" }] })
+    .then((f) => f && run(null, () => api(`/admin/markets/${marketId}/reward`, { method: "PATCH", body: { dailyUsd: f.usd === "" ? null : Number(f.usd) } }), "Pozo guardado").then(() => route()));
+  el.querySelectorAll("[data-rwset]").forEach((b) => (b.onclick = () => setPool(b.dataset.rwset, b.dataset.pool)));
+  const rwPay = el.querySelector("#rwPay");
+  if (rwPay) rwPay.onclick = (e) => run(e.target, () => api("/admin/liquidity-rewards/pay", { method: "POST", body: {} }), (x) => x.days.length ? `${x.days.length} día(s) pagado(s): ${money(x.days.reduce((a, d) => a + d.paid, 0))}` : "No hay días cerrados por pagar (se pagan solos cada hora)").then(() => route());
+  const rwAdd = el.querySelector("#rwAdd");
+  if (rwAdd) rwAdd.onclick = async () => {
+    const evs = await api("/admin/events?status=open&sort=volume24h&limit=60");
+    const options = evs.flatMap((e) => e.markets.filter((m) => m.status === "open").map((m) => [String(m.id), `${e.title}${e.kind === "multi" ? ` · ${m.label}` : ""}`.slice(0, 110)]));
+    const f = await modal({ title: "Asignar pozo de incentivos", text: "Elige el mercado (ordenados por volumen de las últimas 24 h) y cuánto repartir por día.", ok: "Guardar",
+      fields: [{ id: "m", label: "Mercado", type: "select", options }, { id: "usd", label: "USD por día", type: "number", value: "20" }] });
+    if (f) run(null, () => api(`/admin/markets/${f.m}/reward`, { method: "PATCH", body: { dailyUsd: Number(f.usd) } }), "Pozo asignado").then(() => route());
+  };
+  el.querySelectorAll("[data-fund]").forEach((b) => (b.onclick = async () => {
+    const f = await modal({ title: "Mover fondos", text: "Registra el depósito o retiro del saldo que custodia la plataforma. La transferencia real se hace por fuera.", ok: "Registrar",
+      fields: [{ id: "dir", label: "Movimiento", type: "select", options: [["deposit", "Depósito"], ["withdraw", "Retiro"]] }, { id: "amt", label: "Monto (USD)", type: "number" }] });
+    if (f) run(null, () => api(`/admin/market-makers/${b.dataset.fund}/funds`, { method: "POST", body: { direction: f.dir, amountUsd: Number(f.amt) } }), "Fondos registrados").then(() => route());
+  }));
+  el.querySelectorAll("[data-act]").forEach((b) => (b.onclick = () => run(b, () => api(`/admin/market-makers/${b.dataset.act}`, { method: "PATCH", body: { active: b.dataset.on === "1" } }), b.dataset.on === "1" ? "Market maker activado" : "Market maker suspendido: sus órdenes salieron del libro").then(() => route())));
+}
+
+// ---------- Tesorería ----------
+async function viewTesoreria(el) {
+  const t = await api("/admin/treasury");
+  const R = t.reserves, J = t.journal;
+  const due = t.settlements.filter((x) => x.status === "overdue");
+  const stPill = (x) => ({ pending: `<span class="pill proposed">Pendiente</span>`, paid: `<span class="pill resolved">Pagada</span>`, overdue: `<span class="pill void">Vencida</span>`, covered: `<span class="pill resolved">Cobrada de garantía</span>`, cancelled: `<span class="pill">Anulada</span>` }[x] ?? esc(x));
+  const fday2 = (d) => (d ? new Date(d).toLocaleDateString("es-EC", { day: "numeric", month: "short" }) : "—");
+  el.innerHTML = `<div class="head"><div><h1>Tesorería</h1><p>Dónde está el dinero real y quién le debe a quién. La plata de los jugadores sigue en cada casino; aquí se emite la liquidación de cada uno con su estado de cuenta firmado, se controlan sus garantías en el fideicomiso, se concilia con el extracto del banco y todo queda en un libro contable que no se puede alterar sin que se note.</p></div>
+    <div class="row"><button class="btn" id="tBank">Cargar extracto</button>${t.usdc?.enabled ? (t.usdc.simulated ? `<button class="btn" id="tUsdcSim">Simular transferencia USDC</button>` : `<button class="btn" id="tUsdc">Leer bóveda USDC</button>`) : ""}<button class="btn" id="tAnchor">Sellar en Bitcoin</button><button class="btn" id="tReserve">Reserva de la casa</button><button class="btn primary" id="tSettle">Liquidar ahora</button></div></div>
+    ${t.usdc?.enabled && !t.usdc.realMoney ? `<div class="panel" style="margin-bottom:14px;border-color:var(--warn,#c90)"><b>Modo de prueba:</b> ${esc(t.usdc.label)}. ${t.usdc.simulated ? "No hay cadena: las transferencias USDC se registran con “Simular transferencia USDC” y pasan por la misma conciliación que las reales." : "Los casinos pagan con USDC de prueba (gratis en faucet.circle.com) y la plataforma lee la cadena de prueba igual que leería la real."}</div>` : ""}
+    <div class="kpis" style="margin-bottom:14px">
+      <div class="kpi"><span class="k">Dinero (fideicomiso${t.usdc?.enabled ? " + USDC" : ""})</span><span class="v">${money(R.fiduciary)}</span><span class="d">garantías ${money(R.guarantees)} · reserva ${money(R.houseReserve)}</span></div>
+      <div class="kpi ${R.ok ? "" : "alert"}"><span class="k">Cobertura</span><span class="v ${R.ok ? "ok" : "bad"}">${R.coverage == null ? "—" : Math.round(R.coverage * 100) + "%"}</span><span class="d">de ${money(R.obligations)} en obligaciones y riesgo de la casa</span></div>
+      <div class="kpi ${due.length ? "alert" : ""}"><span class="k">Liquidaciones vencidas</span><span class="v">${due.length}</span><span class="d">por cobrar a casinos ${money(R.receivableFromCasinos)}</span></div>
+      <div class="kpi ${J.ok ? "" : "alert"}"><span class="k">Libro contable</span><span class="v ${J.ok ? "ok" : "bad"}">${J.ok ? "Íntegro" : "ROTO"}</span><span class="d">${J.ok ? `${J.entries} asientos · ${esc((J.head ?? "").slice(0, 12))}…` : `desde el asiento #${J.brokenAt}: ${esc(J.reason)}`}</span></div>
+    </div>
+    <div class="tablewrap"><table><thead><tr><th>Casino</th><th class="num">Garantía</th><th class="num">Deuda</th><th class="num">Límite</th><th>Operación</th><th></th></tr></thead><tbody>
+      ${t.casinos.map((c) => `<tr><td><div class="t">${esc(c.name)}</div><span class="faint" style="font-size:11px">${esc(c.operatorId)} · ${c.rail === "usdc" ? `USDC <span style="font-family:var(--mono)">${esc((c.usdcAddress ?? "").slice(0, 6))}…${esc((c.usdcAddress ?? "").slice(-4))}</span>` : "banco"}</span></td>
+        <td class="num">${money(c.guarantee)}${c.guaranteeInstruments ? `<br><span class="faint" style="font-size:11px">efectivo ${money(c.guaranteeCash)} · pólizas ${money(c.guaranteeInstruments)}</span>` : ""}${c.guaranteeRequired ? `<br><span class="faint" style="font-size:11px">exigida ${money(c.guaranteeRequired)}</span>` : ""}${(c.instrumentsExpiring ?? []).length ? `<br><span class="bad" style="font-size:11px">${c.instrumentsExpiring.map((x) => `${x.kind === "poliza" ? "póliza" : "carta"} ${esc(x.number)} vence en ${x.daysLeft} d${x.counts ? "" : " (ya no cuenta)"}`).join(" · ")}</span>` : ""}</td>
+        <td class="num">${money(c.debt)}<br><span class="faint" style="font-size:11px">emitida ${money(Math.max(0, c.issuedBalance))} · en curso ${money(Math.max(0, c.accrued))}</span></td>
+        <td class="num">${c.debtLimit != null ? money(c.debtLimit) : c.guaranteeRequired ? "su garantía" : "sin límite"}</td>
+        <td>${c.paused ? `<span class="pill void">Pausada${c.pausedManual ? " (manual)" : ""}</span><div class="faint" style="font-size:11px;max-width:260px">${esc(c.pausedReason ?? "")}</div>` : `<span class="pill open">Operando</span>`}</td>
+        <td><div class="row" style="flex-wrap:nowrap"><button class="btn sm" data-gar="${esc(c.operatorId)}">Garantía</button><button class="btn sm" data-cfg="${esc(c.operatorId)}">Configurar</button></div></td></tr>`).join("") || `<tr><td colspan="6" class="muted" style="text-align:center;padding:24px">Sin casinos.</td></tr>`}
+    </tbody></table></div>
+    <div class="panel" style="margin-top:14px"><h2>Pólizas y cartas de crédito <span class="row"><small>garantías sin depositar dinero · dejan de contar ${t.config.instrumentMinValidityDays} días antes de vencer</small><button class="btn sm" id="tInstr">Registrar</button></span></h2>
+      ${(t.instruments ?? []).length ? `<div class="tablewrap"><table><thead><tr><th>Casino</th><th>Tipo y número</th><th class="num">Cubre</th><th>Vence</th><th>Estado</th><th></th></tr></thead><tbody>${t.instruments.map((i) => `<tr>
+        <td>${esc(i.name)}</td>
+        <td><div class="t">${esc(i.kindLabel)} ${esc(i.number)}</div><span class="faint" style="font-size:11px">${esc(i.issuer)}${i.documentUrl ? ` · <a href="${esc(i.documentUrl)}" target="_blank" rel="noopener">documento</a>` : ""}${i.notes ? ` · ${esc(i.notes)}` : ""}</span></td>
+        <td class="num">${money(i.available)}${i.executed ? `<br><span class="faint" style="font-size:11px">de ${money(i.amount)} · ejecutado ${money(i.executed)}</span>` : ""}</td>
+        <td style="white-space:nowrap">${fday2(i.expiresAt)}${i.status === "active" ? `<div class="${i.expiringSoon ? "bad" : "faint"}" style="font-size:11px">${i.daysLeft > 0 ? `en ${i.daysLeft} días` : "hoy"}</div>` : ""}</td>
+        <td>${i.status === "active" ? (i.counts ? `<span class="pill open">Vigente</span>` : `<span class="pill proposed">Por vencer: no cuenta</span>`) : { expired: `<span class="pill void">Vencida</span>`, released: `<span class="pill">Devuelta</span>`, executed: `<span class="pill resolved">Ejecutada</span>` }[i.status]}</td>
+        <td>${i.status === "active" ? `<div class="row" style="flex-wrap:nowrap">${t.settlements.some((x) => x.operator_id === i.operatorId && ["pending", "overdue"].includes(x.status) && x.amount > 0) ? `<button class="btn bad sm" data-iexe="${i.id}">Ejecutar</button>` : ""}<button class="btn sm" data-irel="${i.id}">Devolver</button></div>` : ""}</td></tr>`).join("")}</tbody></table></div>`
+        : `<p class="muted" style="font-size:13px">Sin pólizas ni cartas de crédito. Son la forma más barata de pedir garantía a un casino: una aseguradora o un banco se compromete a pagar si el casino no paga, sin inmovilizar su dinero.</p>`}</div>
+    <div class="panel" style="margin-top:14px"><h2>Liquidaciones <small>cada ${t.config.settlementEveryHours} h · plazo de pago ${t.config.paymentTermHours} h${t.config.autoCollectGuarantee ? " · se cobran solas de la garantía al vencer" : ""}</small></h2>
+      <div class="tablewrap"><table><thead><tr><th>Referencia</th><th>Casino</th><th>Período</th><th class="num">Monto</th><th>Estado</th><th>Vence</th><th>Transferencia</th><th></th></tr></thead><tbody>
+      ${t.settlements.map((x) => `<tr><td style="font-family:var(--mono);font-size:12px">LIQ-${x.id}</td><td>${esc(x.name)}</td><td style="white-space:nowrap">${fday2(x.period_from)} → ${fday2(x.period_to)}</td>
+        <td class="num"><b>${money(Math.abs(x.amount))}</b><br><span class="faint" style="font-size:11px">${x.amount > 0 ? "el casino paga" : x.amount < 0 ? "pagamos al casino" : "sin saldo"}</span></td>
+        <td>${stPill(x.status)}${x.covered_from_guarantee > 0 && x.status !== "covered" ? `<div class="faint" style="font-size:11px">${money(x.covered_from_guarantee)} de garantía</div>` : ""}</td><td style="white-space:nowrap">${fday2(x.due_at)}</td>
+        <td style="font-size:12px">${esc(x.bank_ref ?? "—")}</td>
+        <td><div class="row" style="flex-wrap:nowrap">${["pending", "overdue"].includes(x.status) && x.amount !== 0 ? `<button class="btn ok sm" data-pay="${x.id}">Pagada</button>` : ""}${["pending", "overdue"].includes(x.status) && x.amount > 0 ? `<button class="btn bad sm" data-col="${x.id}">Cobrar de garantía</button>` : ""}${t.usdc?.simulated && ["pending", "overdue"].includes(x.status) && x.amount !== 0 && t.casinos.find((c) => c.operatorId === x.operator_id)?.rail === "usdc" ? `<button class="btn sm" data-simpay="${x.id}">Simular pago USDC</button>` : ""}<button class="btn sm" data-stm="${x.id}">Estado firmado</button></div></td></tr>`).join("") || `<tr><td colspan="8" class="muted" style="text-align:center;padding:24px">Todavía no hay liquidaciones. Se emiten solas cada ${t.config.settlementEveryHours} h, o con "Liquidar ahora".</td></tr>`}
+      </tbody></table></div></div>
+    <div class="grid2">
+      <div class="panel"><h2>Sin conciliar <small>banco y cadena · ${t.unmatchedBankLines.length}</small></h2>
+        ${t.unmatchedBankLines.length ? `<div class="tablewrap"><table><tbody>${t.unmatchedBankLines.map((b) => `<tr><td style="white-space:nowrap">${fday2(b.date)}<div class="faint" style="font-size:11px">${b.account === "usdc" ? "USDC" : "banco"}</div></td><td style="font-size:12px;word-break:break-all">${esc(b.reference.split(":")[0].slice(0, 24))}${b.reference.length > 24 ? "…" : ""}<div class="faint">${esc(b.description)}</div></td><td class="num ${b.amount >= 0 ? "ok" : "bad"}">${money(b.amount)}</td><td><div class="row" style="flex-wrap:nowrap">${b.amount > 0 ? `<button class="btn sm" data-lg="${b.id}" data-acc="${esc(b.account)}">Es garantía</button>` : ""}<button class="btn sm" data-ign="${b.id}">Ignorar</button></div></td></tr>`).join("")}</tbody></table></div>`
+          : `<p class="muted" style="font-size:13px">Todo lo cargado del banco está conciliado. Para que se concilie solo, cada transferencia debe llevar la referencia LIQ-número.</p>`}</div>
+      <div class="panel"><h2>Reservas</h2><div class="tablewrap"><table><tbody>
+        <tr><td>Dinero en el fideicomiso (banco)</td><td class="num"><b>${money(R.bank ?? R.fiduciary)}</b></td></tr>
+        ${R.usdc?.enabled ? `<tr><td>Bóveda USDC <span class="faint" style="font-size:11px">(${esc(R.usdc.chain)})</span><div class="faint" style="font-size:11px">${R.usdc.error ? `no se pudo leer la cadena: ${esc(R.usdc.error)}` : `en la cadena ${money(R.usdc.onChain)}${R.usdc.difference ? ` · <span class="bad">diferencia ${money(R.usdc.difference)}</span>` : " · cuadra con el libro"}`}</div></td><td class="num"><b>${money(R.usdc.book)}</b></td></tr>` : ""}
+        <tr><td>Garantías que se deben devolver</td><td class="num">${money(R.guarantees)}</td></tr>
+        ${R.contingent ? `<tr><td>Pólizas y cartas de crédito vigentes<div class="faint" style="font-size:11px">no es dinero: se cobra solo si un casino no paga</div></td><td class="num faint">${money(R.contingent)}</td></tr>` : ""}
+        <tr><td>Liquidaciones por pagar a casinos</td><td class="num">${money(R.payableToCasinos)}</td></tr>
+        <tr><td>Pérdida de la casa en el peor escenario</td><td class="num">${money(R.houseRisk)}</td></tr>
+        <tr><td><b>Sobra (o falta)</b></td><td class="num ${R.ok ? "ok" : "bad"}"><b>${money(R.fiduciary - R.obligations)}</b></td></tr>
+        <tr><td>Custodia de market makers / valor de sus cuentas${R.marketMakers.ok ? "" : `<div class="faint" style="font-size:11px">su resultado todavía no se traspasó; se ajusta solo en cada ronda de liquidaciones <button class="btn sm" id="tMmc">Ajustar ahora</button></div>`}</td><td class="num ${R.marketMakers.ok ? "" : "bad"}">${money(R.marketMakers.custody)} / ${money(R.marketMakers.accounts)}</td></tr>
+      </tbody></table></div><p class="faint" style="font-size:12px;margin:8px 0 0">${esc(R.note)}</p></div>
+    </div>
+    <div class="panel" style="margin-top:14px"><h2>Sellos en Bitcoin <small>${t.config.anchorEnabled ? `cada ${t.config.anchorEveryHours} h con OpenTimestamps · públicos en /v1/oracle/anchors` : "anclaje desactivado"}</small></h2>
+      ${(t.anchors ?? []).length ? `<div class="tablewrap"><table><thead><tr><th>Fecha</th><th class="num">Asiento</th><th>Huella</th><th>Calendario</th><th>Estado</th></tr></thead><tbody>${t.anchors.map((a) => `<tr><td style="white-space:nowrap">${new Date(a.created_at).toLocaleString("es-EC", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td><td class="num">#${a.journal_id}</td><td style="font-family:var(--mono);font-size:11px">${esc(a.head_hash.slice(0, 16))}…</td><td style="font-size:12px">${esc(a.calendar.replace(/^https?:\/\//, ""))}</td>
+        <td>${a.status === "submitted" ? `<a class="btn sm" href="${esc(A.api.replace(/\/$/, ""))}/v1/oracle/anchors/${a.id}.ots" target="_blank" rel="noopener">Descargar .ots</a>` : `<span class="pill void" title="${esc(a.error ?? "")}">Error</span>`}</td></tr>`).join("")}</tbody></table></div>
+        <p class="faint" style="font-size:12px;margin:8px 0 0">Cada sello prueba que el libro tenía exactamente esa huella en esa fecha. Se verifica en opentimestamps.org o con <code>ots verify</code>; Bitcoin lo confirma en unas horas.</p>`
+        : `<p class="muted" style="font-size:13px">Todavía no hay sellos. Se hace uno cada ${t.config.anchorEveryHours ?? 24} h si hubo asientos nuevos, o con "Sellar en Bitcoin". No necesita billetera ni cripto: OpenTimestamps es gratis.</p>`}</div>
+    <div class="panel" style="margin-top:14px"><h2>Libro contable <small>últimos asientos · cada uno guarda el hash del anterior</small></h2>
+      <div class="tablewrap"><table><thead><tr><th>#</th><th>Fecha</th><th>Tipo</th><th>Referencia</th><th>Partidas</th><th>Hash</th></tr></thead><tbody>
+      ${J.recent.map((j) => `<tr><td class="num">${j.id}</td><td style="white-space:nowrap">${new Date(j.ts).toLocaleString("es-EC", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</td><td>${esc(j.kind.replace(/_/g, " "))}<div class="faint" style="font-size:11px">${esc(j.created_by)}</div></td><td style="font-size:12px">${esc(j.ref ?? "")}</td>
+        <td style="font-size:12px">${j.entries.map((e) => `${esc(e.account)} <b class="${e.amount >= 0 ? "ok" : "bad"}">${e.amount >= 0 ? "+" : ""}${money(e.amount)}</b>`).join("<br>")}</td><td style="font-family:var(--mono);font-size:11px">${esc(j.hash.slice(0, 10))}…</td></tr>`).join("") || `<tr><td colspan="6" class="muted">Sin asientos todavía.</td></tr>`}
+      </tbody></table></div></div>`;
+
+  const after = () => route();
+  el.querySelector("#tSettle").onclick = (e) => run(e.target, () => api("/admin/treasury/settle", { method: "POST", body: {} }), (x) => `${x.created.length} liquidaciones emitidas`).then(after);
+  el.querySelector("#tAnchor").onclick = (e) => run(e.target, () => api("/admin/treasury/anchor", { method: "POST", body: {} }), (x) => x.anchored ? `Asiento #${x.journalId} sellado en Bitcoin` : `Sin sellar: ${x.reason ?? (x.results ?? []).map((r) => r.error).join("; ")}`).then(after);
+  const us = el.querySelector("#tUsdc");
+  if (us) us.onclick = (e) => run(e.target, () => api("/admin/treasury/usdc/sync", { method: "POST", body: {} }), (x) => `${x.transfers} transferencias leídas · ${x.matched} conciliadas`).then(after);
+  const simUsdc = (body) => run(null, () => api("/admin/treasury/usdc/simulate", { method: "POST", body }), (x) => `Transferencia simulada · bóveda ${money(x.vaultBalance)}${x.matched ? " · liquidación conciliada" : " · quedó sin conciliar"}`).then(after);
+  const usim = el.querySelector("#tUsdcSim");
+  if (usim) usim.onclick = async () => {
+    const opts = [...t.casinos.filter((c) => c.rail === "usdc" && c.usdcAddress).map((c) => [c.usdcAddress, c.name]), ["", "Otra dirección"]];
+    const f = await modal({ title: "Simular transferencia USDC", text: "Registra una transferencia como si hubiera ocurrido en la cadena. Si el monto coincide con una liquidación pendiente del casino, se marca pagada; si no, queda en “Sin conciliar” (por ejemplo, para registrarla como garantía).", ok: "Simular",
+      fields: [{ id: "dir", label: "Movimiento", type: "select", options: [["in", "Entra a la bóveda (el casino paga)"], ["out", "Sale de la bóveda (pagamos al casino)"]] }, { id: "who", label: "Casino", type: "select", options: opts }, { id: "addr", label: "Otra dirección (si elegiste “Otra dirección”)", placeholder: "0x…" }, { id: "amt", label: "Monto (USDC)", type: "number" }] });
+    if (f) simUsdc({ direction: f.dir, address: f.who || f.addr, amountUsd: Number(f.amt) });
+  };
+  el.querySelectorAll("[data-simpay]").forEach((b) => (b.onclick = () => {
+    const x = t.settlements.find((s) => String(s.id) === b.dataset.simpay), c = t.casinos.find((k) => k.operatorId === x.operator_id);
+    simUsdc({ direction: x.amount > 0 ? "in" : "out", address: c.usdcAddress, amountUsd: Math.abs(x.amount - (x.covered_from_guarantee ?? 0)) / 1e6 });
+  }));
+  const mmc = el.querySelector("#tMmc");
+  if (mmc) mmc.onclick = (e) => run(e.target, () => api("/admin/treasury/mm-custody/true-up", { method: "POST", body: {} }), (x) => x.adjusted ? `Custodia ajustada en ${money(x.total)}: traspásalo ${x.total >= 0 ? "del fideicomiso a la custodia" : "de la custodia al fideicomiso"}` : "La custodia ya estaba al día").then(after);
+  el.querySelector("#tInstr").onclick = async () => {
+    const f = await modal({ title: "Registrar póliza o carta de crédito", text: "Guarda la garantía que entregó el casino. Cuenta mientras esté vigente y deja de contar unos días antes de vencer, para que haya tiempo de ejecutarla. Te avisaremos antes.", ok: "Registrar",
+      fields: [{ id: "op", label: "Casino", type: "select", options: t.casinos.map((c) => [c.operatorId, c.name]) }, { id: "kind", label: "Tipo", type: "select", options: [["poliza", "Póliza de caución (aseguradora)"], ["carta_credito", "Carta de crédito stand-by (banco)"]] },
+        { id: "issuer", label: "Aseguradora o banco", placeholder: "Seguros Equinoccial" }, { id: "number", label: "Número", placeholder: "PC-2026-118" }, { id: "amt", label: "Monto asegurado (USD)", type: "number" },
+        { id: "exp", label: "Vence", type: "date" }, { id: "url", label: "Enlace al documento (opcional)", type: "url", placeholder: "https://" }, { id: "notes", label: "Notas (opcional)" }] });
+    if (f) run(null, () => api("/admin/treasury/instruments", { method: "POST", body: { operatorId: f.op, kind: f.kind, issuer: f.issuer, number: f.number, amountUsd: Number(f.amt), expiresAt: f.exp, ...(f.url ? { documentUrl: f.url } : {}), ...(f.notes ? { notes: f.notes } : {}) } }), "Garantía registrada").then(after);
+  };
+  el.querySelectorAll("[data-irel]").forEach((b) => (b.onclick = async () => {
+    if (!(await modal({ title: "Devolver al casino", text: "Deja de contar como garantía (por ejemplo, porque la reemplazó o terminó la relación). No se puede deshacer.", ok: "Devolver", danger: true }))) return;
+    run(b, () => api(`/admin/treasury/instruments/${b.dataset.irel}/release`, { method: "POST", body: {} }), "Devuelta").then(after);
+  }));
+  el.querySelectorAll("[data-iexe]").forEach((b) => (b.onclick = async () => {
+    const i = t.instruments.find((x) => String(x.id) === b.dataset.iexe);
+    const opts = t.settlements.filter((x) => x.operator_id === i.operatorId && ["pending", "overdue"].includes(x.status) && x.amount > 0).map((x) => [String(x.id), `LIQ-${x.id} · ${money(x.amount - x.covered_from_guarantee)}${x.status === "overdue" ? " · vencida" : ""}`]);
+    const f = await modal({ title: `Ejecutar ${i.kindLabel} ${i.number}`, text: `Regístralo cuando ${esc(i.issuer)} haya pagado. Ese dinero entra al fideicomiso y cubre la liquidación que el casino no pagó.`, ok: "Registrar cobro", danger: true,
+      fields: [{ id: "s", label: "Liquidación que cubre", type: "select", options: opts }, { id: "ref", label: "Referencia del pago de la aseguradora o del banco" }] });
+    if (f) run(b, () => api(`/admin/treasury/instruments/${i.id}/execute`, { method: "POST", body: { settlementId: Number(f.s), bankRef: f.ref } }), (x) => `Cobrado ${money(x.collected)}`).then(after);
+  }));
+  el.querySelectorAll("[data-lg]").forEach((b) => (b.onclick = async () => {
+    const rail = b.dataset.acc === "usdc" ? "usdc" : "bank";
+    const opts = t.casinos.filter((c) => c.rail === rail).map((c) => [c.operatorId, c.name]);
+    if (!opts.length) { toast(`Ningún casino liquida por ${rail === "usdc" ? "USDC" : "banco"}`); return; }
+    const f = await modal({ title: "Registrar como depósito de garantía", ok: "Registrar", fields: [{ id: "op", label: "Casino", type: "select", options: opts }] });
+    if (f) run(null, () => api(`/admin/treasury/bank-lines/${b.dataset.lg}/guarantee`, { method: "POST", body: { operatorId: f.op } }), "Garantía registrada").then(after);
+  }));
+  el.querySelector("#tReserve").onclick = async () => {
+    const f = await modal({ title: "Reserva de la casa", text: "Capital de la plataforma en el fideicomiso para cubrir lo que pierda la casa. Debe ser al menos su pérdida en el peor escenario.", ok: "Registrar",
+      fields: [{ id: "dir", label: "Movimiento", type: "select", options: [["deposit", "Aporte"], ["withdraw", "Retiro"]] }, ...(t.usdc?.enabled ? [{ id: "rail", label: "Dónde", type: "select", options: [["bank", "Fideicomiso (banco)"], ["usdc", "Bóveda USDC"]] }] : []), { id: "amt", label: "Monto (USD)", type: "number" }, { id: "ref", label: "Referencia (bancaria o hash de la transacción)" }] });
+    if (f) run(null, () => api("/admin/treasury/reserve", { method: "POST", body: { direction: f.dir, amountUsd: Number(f.amt), ...(f.rail ? { rail: f.rail } : {}), ...(f.ref ? { bankRef: f.ref } : {}) } }), "Movimiento registrado").then(after);
+  };
+  el.querySelector("#tBank").onclick = async () => {
+    const f = await modal({ title: "Cargar extracto del banco", text: "Pega las líneas del extracto del fideicomiso: <code>fecha;referencia;monto;descripción</code> (o con comas). Montos positivos entran, negativos salen. Las transferencias con LIQ-número se concilian solas.", ok: "Conciliar",
+      fields: [{ id: "csv", label: "Extracto", type: "textarea", placeholder: "2026-10-27;TRX-9001;60,60;Pago LIQ-12 Casino Dos" }] });
+    if (f) run(null, () => api("/admin/treasury/bank-statements", { method: "POST", body: { csv: f.csv } }), (x) => `${x.imported} líneas nuevas · ${x.matched} conciliadas · ${x.unmatched} sin conciliar`).then(after);
+  };
+  el.querySelectorAll("[data-gar]").forEach((b) => (b.onclick = async () => {
+    const f = await modal({ title: `Garantía de ${b.dataset.gar}`, text: "Registra el depósito o el retiro en el fideicomiso (la transferencia real se hace por el banco).", ok: "Registrar",
+      fields: [{ id: "dir", label: "Movimiento", type: "select", options: [["deposit", "Depósito"], ["withdraw", "Devolución"]] }, { id: "amt", label: "Monto (USD)", type: "number" }, { id: "ref", label: "Referencia bancaria" }] });
+    if (f) run(null, () => api(`/admin/treasury/guarantees/${b.dataset.gar}`, { method: "POST", body: { direction: f.dir, amountUsd: Number(f.amt), ...(f.ref ? { bankRef: f.ref } : {}) } }), "Garantía actualizada").then(after);
+  }));
+  el.querySelectorAll("[data-cfg]").forEach((b) => (b.onclick = async () => {
+    const c = t.casinos.find((x) => x.operatorId === b.dataset.cfg);
+    const f = await modal({ title: `Condiciones de ${c.name}`, text: "Si la garantía queda por debajo de lo exigido, si su deuda supera el límite o si tiene una liquidación vencida, sus jugadores no pueden abrir apuestas nuevas (sí vender y cobrar) hasta que se regularice.", ok: "Guardar",
+      fields: [{ id: "req", label: "Garantía exigida (USD, 0 = sin exigir)", type: "number", value: String(c.guaranteeRequired / 1e6) },
+        { id: "lim", label: "Límite de deuda (USD; vacío = su garantía)", type: "number", value: c.debtLimit == null ? "" : String(c.debtLimit / 1e6) },
+        { id: "rail", label: "Cómo liquida", type: "select", value: c.rail, options: [["bank", "Banco / fideicomiso"], ["usdc", "USDC (bóveda multifirma)"]] },
+        { id: "addr", label: "Dirección USDC del casino (si liquida en USDC)", value: c.usdcAddress ?? "", placeholder: "0x…" },
+        { id: "pause", label: "Pausa manual", type: "checkbox", value: c.pausedManual, hint: "Pausar la operación hasta que la quite a mano" }] });
+    if (f) run(null, () => api(`/admin/treasury/casinos/${c.operatorId}`, { method: "PATCH", body: { guaranteeRequiredUsd: Number(f.req || 0), debtLimitUsd: f.lim === "" ? null : Number(f.lim), paused: f.pause,
+      ...(f.addr !== (c.usdcAddress ?? "") ? { usdcAddress: f.addr || null } : {}), ...(f.rail !== c.rail ? { rail: f.rail } : {}) } }), "Condiciones guardadas").then(after);
+  }));
+  el.querySelectorAll("[data-pay]").forEach((b) => (b.onclick = async () => {
+    const f = await modal({ title: `Marcar LIQ-${b.dataset.pay} como pagada`, ok: "Marcar pagada", fields: [{ id: "ref", label: "Referencia de la transferencia" }] });
+    if (f) run(null, () => api(`/admin/treasury/settlements/${b.dataset.pay}/pay`, { method: "POST", body: { bankRef: f.ref } }), "Liquidación pagada").then(after);
+  }));
+  el.querySelectorAll("[data-col]").forEach((b) => (b.onclick = async () => {
+    if (!(await modal({ title: `Cobrar LIQ-${b.dataset.col} de la garantía`, text: "Se descuenta de la garantía del casino lo que adeuda (o lo que alcance). Después tendrá que reponerla.", ok: "Cobrar", danger: true }))) return;
+    run(b, () => api(`/admin/treasury/settlements/${b.dataset.col}/collect`, { method: "POST", body: {} }), (x) => `Cobrados ${money(x.collected)}${x.remaining > 0 ? ` · faltan ${money(x.remaining)}` : ""}`).then(after);
+  }));
+  el.querySelectorAll("[data-ign]").forEach((b) => (b.onclick = () => run(b, () => api(`/admin/treasury/bank-lines/${b.dataset.ign}/ignore`, { method: "POST", body: {} }), "Línea ignorada").then(after)));
+  el.querySelectorAll("[data-stm]").forEach((b) => (b.onclick = async () => {
+    const r = await fetch(A.api.replace(/\/$/, "") + `/admin/treasury/settlements/${b.dataset.stm}/statement`, { headers: { "x-admin-key": A.key ?? "", "x-admin-user": A.user ?? "" } });
+    const text = await r.text();
+    const sig = r.headers.get("x-oracle-signature");
+    const full = JSON.stringify({ statement: text, signature: sig, keyId: r.headers.get("x-oracle-key-id"), howToVerify: "Ed25519 (base64) sobre el texto exacto de 'statement', con la clave pública de /v1/oracle/keys" }, null, 2);
+    await modal({ title: `Estado de cuenta LIQ-${b.dataset.stm}`, text: "Copia este bloque y envíaselo al casino. El texto de <code>statement</code> va firmado tal cual: cualquier cambio invalida la firma.", ok: "Cerrar",
+      fields: [{ id: "json", label: "Estado firmado", type: "textarea", value: full }] });
+  }));
+}
+
+// ---------- Liquidación entre casinos ----------
+async function viewLiquidacion(el) {
+  const days = viewLiquidacion.days ?? 7;
+  const r = await api(`/admin/clearing?from=${new Date(Date.now() - days * 864e5).toISOString()}`);
+  const L = r.liquidity, pctOf = (v) => (L.volume ? Math.round((v / L.volume) * 100) : 0);
+  const sameCasino = L.volume - L.betweenCasinos - L.fromMarketMakers - L.fromHouse;
+  el.innerHTML = `<div class="head"><div><h1>Liquidación entre casinos</h1><p>El libro es uno solo: el jugador de un casino le puede ganar al de otro. Cada casino cobra y paga a sus jugadores, así que la plataforma compensa: el casino cuyos jugadores perdieron le transfiere el neto, y ella le paga al casino cuyos jugadores ganaron. Solo entran los mercados ya resueltos (lo demás sigue en garantía en cada casino).</p></div>
+    <span class="seg" id="lDays">${[[7, "7 días"], [30, "30 días"], [90, "90 días"]].map(([d, l]) => `<button type="button" data-d="${d}" class="${d === days ? "on" : ""}">${l}</button>`).join("")}</span></div>
+    <div class="kpis" style="margin-bottom:14px">
+      <div class="kpi"><span class="k">Volumen del período</span><span class="v">${kmoney(L.volume)}</span><span class="d">todos los cruces</span></div>
+      <div class="kpi"><span class="k">Entre casinos distintos</span><span class="v">${pctOf(L.betweenCasinos)}%</span><span class="d">${kmoney(L.betweenCasinos)} · jugador contra jugador</span></div>
+      <div class="kpi"><span class="k">Con market makers externos</span><span class="v">${pctOf(L.fromMarketMakers)}%</span><span class="d">reembolsos pagados ${money(r.platform.rebatesPaid)}</span></div>
+      <div class="kpi"><span class="k">Con la casa</span><span class="v">${pctOf(L.fromHouse)}%</span><span class="d">resultado de la casa ${money(r.platform.houseResult)}</span></div>
+    </div>
+    <div class="tablewrap"><table><thead><tr><th>Casino</th><th class="num">Mercados</th><th class="num">Recaudado neto</th><th class="num">Comisiones</th><th class="num">Revenue share</th><th class="num">Resultado de sus jugadores</th><th class="num">A liquidar</th></tr></thead><tbody>
+      ${r.casinos.map((c) => `<tr><td><div class="t">${esc(c.name)}</div><span class="faint" style="font-size:11px">${c.players} jugadores</span></td><td class="num">${c.markets}</td><td class="num">${money(c.collected)}<br><span class="faint" style="font-size:11px">−${money(c.credited)} de ${money(c.debited)}</span></td><td class="num">${money(c.fees)}</td>
+        <td class="num">${money(c.revenueShare)} <span class="faint">(${(c.revenueShareBps / 100).toFixed(0)}%)</span></td><td class="num ${c.playersResult >= 0 ? "ok" : "bad"}">${money(c.playersResult)}</td>
+        <td class="num"><b>${money(Math.abs(c.due))}</b><br><span class="faint" style="font-size:11px">${c.due > 0 ? "el casino paga" : c.due < 0 ? "se le paga al casino" : "sin saldo"}</span></td></tr>`).join("") || `<tr><td colspan="7" class="muted" style="text-align:center;padding:24px">Sin casinos.</td></tr>`}
+    </tbody></table></div>
+    ${r.casinos.every((c) => !c.markets) ? `<p class="faint" style="font-size:12px;margin:8px 0 0">Todavía no hay mercados resueltos en el período: la liquidación se calcula cuando se pagan. Resuelve uno en Resoluciones para verla.</p>` : ""}
+    <div class="grid2">
+      <div class="panel"><h2>Quién le compró a quién <small>volumen por par</small></h2>
+        <div class="tablewrap"><table><thead><tr><th>Toma (taker)</th><th>Da liquidez (maker)</th><th class="num">Volumen</th><th class="num">Cruces</th></tr></thead><tbody>
+        ${L.matrix.slice(0, 15).map((m) => `<tr><td>${esc(m.taker)}</td><td>${esc(m.maker)}</td><td class="num">${kmoney(m.volume)}</td><td class="num">${m.trades}</td></tr>`).join("") || `<tr><td colspan="4" class="muted">Sin cruces en el período.</td></tr>`}
+        </tbody></table></div></div>
+      <div class="panel"><h2>Cómo se calcula</h2><p class="muted" style="font-size:13px;line-height:1.55;margin:0">
+        <b>Recaudado neto</b> = lo que el casino debitó a sus jugadores en los mercados resueltos del período − lo que les acreditó (premios, ventas y devoluciones), más las fianzas de resolución.<br>
+        <b>A liquidar</b> = recaudado − su revenue share. Si es positivo, el casino le transfiere ese monto a la plataforma; si es negativo, la plataforma se lo paga.<br>
+        La plataforma queda con las comisiones (menos revenue share y reembolsos a market makers) y con el resultado de la casa. Mismo casino entre sus jugadores: ${kmoney(Math.max(0, sameCasino))}.<br>
+        Cada casino ve su propia liquidación en <code>GET /operator/v1/clearing</code>.</p></div>
+    </div>`;
+  el.querySelectorAll("#lDays button").forEach((b) => (b.onclick = () => { viewLiquidacion.days = Number(b.dataset.d); route(); }));
+}
+
+// ---------- Oráculo ----------
+async function viewOraculo(el) {
+  const [idx, tr, keys, mk] = await Promise.all([api("/v1/oracle"), api("/v1/oracle/track-record"), api("/v1/oracle/keys"), api("/v1/oracle/markets?limit=12")]);
+  const base = (A.api || (location.origin !== "null" ? location.origin : "https://tu-servidor")).replace(/\/$/, "");
+  const [d, w] = tr.data.horizons, res = tr.data.resolutions;
+  const kpi = (k, v, sub, cls = "") => `<div class="kpi ${cls}"><span class="k">${k}</span><span class="v">${v}</span><span class="d">${sub}</span></div>`;
+  const pct = (p) => p == null ? "—" : Math.round(p * 100) + "%";
+  el.innerHTML = `<div class="head"><div><h1>Oráculo</h1><p>Lo que la plataforma publica para que otros lo usen: la probabilidad de cada mercado, firmada, y su historial de aciertos. Mientras mejor calibrado, más vale el dato.</p></div></div>
+    ${!w.reliable ? `<div class="panel" style="margin-bottom:14px;border-color:color-mix(in srgb,var(--brand) 45%,var(--line))">Con ${w.resolvedMarkets} mercados resueltos el historial todavía es orientativo (hacen falta 30 o más).</div>` : ""}
+    <div class="kpis" style="margin-bottom:14px">
+      ${kpi("Brier 7 días antes", bscore(w.brier), `apertura ${bscore(w.brierOpening)} · sin información 0,250`, w.brier != null && w.brier < 0.2 ? "" : "attn")}
+      ${kpi("Brier 24 h antes", bscore(d.brier), `${d.resolvedMarkets} mercados resueltos`)}
+      ${kpi("Resoluciones", res.finalized, `${res.disputed} disputadas · ${res.disputesUpheld} con razón · ${res.proposedByPlayers} propuestas por jugadores`)}
+      ${kpi("Fianzas", "$" + res.bonds.playerBondUsd + " / $" + res.bonds.houseBondUsd, `jugador / casa · pagado a quien corrigió $${res.bonds.paidToDisputersUsd.toLocaleString("es-EC")}`)}
+    </div>
+    <div class="grid2">
+      <div class="panel"><h2>Calibración publicada <small>precio 7 días antes vs. resultado</small></h2>${calibrationChart(w.calibration)}</div>
+      <div class="panel"><h2>Endpoints públicos <small>sin clave, con caché de 30 s</small></h2>
+        <div class="tablewrap"><table><tbody>${Object.entries(idx.data.endpoints).map(([k, v]) => `<tr><td style="white-space:nowrap"><b>${esc(k)}</b></td><td style="font-family:var(--mono);font-size:12px;word-break:break-all">${esc(base + v)}</td></tr>`).join("")}</tbody></table></div>
+        <h2 style="margin-top:16px">Firma <small>Ed25519 · clave ${esc(keys.keys[0].kid)}</small></h2>
+        <p class="muted" style="font-size:13px;margin:0 0 8px">Cada respuesta trae la cabecera <code>X-Oracle-Signature</code>: la firma de los bytes exactos del cuerpo. Quien use el dato puede comprobar que salió de aquí y que nadie lo cambió.</p>
+        <details><summary>Clave pública y cómo verificar</summary><pre style="white-space:pre-wrap;font-size:11px">${esc(keys.keys[0].publicKeyPem)}</pre>
+<pre style="white-space:pre-wrap;font-size:11px">${esc(`// Node.js
+import { verify, createPublicKey } from "node:crypto";
+const res = await fetch("${base}/v1/oracle/markets");
+const body = await res.text();
+const ok = verify(null, Buffer.from(body), createPublicKey(PUBLIC_KEY_PEM),
+  Buffer.from(res.headers.get("x-oracle-signature"), "base64"));`)}</pre></details></div>
+    </div>
+    <div class="panel" style="margin-top:14px"><h2>Lo que se publica ahora <small>los 12 mercados con más volumen</small></h2>
+      <div class="tablewrap"><table><thead><tr><th>Mercado</th><th class="num">Probabilidad</th><th class="num">Compra / venta</th><th class="num">Volumen</th><th>Confianza</th><th class="num">Externa</th></tr></thead><tbody>
+      ${mk.data.markets.map((m) => `<tr><td><div class="t">${esc(m.event)}</div>${m.kind === "multi" ? `<span class="faint" style="font-size:11px">${esc(m.outcome)}</span>` : ""}</td><td class="num"><b>${pct(m.probability)}</b></td><td class="num">${m.bid != null ? Math.round(m.bid * 100) : "—"}¢ / ${m.ask != null ? Math.round(m.ask * 100) : "—"}¢</td><td class="num">$${m.volumeUsd.toLocaleString("es-EC")}</td><td><span class="pill ${m.confidence === "alta" ? "open" : m.confidence === "media" ? "proposed" : "void"}">${m.confidence}</span></td><td class="num">${m.external ? pct(m.external.probability) : "—"}</td></tr>`).join("")}
+      </tbody></table></div>
+      <p class="faint" style="font-size:12px;margin:10px 0 0">Probabilidad: precio justo del market maker (aprende del dinero de los jugadores y de referencias externas). Confianza: alta con más de $1.000 apostados y spread de 6¢ o menos; media con más de $100 y spread de 10¢ o menos.</p></div>`;
+}
+
+function calibrationChart(bins) {
+  const W = 360, H = 300, pad = { l: 40, r: 12, t: 12, b: 34 };
+  const x = (v) => pad.l + v * (W - pad.l - pad.r), y = (v) => H - pad.b - v * (H - pad.t - pad.b);
+  const maxN = Math.max(1, ...bins.map((b) => b.n));
+  let g = "";
+  for (let t = 0; t <= 1.0001; t += 0.25) g += `<line x1="${x(0)}" x2="${x(1)}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${pad.l - 6}" y="${y(t) + 4}" text-anchor="end">${Math.round(t * 100)}%</text><text x="${x(t)}" y="${H - pad.b + 16}" text-anchor="middle">${Math.round(t * 100)}%</text>`;
+  const pts = bins.filter((b) => b.n);
+  const path = pts.map((b, i) => `${i ? "L" : "M"}${x(b.predicted)} ${y(b.actual)}`).join("");
+  const dots = pts.map((b) => `<circle cx="${x(b.predicted)}" cy="${y(b.actual)}" r="${5 + 9 * Math.sqrt(b.n / maxN)}" fill="var(--brand)" fill-opacity=".85" stroke="var(--card)" stroke-width="2"><title>Precio ${Math.round(b.from * 100)}–${Math.round(b.to * 100)}%: ${b.n} mercados · precio medio ${Math.round(b.predicted * 100)}% · se cumplieron ${Math.round(b.actual * 100)}%</title></circle>`).join("");
+  return `<svg class="calib" viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W * 1.4}px" role="img" aria-label="Gráfico de calibración: precio frente a porcentaje cumplido">
+    ${g}<line x1="${x(0)}" y1="${y(0)}" x2="${x(1)}" y2="${y(1)}" stroke="var(--muted)" stroke-dasharray="4 4"/>
+    ${pts.length > 1 ? `<path d="${path}" fill="none" stroke="var(--brand)" stroke-width="2" opacity=".6"/>` : ""}${dots}
+    <text x="${x(0.5)}" y="${H - 4}" text-anchor="middle">Precio del Sí antes del cierre</text>
+    <text transform="translate(11 ${y(0.5)}) rotate(-90)" text-anchor="middle">Se cumplió</text></svg>`;
+}
+const bscore = (v) => (v == null ? "—" : v.toFixed(3));
+function brierBars(rows, labelKey) {
+  const max = 0.35;
+  return rows.filter((r) => r.n).map((r) => `<div class="bars2" title="${esc(r[labelKey])}: Brier ${bscore(r.brierRef)} con ${r.n} mercados (apertura ${bscore(r.brierInitial)})"><span>${esc(r[labelKey])}</span>
+    <span class="bar"><i style="width:${Math.min(100, ((r.brierRef ?? 0) / max) * 100)}%"></i><b style="left:${(0.25 / max) * 100}%"></b></span><span class="num" style="text-align:right">${bscore(r.brierRef)}</span><span class="faint num" style="text-align:right">${r.n}</span></div>`).join("") || `<p class="muted">Sin mercados resueltos todavía.</p>`;
+}
+const pctS = (v) => (v == null ? "—" : `${v > 0 ? "+" : ""}${Math.round(v * 100)} pts`);
+
+async function viewCalibracion(el) {
+  const h = viewCalibracion.h ?? 168;
+  const r = await api(`/admin/integrity?horizon=${h}`);
+  const o = r.overall, I = r.integrity;
+  const improve = o.brierInitial != null && o.brierRef != null ? o.brierInitial - o.brierRef : null;
+  el.innerHTML = `<div class="head"><div><h1>Calibración y sesgo</h1><p>¿Los precios predicen bien? Se mide con los mercados ya resueltos: si los que estaban a 70% se cumplieron cerca del 70% de las veces, el mercado está bien calibrado.</p></div>
+    <span class="seg" id="cH">${[[24, "1 día antes"], [168, "7 días antes"], [720, "30 días antes"]].map(([v, l]) => `<button type="button" data-h="${v}" class="${v === h ? "on" : ""}">${l}</button>`).join("")}</span></div>
+    ${!r.reliable ? `<div class="banner"><b>Todavía hay pocos datos:</b> ${o.n} mercados resueltos. Con menos de ${r.minReliable}, estos números son orientativos; con varias decenas por categoría empiezan a ser confiables.</div>` : ""}
+    <div class="kpis">
+      <div class="kpi"><span class="k">Mercados resueltos</span><span class="v">${o.n}</span><span class="d">Tasa de Sí: ${o.baseRate == null ? "—" : Math.round(o.baseRate * 100) + "%"}</span></div>
+      <div class="kpi"><span class="k">Puntaje de Brier</span><span class="v ${o.brierRef != null && o.brierRef < 0.2 ? "ok" : ""}">${bscore(o.brierRef)}</span><span class="d">0 = perfecto · 0,25 = decir 50% a todo</span></div>
+      <div class="kpi"><span class="k">Brier al cierre</span><span class="v">${bscore(o.brierClose)}</span><span class="d">Sin información: ${bscore(o.brierBaseRate)}</span></div>
+      <div class="kpi"><span class="k">Aporte de los jugadores</span><span class="v ${improve > 0 ? "ok" : improve < 0 ? "bad" : ""}">${improve == null ? "—" : (improve >= 0 ? "+" : "") + improve.toFixed(3)}</span><span class="d">Brier de apertura ${bscore(o.brierInitial)} → ${bscore(o.brierRef)}</span></div>
+    </div>
+    <div class="grid2">
+      <div class="panel"><h2>Gráfico de calibración <small>${h === 24 ? "1 día" : h === 168 ? "7 días" : "30 días"} antes del cierre</small></h2>${calibrationChart(r.calibration)}
+        <p class="help">Cada punto agrupa mercados por precio; su tamaño indica cuántos. Sobre la diagonal, el precio acierta. Por debajo, se cumplen menos de lo que decía el precio (sobrevalorados); por encima, más (infravalorados).</p>
+        <div class="tablewrap" style="margin-top:10px"><table><thead><tr><th>Tramo de precio</th><th class="num">Mercados</th><th class="num">Precio medio</th><th class="num">Se cumplió</th><th class="num">Desvío</th></tr></thead><tbody>
+        ${r.calibration.map((b) => `<tr><td>${Math.round(b.from * 100)}–${Math.round(b.to * 100)}%</td><td class="num">${b.n}</td><td class="num">${b.predicted == null ? "—" : Math.round(b.predicted * 100) + "%"}</td><td class="num">${b.actual == null ? "—" : Math.round(b.actual * 100) + "%"}</td><td class="num ${b.n && Math.abs(b.actual - b.predicted) > 0.1 ? "warn" : ""}">${b.n ? pctS(b.actual - b.predicted) : "—"}</td></tr>`).join("")}</tbody></table></div></div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="panel"><h2>Brier por categoría <small>línea = 0,25 · menor es mejor</small></h2>${brierBars(r.byCategory, "name")}</div>
+        <div class="panel"><h2>Brier por volumen del mercado</h2>${brierBars(r.byVolume, "tier")}<p class="help">Con más dinero en juego, los precios suelen predecir mejor. Si los mercados chicos tienen Brier alto, conviene no presentarlos como predicción confiable.</p></div>
+      </div>
+    </div>
+    <h2 style="font-size:18px;margin:26px 0 10px">Sesgos</h2>
+    <div class="grid3">
+      <div class="panel"><h2>Favorito y batacazo</h2>
+        <div class="bars2" style="grid-template-columns:1fr auto auto"><span>Batacazos (precio &lt; 20%)</span><b class="num ${(r.bias.longshot.longshots.gap ?? 0) < -0.05 ? "warn" : ""}">${pctS(r.bias.longshot.longshots.gap)}</b><span class="faint num">${r.bias.longshot.longshots.n}</span></div>
+        <div class="bars2" style="grid-template-columns:1fr auto auto"><span>Favoritos (precio &gt; 80%)</span><b class="num ${(r.bias.longshot.favorites.gap ?? 0) > 0.05 ? "warn" : ""}">${pctS(r.bias.longshot.favorites.gap)}</b><span class="faint num">${r.bias.longshot.favorites.n}</span></div>
+        <p class="help">Cuánto se cumplieron frente a su precio. Negativo en batacazos = los jugadores pagan de más por lo improbable (sesgo clásico de las apuestas).</p></div>
+      <div class="panel"><h2>Resultados Sí / No <small>binarios</small></h2>
+        ${r.bias.yesNo.length ? r.bias.yesNo.map((y) => { const t = y.yes + y.no || 1; return `<div class="bars2" style="grid-template-columns:110px minmax(0,1fr) 70px" title="${esc(y.name)}: ${y.yes} Sí, ${y.no} No, ${y.void} anulados"><span>${esc(y.name)}</span><span class="bar"><i style="width:${(y.yes / t) * 100}%"></i><b style="left:50%"></b></span><span class="num" style="text-align:right">${y.yes}/${y.no}</span></div>`; }).join("") : `<p class="muted">Sin binarios resueltos todavía.</p>`}
+        <p class="help">Si casi todo se resuelve en No (o en Sí), las preguntas pueden estar redactadas con sesgo.</p></div>
+      <div class="panel"><h2>Precisión de la apertura <small>por origen</small></h2>
+        ${r.bias.openingAccuracy.length ? r.bias.openingAccuracy.map((a) => `<div class="bars2" style="grid-template-columns:1fr auto auto"><span>${esc(a.origin)}</span><b class="num">${bscore(a.brierInitial)}</b><span class="faint num">${a.n}</span></div>`).join("") : `<p class="muted">Sin datos todavía.</p>`}
+        <p class="help">Brier de la probabilidad con la que abrió el mercado: compara la IA con el catálogo y los moderadores.</p></div>
+    </div>
+    <h2 style="font-size:18px;margin:26px 0 10px">Integridad</h2>
+    <div class="grid2">
+      <div class="panel"><h2>Alertas <small>compras tardías ganadoras y cuentas nuevas</small></h2>
+        ${I.alerts.length ? `<div class="tablewrap"><table><thead><tr><th>Tipo</th><th>Mercado</th><th>Jugador</th><th class="num">Monto</th><th>Detalle</th></tr></thead><tbody>${I.alerts.map((a) => `<tr><td><span class="pill disputed">${esc(a.kind)}</span></td><td>${esc(a.title)}</td><td>${esc(a.player)}</td><td class="num">${money(a.amount)}</td><td class="muted" style="font-size:12px">${esc(a.detail)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="ok">Sin alertas.</p>`}
+        <p class="help">Compras de $${r.thresholds.alertMinUsd} o más en el lado ganador dentro de los ${r.thresholds.lateWindowMinutes} min previos al cierre o a la propuesta, y cuentas de menos de 7 días que apuestan $${r.thresholds.alertMinUsd * 2} o más en un día. Límite por jugador y mercado: ${r.thresholds.maxStakePerMarketUsd ? "$" + r.thresholds.maxStakePerMarketUsd : "sin límite"}.</p></div>
+      <div class="panel"><h2>Resultado de la casa según quién resolvió</h2>
+        ${I.houseByResolver.length ? `<div class="tablewrap"><table><thead><tr><th>Propuso</th><th class="num">Eventos</th><th class="num">Casa ganó</th><th class="num">Resultado casa</th></tr></thead><tbody>${I.houseByResolver.map((x) => `<tr><td>${esc(x.proposer)}</td><td class="num">${x.events}</td><td class="num">${x.events ? Math.round((x.house_won / x.events) * 100) : 0}%</td><td class="num ${x.house_pnl >= 0 ? "ok" : "bad"}">${money(x.house_pnl)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="muted">Sin resoluciones finalizadas todavía.</p>`}
+        <p class="help">La casa es contraparte y además resuelve. Si con un resolutor la casa gana mucho más seguido que con los demás, hay que revisar esas resoluciones.</p></div>
+    </div>
+    <div class="grid2">
+      <div class="panel"><h2>Concentración del dinero <small>mercados abiertos</small></h2>
+        ${I.concentration.length ? `<div class="tablewrap"><table><thead><tr><th>Mercado</th><th class="num">Apostado</th><th class="num">Jugadores</th><th class="num">Top 1</th><th class="num">Top 5</th></tr></thead><tbody>${I.concentration.map((c) => `<tr><td>${esc(c.title)}</td><td class="num">${money(c.total)}</td><td class="num">${c.players}</td><td class="num warn">${Math.round(c.top1 * 100)}%</td><td class="num">${Math.round(c.top5 * 100)}%</td></tr>`).join("")}</tbody></table></div>` : `<p class="ok">Ningún mercado depende de uno o pocos jugadores.</p>`}
+        <p class="help">Mercados con al menos $${r.thresholds.minVolumeUsd} apostados donde un jugador pone el 50% o más, o los 5 mayores el 80% o más: su precio refleja a pocas personas.</p></div>
+      <div class="panel"><h2>Sesgo de hinchada <small>por país del jugador</small></h2>
+        ${I.homeBias.length ? `<div class="tablewrap"><table><thead><tr><th>Opción</th><th class="num">Dinero de su país</th><th class="num">Jugadores de su país</th><th class="num">Veces</th></tr></thead><tbody>${I.homeBias.map((b) => `<tr><td>${esc(b.title)}</td><td class="num">${Math.round(b.moneyFromHome * 100)}%</td><td class="num">${Math.round(b.bettorsFromHome * 100)}%</td><td class="num ${b.ratio > 1.3 ? "warn" : ""}">${b.ratio ?? "—"}×</td></tr>`).join("")}</tbody></table></div>`
+          : `<p class="muted">${I.countryCoverage ? "Sin sesgo de hinchada detectable todavía." : "Aún no hay jugadores con país. El casino debe enviar <code>country</code> (EC, CO…) al abrir la sesión."}</p>`}
+        <p class="help">Cuando una opción es un país, compara qué parte del dinero al Sí viene de jugadores de ese país con qué parte de los jugadores del evento son de ahí. Más de 1,3× indica apuesta de hinchada.</p></div>
+    </div>
+    <div class="panel" style="margin-top:14px"><h2>Comparación con referencias externas <small>usa “Referencia” en Mercados para agregar</small></h2>
+      ${r.external.length ? `<div class="tablewrap"><table><thead><tr><th>Mercado</th><th>Fuente</th><th class="num">Referencia</th><th class="num">Nuestro precio</th><th class="num">Diferencia</th><th>Actualizado</th></tr></thead><tbody>${r.external.map((x) => `<tr><td>${esc(x.title)}</td><td>${esc(x.source)}</td><td class="num">${x.refPrice}%</td><td class="num">${x.ourPrice}%</td><td class="num ${Math.abs(x.diff) >= 10 ? "warn" : ""}">${x.diff > 0 ? "+" : ""}${x.diff} pts</td><td style="white-space:nowrap">${ago(x.capturedAt)}</td></tr>`).join("")}</tbody></table></div>`
+        : `<p class="muted">Sin referencias todavía. Para eventos que también existen en Polymarket o en casas de apuestas, agrega la referencia desde Mercados.</p>`}
+      <p class="help">Diferencias de 10 puntos o más con una fuente con mucho volumen suelen indicar sesgo local o poca liquidez.</p></div>`;
+  el.querySelectorAll("#cH button").forEach((b) => (b.onclick = () => { viewCalibracion.h = Number(b.dataset.h); route(); }));
+}
+
+// ---------- Arranque ----------
+if (A.key) start().catch(() => logout()); else { document.getElementById("login").hidden = false; if (A.api) document.getElementById("lkApi").value = A.api; if (A.user) document.getElementById("lkUser").value = A.user; }
+</script>
+</body>
+</html>
