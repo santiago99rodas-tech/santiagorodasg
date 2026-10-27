@@ -619,7 +619,7 @@
       trades_24h: S.trades.filter((t) => t.at > t24).length, open_events: S.events.filter((e) => e.status === "open").length,
       awaiting_resolution: S.events.filter((e) => ["closed", "resolving"].includes(e.status)).length, players_total: S.players.size - 1,
       players_online: stats().players_online, pending_drafts: S.drafts.filter((d) => d.status === "pending").length,
-      open_resolutions: S.resolutions.filter((r) => ["proposed", "disputed"].includes(r.status)).length, failed_credits: 0, pending_webhooks: 0,
+      open_resolutions: S.resolutions.filter((r) => ["proposed", "disputed"].includes(r.status)).length, closed_unproposed: S.events.filter((e) => e.status === "closed").length, failed_credits: 0, pending_webhooks: 0,
       active_trends: S.trends.filter((t) => t.status === "active").length, sources_enabled: S.sources.filter((s) => s.enabled).length, sources_failing: 0,
       house_open_cost: house.reduce((a, p) => a + p.cost, 0), house_realized: house.reduce((a, p) => a + p.realized, 0), hourly, aiEnabled: false, autoApprove: false,
     };

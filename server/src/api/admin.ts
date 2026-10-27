@@ -62,6 +62,7 @@ export async function adminRoutes(app: FastifyInstance) {
         (SELECT COUNT(*) FROM players WHERE NOT is_house AND last_seen_at > now() - interval '5 minutes')::int AS players_online,
         (SELECT COUNT(*) FROM drafts WHERE status='pending')::int AS pending_drafts,
         (SELECT COUNT(*) FROM resolutions WHERE status IN ('proposed','disputed'))::int AS open_resolutions,
+        (SELECT COUNT(*) FROM events WHERE status='closed')::int AS closed_unproposed,
         (SELECT COUNT(*) FROM ledger WHERE direction='credit' AND status='failed')::int AS failed_credits,
         (SELECT COUNT(*) FROM webhook_outbox WHERE delivered_at IS NULL)::int AS pending_webhooks,
         (SELECT COUNT(*) FROM trends WHERE status='active')::int AS active_trends,

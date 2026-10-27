@@ -284,7 +284,7 @@ async function refreshCounts() {
   OV = await api("/admin/overview").catch(() => OV);
   if (!OV) return;
   const set = (id, n) => { const el = document.getElementById(id); el.hidden = !n; el.textContent = n; };
-  set("cDrafts", OV.pending_drafts); set("cRes", OV.open_resolutions);
+  set("cDrafts", OV.pending_drafts); set("cRes", OV.open_resolutions + (OV.closed_unproposed ?? 0));
 }
 setInterval(() => { if (A.key) refreshCounts(); }, 30000);
 
@@ -306,7 +306,7 @@ async function viewResumen(el) {
   const alerts = [
     o.failed_credits && `<div class="bad">${o.failed_credits} crédito(s) al casino fallaron y se están reintentando.</div>`,
     o.sources_failing && `<div class="warn">${o.sources_failing} fuente(s) con error en la última lectura. <a href="#fuentes">Ver fuentes</a></div>`,
-    o.awaiting_resolution && `<div class="warn">${o.awaiting_resolution} evento(s) cerrados esperan resolución. <a href="#mercados">Ver mercados</a></div>`,
+    o.awaiting_resolution && `<div class="warn">${o.awaiting_resolution} evento(s) cerrados esperan resolución. <a href="#resoluciones">Resolverlos</a></div>`,
     short.length && `<div class="warn">${short.length} categoría(s) por debajo del mínimo de ${short[0].minimum} mercados.</div>`,
     !o.aiEnabled && `<div class="muted">La IA está desactivada: configura ANTHROPIC_API_KEY para generar y resolver preguntas automáticamente.</div>`,
   ].filter(Boolean);
@@ -553,7 +553,7 @@ async function resolveDialog(e, btn) {
 async function viewResoluciones(el) {
   const status = viewResoluciones.status ?? "proposed,disputed";
   const list = await api(`/admin/resolutions?status=${status}`);
-  const closed = OV?.aiEnabled ? await api("/admin/events?status=closed&sort=closing&limit=20") : [];
+  const closed = (await api("/admin/events?status=closed&sort=closing&limit=50")).filter((e) => !e.resolution);
   el.innerHTML = `<div class="head"><div><h1>Resoluciones</h1><p>Como el oráculo optimista de Polymarket: alguien propone el resultado con una fianza, corre la ventana de disputa y, si nadie disputa, se paga $1 por acción ganadora. Si hay disputa, decides tú: quien tenía razón recupera su fianza y se lleva la mitad de la del otro.</p></div>
     <span class="seg" id="rStatus">${[["proposed,disputed", "Abiertas"], ["finalized", "Finalizadas"], ["rejected", "Rechazadas"]].map(([k, l]) => `<button type="button" data-s="${k}" class="${k === status ? "on" : ""}">${l}</button>`).join("")}</span></div>
     <div class="cards">${list.length ? list.map((r) => `<div class="dcard"><span></span><div><h3>${esc(r.title)}</h3>
@@ -566,8 +566,8 @@ async function viewResoluciones(el) {
       <div class="acts">${r.status === "proposed" ? `<button class="btn sm" data-dis="${r.id}">Disputar</button><button class="btn ok sm" data-fin="${r.id}" data-force="${new Date(r.challenge_ends_at) > new Date() ? 1 : 0}">Finalizar${new Date(r.challenge_ends_at) > new Date() ? " ya" : ""}</button>` : ""}
         ${r.status === "proposed" ? `<button class="btn bad sm" data-rej="${r.id}">Rechazar</button>` : ""}
         ${r.status === "disputed" ? `<button class="btn ok sm" data-keep="${r.id}">Tenía razón quien propuso</button><button class="btn bad sm" data-upheld="${r.id}" data-ev="${r.event_id}">Tenía razón quien disputó</button>` : ""}</div></div>`).join("") : `<div class="empty">No hay resoluciones en este estado.</div>`}</div>
-    ${closed.length && status !== "finalized" ? `<h2 style="font-size:16px;margin:24px 0 10px">Cerrados sin propuesta <span class="faint" style="font-size:12px;font-weight:500">la IA puede investigar el resultado</span></h2>
-      <div class="tablewrap"><table><tbody>${closed.filter((e) => !e.resolution).map((e) => `<tr><td><div class="t">${esc(e.title)}</div><span class="faint" style="font-size:11px">Cerró ${fday(e.closeTime)} · ${esc(e.resolutionSource)}</span></td><td style="width:1%"><button class="btn sm" data-ai="${e.id}">Resolver con IA</button></td></tr>`).join("")}</tbody></table></div>` : ""}`;
+    ${closed.length && status !== "finalized" ? `<h2 style="font-size:16px;margin:24px 0 10px">Cerrados sin propuesta · ${closed.length} <span class="faint" style="font-size:12px;font-weight:500">esperan que alguien proponga el resultado${OV?.aiEnabled ? "; la IA puede investigarlo" : ""}</span></h2>
+      <div class="tablewrap"><table><tbody>${closed.map((e) => `<tr><td><div class="t">${esc(e.title)}</div><span class="faint" style="font-size:11px">Cerró ${fday(e.closeTime)} · Fuente: ${esc(e.resolutionSource)}</span>${e.resolutionCriteria ? `<div class="faint" style="font-size:11px;max-width:640px">${esc(e.resolutionCriteria)}</div>` : ""}</td><td style="width:1%"><div class="row" style="flex-wrap:nowrap"><button class="btn primary sm" data-res="${e.id}">Resolver</button>${OV?.aiEnabled ? `<button class="btn sm" data-ai="${e.id}">Resolver con IA</button>` : ""}</div></td></tr>`).join("")}</tbody></table></div>` : ""}`;
   el.querySelectorAll("#rStatus button").forEach((b) => (b.onclick = () => { viewResoluciones.status = b.dataset.s; route(); }));
   el.querySelectorAll("[data-dis]").forEach((b) => (b.onclick = async () => { const r = await modal({ title: "Disputar propuesta", fields: [{ id: "reason", label: "Motivo", type: "textarea" }], ok: "Disputar", danger: true }); if (r) run(b, () => api(`/admin/resolutions/${b.dataset.dis}/dispute`, { method: "POST", body: { reason: r.reason } }), "Propuesta disputada").then(() => route()); }));
   el.querySelectorAll("[data-keep]").forEach((b) => (b.onclick = async () => {
@@ -592,6 +592,7 @@ async function viewResoluciones(el) {
     if (b.dataset.force === "1") { const r = await modal({ title: "Finalizar y pagar", text: "Se pagará a los ganadores en sus casinos. Esta acción no se puede deshacer.", ok: "Finalizar" }); if (!r) return; }
     run(b, () => api(`/admin/resolutions/${b.dataset.fin}/finalize`, { method: "POST", body: { force: b.dataset.force === "1" } }), (x) => `Finalizada. ${x.payouts ?? 0} pagos enviados.`).then(async () => { await refreshCounts(); route(); });
   }));
+  el.querySelectorAll("[data-res]").forEach((b) => (b.onclick = () => resolveDialog(closed.find((e) => String(e.id) === b.dataset.res), b)));
   el.querySelectorAll("[data-ai]").forEach((b) => (b.onclick = () => run(b, () => api(`/admin/events/${b.dataset.ai}/ai-resolve`, { method: "POST", body: {} }), (x) => x.proposed ? `La IA propuso: ${x.decision} (${Math.round(x.confidence * 100)}%)` : `Sin propuesta: ${x.explanation ?? x.decision}`).then(() => route())));
 }
 
