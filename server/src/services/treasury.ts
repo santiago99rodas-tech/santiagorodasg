@@ -19,6 +19,8 @@
 //   capital:reserva_casa   capital aportado como reserva de la casa (saldo negativo)
 //   mm:<playerId>          lo que se le debe a cada market maker externo (saldo negativo)
 //   compensacion           contrapartida de las liquidaciones: el resultado neto de la plataforma
+//   contingente:<id>       cuentas de orden: pólizas y cartas de crédito vigentes del casino (no es dinero;
+//   contingente:emisores   su contrapartida). Ver "pólizas y cartas de crédito" más abajo.
 
 import { createHash } from "node:crypto";
 import { pool, many, one, tx, type Db } from "../db/pool.js";
@@ -96,6 +98,124 @@ export async function balances(prefix?: string) {
 const balanceOf = async (account: string) => (await balances(account)).get(account) ?? 0;
 export const guaranteeOf = async (operatorId: string) => -(await balanceOf(`garantia:${operatorId}`));
 
+// ---------- pólizas y cartas de crédito ----------
+//
+// Una póliza de caución o una carta de crédito stand-by es una promesa de pago de una aseguradora o de
+// un banco: si el casino no paga, se ejecuta y el emisor paga. No es dinero en el fideicomiso, así que no
+// entra en las reservas; sí cuenta como garantía del casino mientras esté vigente. Deja de contar
+// GUARANTEE_MIN_VALIDITY_DAYS antes de vencer, para que haya tiempo de ejecutarla si hace falta.
+
+const KIND_LABEL: Record<string, string> = { poliza: "póliza", carta_credito: "carta de crédito" };
+const validFrom = () => new Date(Date.now() + config.treasury.instrumentMinValidityDays * 864e5);
+
+/** Lo que cubren hoy las pólizas y cartas de crédito vigentes de cada casino. */
+async function instrumentCover(operatorId?: string) {
+  const rows = await many(pool, `SELECT operator_id, COALESCE(SUM(amount - executed),0)::bigint AS cover FROM guarantee_instruments
+                                 WHERE status='active' AND expires_at > $1 AND ($2::text IS NULL OR operator_id=$2) GROUP BY operator_id`, [validFrom(), operatorId ?? null]);
+  return new Map(rows.map((r) => [r.operator_id as string, Number(r.cover)]));
+}
+/** Garantía total del casino: dinero depositado + pólizas y cartas de crédito que cuentan hoy. */
+export const effectiveGuaranteeOf = async (operatorId: string) => (await guaranteeOf(operatorId)) + ((await instrumentCover(operatorId)).get(operatorId) ?? 0);
+
+export async function listInstruments(operatorId?: string) {
+  const rows = await many(pool, `SELECT i.*, o.name FROM guarantee_instruments i JOIN operators o ON o.id=i.operator_id
+                                 WHERE $1::text IS NULL OR i.operator_id=$1 ORDER BY (i.status='active') DESC, i.expires_at`, [operatorId ?? null]);
+  const from = validFrom().getTime(), warn = Date.now() + config.treasury.instrumentWarnDays * 864e5;
+  return rows.map((r) => {
+    const exp = new Date(r.expires_at).getTime(), available = Number(r.amount) - Number(r.executed);
+    return {
+      id: Number(r.id), operatorId: r.operator_id, name: r.name, kind: r.kind, kindLabel: KIND_LABEL[r.kind], issuer: r.issuer, number: r.number,
+      amount: Number(r.amount), executed: Number(r.executed), available, issuedAt: r.issued_at, expiresAt: r.expires_at, status: r.status,
+      documentUrl: r.document_url, notes: r.notes, createdBy: r.created_by, createdAt: r.created_at, closedAt: r.closed_at, closedBy: r.closed_by,
+      daysLeft: Math.ceil((exp - Date.now()) / 864e5),
+      counts: r.status === "active" && exp > from && available > 0,
+      expiringSoon: r.status === "active" && exp <= warn,
+    };
+  });
+}
+
+export async function addInstrument(input: { operatorId: string; kind: "poliza" | "carta_credito"; issuer: string; number: string; amountUsd: number; expiresAt: string; issuedAt?: string; documentUrl?: string; notes?: string }, by: string) {
+  const op = await one(pool, "SELECT id FROM operators WHERE id=$1 AND kind='casino'", [input.operatorId]);
+  if (!op) throw notFound("Casino no encontrado");
+  const amount = Math.round(input.amountUsd * 1e6);
+  if (!(amount > 0)) throw bad("invalid_amount", "Indica un monto positivo");
+  // Una fecha sola (AAAA-MM-DD) vence al final de ese día en Ecuador
+  const expires = new Date(/^\d{4}-\d{2}-\d{2}$/.test(input.expiresAt) ? `${input.expiresAt}T23:59:59-05:00` : input.expiresAt);
+  if (!Number.isFinite(expires.getTime())) throw bad("invalid_date", "Fecha de vencimiento inválida");
+  if (expires.getTime() <= Date.now()) throw bad("already_expired", "La fecha de vencimiento ya pasó");
+  if (!input.issuer.trim() || !input.number.trim()) throw bad("missing_fields", "Indica el emisor y el número");
+  const dup = await one(pool, "SELECT id FROM guarantee_instruments WHERE kind=$1 AND issuer=$2 AND number=$3", [input.kind, input.issuer.trim(), input.number.trim()]);
+  if (dup) throw conflict("duplicate_instrument", `Esa ${KIND_LABEL[input.kind]} ya está registrada (#${dup.id})`);
+  const id = await tx(async (c) => {
+    const r = await one(c, `INSERT INTO guarantee_instruments (operator_id, kind, issuer, number, amount, issued_at, expires_at, document_url, notes, created_by)
+                            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+      [input.operatorId, input.kind, input.issuer.trim(), input.number.trim(), amount, input.issuedAt || null, expires, input.documentUrl || null, input.notes || null, by]);
+    await post({ kind: "garantia_instrumento", ref: `${input.kind.toUpperCase()}-${input.number.trim()}`, by,
+      memo: `Alta de ${KIND_LABEL[input.kind]} ${input.number.trim()} de ${input.issuer.trim()} para ${input.operatorId}, vence ${expires.toISOString().slice(0, 10)}`,
+      entries: [{ account: `contingente:${input.operatorId}`, amount }, { account: "contingente:emisores", amount: -amount }] }, c);
+    return Number(r!.id);
+  });
+  await evaluatePauses();
+  return (await listInstruments(input.operatorId)).find((x) => x.id === id);
+}
+
+/** Saca de vigor una póliza: la devolución al casino (released) o el vencimiento (expired). */
+async function closeInstrument(id: number, status: "released" | "expired", by: string, c?: Db) {
+  const run = async (db: Db) => {
+    const i = await one(db, "SELECT * FROM guarantee_instruments WHERE id=$1 FOR UPDATE", [id]);
+    if (!i) throw notFound("Póliza o carta de crédito no encontrada");
+    if (i.status !== "active") throw conflict("not_active", `Ya está ${i.status}`);
+    const rest = Number(i.amount) - Number(i.executed);
+    await db.query("UPDATE guarantee_instruments SET status=$2, closed_at=now(), closed_by=$3 WHERE id=$1", [id, status, by]);
+    if (rest > 0) await post({ kind: "garantia_instrumento", ref: `${String(i.kind).toUpperCase()}-${i.number}`, by,
+      memo: `${status === "expired" ? "Vencimiento" : "Devolución"} de ${KIND_LABEL[i.kind]} ${i.number} de ${i.operator_id}`,
+      entries: [{ account: `contingente:${i.operator_id}`, amount: -rest }, { account: "contingente:emisores", amount: rest }] }, db);
+  };
+  await (c ? run(c) : tx(run));
+}
+
+export async function releaseInstrument(id: number, by: string) {
+  await closeInstrument(id, "released", by);
+  await evaluatePauses();
+  return { id, status: "released" };
+}
+
+/** Marca vencidas las pólizas cuya fecha pasó (corre con la tarea de tesorería). */
+export async function expireInstruments() {
+  const rows = await many(pool, "SELECT id FROM guarantee_instruments WHERE status='active' AND expires_at <= now()");
+  for (const r of rows) await closeInstrument(Number(r.id), "expired", "sistema").catch(() => undefined);
+  if (rows.length) { console.log(`[tesorería] ${rows.length} póliza(s) o carta(s) de crédito vencida(s)`); await evaluatePauses(); }
+  return rows.length;
+}
+
+/**
+ * Ejecuta una póliza o carta de crédito para cobrar una liquidación que el casino no pagó: el emisor
+ * paga (bankRef es su transferencia), ese dinero entra al fideicomiso y cubre la deuda del casino.
+ */
+export async function executeInstrument(id: number, input: { settlementId: number; bankRef: string; amountUsd?: number }, by: string) {
+  if (!input.bankRef?.trim()) throw bad("missing_bank_ref", "Indica la referencia del pago de la aseguradora o del banco");
+  const i = await one(pool, "SELECT * FROM guarantee_instruments WHERE id=$1", [id]);
+  if (!i) throw notFound("Póliza o carta de crédito no encontrada");
+  if (i.status !== "active") throw conflict("not_active", `Está ${i.status}: ya no se puede ejecutar`);
+  if (new Date(i.expires_at).getTime() <= Date.now()) throw conflict("expired", "Ya venció");
+  const s = await one(pool, "SELECT * FROM settlements WHERE id=$1", [input.settlementId]);
+  if (!s || s.operator_id !== i.operator_id) throw notFound("Liquidación de ese casino no encontrada");
+  if (!["pending", "overdue"].includes(s.status) || Number(s.amount) <= 0) throw conflict("not_collectable", "Solo se ejecuta para una liquidación que el casino debe y no pagó");
+  const owed = Number(s.amount) - Number(s.covered_from_guarantee), available = Number(i.amount) - Number(i.executed);
+  const take = Math.min(owed, available, input.amountUsd ? Math.round(input.amountUsd * 1e6) : Infinity);
+  if (!(take > 0)) throw conflict("nothing_to_execute", "No queda monto por cobrar");
+  await tx(async (c) => {
+    await c.query(`UPDATE guarantee_instruments SET executed = executed + $2, status = CASE WHEN executed + $2 >= amount THEN 'executed' ELSE status END,
+                   closed_at = CASE WHEN executed + $2 >= amount THEN now() ELSE closed_at END, closed_by = CASE WHEN executed + $2 >= amount THEN $3 ELSE closed_by END WHERE id=$1`, [id, take, by]);
+    await post({ kind: "garantia_ejecucion", ref: input.bankRef.trim(), by, memo: `Ejecución de ${KIND_LABEL[i.kind]} ${i.number} (${i.issuer}) por LIQ-${s.id} de ${i.operator_id}`,
+      entries: [{ account: await assetAccount(i.operator_id), amount: take }, { account: `casino:${i.operator_id}`, amount: -take },
+                { account: `contingente:${i.operator_id}`, amount: -take }, { account: "contingente:emisores", amount: take }] }, c);
+    await c.query("UPDATE settlements SET covered_from_guarantee = covered_from_guarantee + $2, status = CASE WHEN covered_from_guarantee + $2 >= amount THEN 'covered' ELSE status END WHERE id=$1", [s.id, take]);
+  });
+  await evaluatePauses();
+  return { instrumentId: id, settlementId: s.id, collected: take, remainingOnSettlement: owed - take, remainingOnInstrument: available - take };
+}
+
 export async function journalHead() {
   return (await one(pool, "SELECT id, hash FROM journal ORDER BY id DESC LIMIT 1")) ?? { id: 0, hash: GENESIS };
 }
@@ -166,6 +286,7 @@ export async function runSettlement(opts: { to?: Date; onlyDue?: boolean; operat
       detail: row ? { markets: row.markets, players: row.players, debitedUsd: usd(row.debited), creditedUsd: usd(row.credited), bondsNetUsd: usd(row.bondsNet),
         collectedUsd: usd(row.collected), feesUsd: usd(row.fees), revenueShareBps: row.revenueShareBps, revenueShareUsd: usd(row.revenueShare), playersResultUsd: usd(row.playersResult) } : null,
       guaranteeUsd: usd(await guaranteeOf(o.id)),
+      instrumentsUsd: usd((await instrumentCover(o.id)).get(o.id) ?? 0),
       journalHead: (await journalHead()).hash,
     });
     await tx(async (c) => {
@@ -233,12 +354,16 @@ export async function casinoStatus(operatorId?: string) {
   const ops = await many(pool, `SELECT id, name, guarantee_required, debt_limit, trading_paused, paused_reason, paused_manual, revenue_share_bps, settlement_rail, usdc_address
                                 FROM operators WHERE kind='casino' AND ($1::text IS NULL OR id=$1) ORDER BY name`, [operatorId ?? null]);
   const bal = await balances();
+  const cover = await instrumentCover(operatorId);
+  const instruments = await listInstruments(operatorId);
   const out = [];
   for (const o of ops) {
     const last = await one(pool, "SELECT MAX(period_to) AS t FROM settlements WHERE operator_id=$1", [o.id]);
     const accrued = last?.t ? (await clearingReport({ from: new Date(last.t).toISOString(), operatorId: o.id })).casinos[0]?.due ?? 0 : 0;
     const balance = bal.get(`casino:${o.id}`) ?? 0; // > 0: debe liquidaciones emitidas
-    const guarantee = -(bal.get(`garantia:${o.id}`) ?? 0);
+    const cash = -(bal.get(`garantia:${o.id}`) ?? 0), instrumentsCover = cover.get(o.id) ?? 0;
+    const guarantee = cash + instrumentsCover;
+    const mine = instruments.filter((x) => x.operatorId === o.id && x.status === "active");
     const overdue = await one(pool, "SELECT COUNT(*)::int AS n, COALESCE(SUM(amount - covered_from_guarantee),0)::bigint AS owed FROM settlements WHERE operator_id=$1 AND status='overdue' AND amount > 0", [o.id]);
     const required = Number(o.guarantee_required);
     const limited = required > 0 || o.debt_limit !== null;
@@ -249,7 +374,9 @@ export async function casinoStatus(operatorId?: string) {
     if (required > 0 && guarantee < required) reasons.push(`garantía incompleta (${usd(guarantee)} de ${usd(required)} USD)`);
     if (limited && debt > limit) reasons.push(`deuda de ${usd(debt)} USD sobre su límite de ${usd(limit)} USD`);
     out.push({
-      operatorId: o.id, name: o.name, rail: o.settlement_rail, usdcAddress: o.usdc_address, guarantee, guaranteeRequired: required, debtLimit: o.debt_limit === null ? null : Number(o.debt_limit),
+      operatorId: o.id, name: o.name, rail: o.settlement_rail, usdcAddress: o.usdc_address, guarantee, guaranteeCash: cash, guaranteeInstruments: instrumentsCover,
+      instrumentsExpiring: mine.filter((x) => x.expiringSoon).map((x) => ({ id: x.id, kind: x.kind, number: x.number, expiresAt: x.expiresAt, daysLeft: x.daysLeft, counts: x.counts })),
+      guaranteeRequired: required, debtLimit: o.debt_limit === null ? null : Number(o.debt_limit),
       issuedBalance: balance, accrued, debt, overdueOwed: Number(overdue?.owed ?? 0),
       paused: o.trading_paused, pausedReason: o.paused_reason, pausedManual: o.paused_manual, shouldPause: reasons.length > 0, reasons,
     });
@@ -319,7 +446,9 @@ export async function reservesReport() {
       COALESCE((SELECT SUM(ps.cost) FROM positions ps JOIN players p ON p.id=ps.player_id WHERE p.operator_id='mm'),0)::bigint AS positions`);
   const mmValue = Number(mmAccounts?.balances ?? 0) + Number(mmAccounts?.reserved ?? 0) + Number(mmAccounts?.positions ?? 0);
   const obligations = guarantees + payableToCasinos + houseRisk;
+  const contingent = sum("contingente:", (v) => Math.max(0, v));
   return {
+    contingent,
     fiduciary, bank, usdc: { ...usdcInfo(), book: usdcBook, onChain: usdcChain, difference: usdcChain === null ? null : usdcChain - usdcBook, error: usdcError },
     guarantees, payableToCasinos, receivableFromCasinos, houseReserve, houseRisk,
     obligations, coverage: obligations ? fiduciary / obligations : null, ok: fiduciary >= obligations,
@@ -417,7 +546,7 @@ export async function treasuryOverview() {
   const unmatched = await many(pool, "SELECT * FROM bank_lines WHERE status='unmatched' ORDER BY date DESC, id DESC LIMIT 50");
   const anchors = await many(pool, "SELECT id, journal_id, head_hash, method, calendar, status, error, created_at FROM anchors ORDER BY id DESC LIMIT 20");
   const recent = await many(pool, "SELECT id, ts, kind, ref, entries, memo, created_by, hash FROM journal ORDER BY id DESC LIMIT 30");
-  return { casinos, reserves, journal: { ...journal, recent }, settlements, unmatchedBankLines: unmatched, anchors, usdc: usdcInfo(),
+  return { casinos, reserves, journal: { ...journal, recent }, settlements, unmatchedBankLines: unmatched, anchors, usdc: usdcInfo(), instruments: await listInstruments(),
     config: { ...config.treasury, anchorEnabled: config.anchor.enabled, anchorEveryHours: config.anchor.everyHours } };
 }
 

@@ -63,12 +63,26 @@ export const config = {
     backstopMinShares: num("HOUSE_BACKSTOP_MIN_SHARES", 200),
     backstopSpreadMult: num("HOUSE_BACKSTOP_SPREAD_MULT", 2),
   },
+  // Incentivos de liquidez para market makers externos (docs/P2P.md). Sin pozo configurado no se paga nada.
+  rewards: {
+    enabled: str("LIQ_REWARDS_ENABLED", "true") === "true",
+    defaultDailyUsd: num("LIQ_REWARD_DAILY_USD", 0),      // pozo diario de cada mercado abierto (se puede fijar por mercado)
+    maxDailyUsd: num("LIQ_REWARDS_MAX_DAILY_USD", 1000), // tope de lo que se paga en total por día
+    maxSpreadCents: num("LIQ_REWARD_MAX_SPREAD", 3),     // solo puntúan órdenes a esta distancia del medio o menos
+    minShares: num("LIQ_REWARD_MIN_SHARES", 50),         // y de este tamaño o más
+    singleSidedFactor: num("LIQ_REWARD_SINGLE_SIDED_FACTOR", 3), // cotizar de un solo lado vale 1/3
+    sampleSec: num("LIQ_REWARD_SAMPLE_SEC", 60),
+  },
   // Tesorería (docs/TESORERIA.md)
   treasury: {
     settlementEveryHours: num("SETTLEMENT_EVERY_HOURS", 24), // cada cuánto se emite la liquidación de cada casino
     paymentTermHours: num("SETTLEMENT_PAYMENT_TERM_HOURS", 48), // plazo para pagarla
     autoCollectGuarantee: str("TREASURY_AUTO_COLLECT_GUARANTEE", "false") === "true", // cobrar de la garantía al vencer
     jobEveryMin: num("TREASURY_JOB_EVERY_MIN", 30),
+    // Pólizas y cartas de crédito: dejan de contar como garantía estos días antes de vencer (para que
+    // haya tiempo de ejecutarlas), y se avisa desde estos otros días antes
+    instrumentMinValidityDays: num("GUARANTEE_MIN_VALIDITY_DAYS", 7),
+    instrumentWarnDays: num("GUARANTEE_WARN_DAYS", 30),
   },
   // Anclaje del libro contable en Bitcoin con OpenTimestamps (gratis, sin billetera)
   anchor: {

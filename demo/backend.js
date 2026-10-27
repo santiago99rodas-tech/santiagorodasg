@@ -941,6 +941,28 @@
   const USDC = { enabled: true, chain: "simulado", token: "0x0000000000000000000000000000000000005d0c", vault: "0x00000000000000000000000000000000005afe00", confirmations: 0,
     simulated: true, testnet: false, realMoney: false, label: "USDC simulado (sin cadena, sin valor)" };
   const simVault = (d) => (T.usdcSim += d);
+  // Pólizas y cartas de crédito (server: treasury.ts, "pólizas y cartas de crédito")
+  const INSTR = [], KIND_LABEL = { poliza: "póliza", carta_credito: "carta de crédito" }, MIN_VALID_DAYS = 7, WARN_DAYS = 30;
+  const instrView = (i) => { const o = S.operators.find((x) => x.id === i.operatorId), exp = new Date(i.expiresAt).getTime(), available = i.amount - i.executed;
+    return { ...i, name: o?.name ?? i.operatorId, kindLabel: KIND_LABEL[i.kind], available, daysLeft: Math.ceil((exp - now()) / 864e5),
+      counts: i.status === "active" && exp > now() + MIN_VALID_DAYS * 864e5 && available > 0, expiringSoon: i.status === "active" && exp <= now() + WARN_DAYS * 864e5 }; };
+  const instruments = (op) => INSTR.filter((i) => !op || i.operatorId === op).map(instrView).sort((a, b) => (b.status === "active") - (a.status === "active") || new Date(a.expiresAt) - new Date(b.expiresAt));
+  const instrCover = (op) => instruments(op).filter((i) => i.counts).reduce((a, i) => a + i.available, 0);
+  function instrClose(i, status, by) {
+    const rest = i.amount - i.executed; Object.assign(i, { status, closedAt: iso(now()), closedBy: by });
+    if (rest > 0) jpost("garantia_instrumento", `${i.kind.toUpperCase()}-${i.number}`, [{ account: `contingente:${i.operatorId}`, amount: -rest }, { account: "contingente:emisores", amount: rest }], `${status === "expired" ? "Vencimiento" : "Devolución"} de ${KIND_LABEL[i.kind]} ${i.number}`, by);
+  }
+  function instrAdd(b, by) {
+    const amount = Math.round(Number(b.amountUsd) * 1e6), expiresAt = /^\d{4}-\d{2}-\d{2}$/.test(b.expiresAt) ? new Date(`${b.expiresAt}T23:59:59-05:00`).toISOString() : b.expiresAt;
+    if (!(amount > 0)) throw bad("invalid_amount", "Indica un monto positivo");
+    if (!expiresAt || !(new Date(expiresAt).getTime() > now())) throw bad("already_expired", "La fecha de vencimiento ya pasó");
+    if (!b.issuer?.trim() || !b.number?.trim()) throw bad("missing_fields", "Indica el emisor y el número");
+    if (INSTR.some((i) => i.kind === b.kind && i.issuer === b.issuer.trim() && i.number === b.number.trim())) throw conflict("duplicate_instrument", `Esa ${KIND_LABEL[b.kind]} ya está registrada`);
+    const i = { id: INSTR.length + 1, operatorId: b.operatorId, kind: b.kind, issuer: b.issuer.trim(), number: b.number.trim(), amount, executed: 0, issuedAt: null, expiresAt, status: "active", documentUrl: b.documentUrl ?? null, notes: b.notes ?? null, createdBy: by, createdAt: iso(now()), closedAt: null, closedBy: null };
+    INSTR.push(i);
+    jpost("garantia_instrumento", `${i.kind.toUpperCase()}-${i.number}`, [{ account: `contingente:${i.operatorId}`, amount }, { account: "contingente:emisores", amount: -amount }], `Alta de ${KIND_LABEL[i.kind]} ${i.number} de ${i.issuer} para ${i.operatorId}`, by);
+    return instrView(i);
+  }
   const acct = (opId) => (S.operators.find((o) => o.id === opId)?.settlement_rail === "usdc" ? "boveda_usdc" : "fideicomiso");
   function jpost(kind, ref, entries, memo, by = "sistema") {
     entries = entries.filter((e) => e.amount !== 0);
@@ -964,7 +986,7 @@
     return S.operators.map((o) => {
       const settled = T.settlements.filter((x) => x.operator_id === o.id).reduce((a, x) => a + x.amount, 0);
       const accrued = (clr.casinos.find((c) => c.operatorId === o.id)?.due ?? 0) - settled;
-      const issued = jbal(`casino:${o.id}`), guarantee = -jbal(`garantia:${o.id}`), required = o.guarantee_required ?? 0;
+      const issued = jbal(`casino:${o.id}`), cash = -jbal(`garantia:${o.id}`), inCover = instrCover(o.id), guarantee = cash + inCover, required = o.guarantee_required ?? 0;
       const limit = o.debt_limit != null ? o.debt_limit : guarantee, limited = required > 0 || o.debt_limit != null;
       const debt = Math.max(0, issued) + Math.max(0, accrued);
       const overdue = T.settlements.filter((x) => x.operator_id === o.id && x.status === "overdue" && x.amount > 0);
@@ -973,7 +995,8 @@
       if (required > 0 && guarantee < required) reasons.push(`garantía incompleta (${guarantee / 1e6} de ${required / 1e6} USD)`);
       if (limited && debt > limit) reasons.push(`deuda de ${(debt / 1e6).toFixed(2)} USD sobre su límite de ${(limit / 1e6).toFixed(2)} USD`);
       if (!o.paused_manual) { o.trading_paused = reasons.length > 0; o.paused_reason = reasons.join("; ") || null; }
-      return { operatorId: o.id, name: o.name, rail: o.settlement_rail ?? "bank", usdcAddress: o.usdc_address ?? null, guarantee, guaranteeRequired: required, debtLimit: o.debt_limit ?? null, issuedBalance: issued, accrued, debt,
+      return { operatorId: o.id, name: o.name, rail: o.settlement_rail ?? "bank", usdcAddress: o.usdc_address ?? null, guarantee, guaranteeCash: cash, guaranteeInstruments: inCover,
+        instrumentsExpiring: instruments(o.id).filter((i) => i.status === "active" && i.expiringSoon).map((i) => ({ id: i.id, kind: i.kind, number: i.number, expiresAt: i.expiresAt, daysLeft: i.daysLeft, counts: i.counts })), guaranteeRequired: required, debtLimit: o.debt_limit ?? null, issuedBalance: issued, accrued, debt,
         overdueOwed: overdue.reduce((a, x) => a + x.amount - x.covered_from_guarantee, 0), paused: !!o.trading_paused, pausedReason: o.paused_reason ?? null, pausedManual: !!o.paused_manual, reasons };
     });
   }
@@ -982,7 +1005,7 @@
     const houseRisk = Math.round(totalWorstLoss() * 1e6), obligations = guarantees + payable + houseRisk;
     const mmAcc = [...S.players.values()].filter((x) => x.isMM).reduce((a, x) => a + x.balance + [...S.orders.values()].filter((o) => o.playerId === x.id && o.status === "open" && o.side === "BUY").reduce((b, o) => b + o.reserved, 0)
       + [...S.positions.values()].filter((p) => p.playerId === x.id).reduce((b, p) => b + p.cost, 0), 0);
-    return { fiduciary, bank, usdc: { ...USDC, book: usdcBook, onChain: T.usdcSim, difference: T.usdcSim - usdcBook, error: null }, guarantees, payableToCasinos: payable, receivableFromCasinos: jsum("casino:", (v) => Math.max(0, v)), houseReserve: -jbal("capital:reserva_casa"), houseRisk,
+    return { contingent: jsum("contingente:", (v) => Math.max(0, v)), fiduciary, bank, usdc: { ...USDC, book: usdcBook, onChain: T.usdcSim, difference: T.usdcSim - usdcBook, error: null }, guarantees, payableToCasinos: payable, receivableFromCasinos: jsum("casino:", (v) => Math.max(0, v)), houseReserve: -jbal("capital:reserva_casa"), houseRisk,
       obligations, coverage: obligations ? fiduciary / obligations : null, ok: fiduciary >= obligations, marketMakers: { custody: jbal("custodia_mm"), accounts: mmAcc, ok: jbal("custodia_mm") >= mmAcc },
       journal: { id: T.journal.length, hash: T.journal.at(-1)?.hash ?? "0".repeat(64) }, note: "En la demo el libro vive en tu navegador. En el servidor se guarda en la base y se concilia con el extracto del fideicomiso." };
   }
@@ -1014,7 +1037,7 @@
   route("GET", "/admin/treasury", () => {
     const casinos = tCasinos(), j = jverify();
     return { casinos, reserves: tReserves(), journal: { ...j, recent: T.journal.slice(-30).reverse() }, settlements: T.settlements.slice().reverse(),
-      unmatchedBankLines: T.bank.filter((b) => b.status === "unmatched").map((b) => ({ account: "fideicomiso", ...b })).reverse(), anchors: [], usdc: USDC, config: { ...T.cfg, anchorEnabled: true, anchorEveryHours: 24 } };
+      unmatchedBankLines: T.bank.filter((b) => b.status === "unmatched").map((b) => ({ account: "fideicomiso", ...b })).reverse(), anchors: [], usdc: USDC, instruments: instruments(), config: { ...T.cfg, instrumentMinValidityDays: MIN_VALID_DAYS, instrumentWarnDays: WARN_DAYS, anchorEnabled: true, anchorEveryHours: 24 } };
   });
   route("POST", "/admin/treasury/settle", () => ({ created: tSettle() }));
   route("POST", "/admin/treasury/settlements/:id/pay", ({ p, b, user }) => { if (!b.bankRef) throw bad("missing_bank_ref", "Indica la referencia de la transferencia"); return tPay(Number(p.id), b.bankRef, user); });
@@ -1065,6 +1088,25 @@
       if (x) { if (["pending", "overdue"].includes(x.status)) tPay(x.id, reference, user); line.status = "matched"; matched++; }
     }
     return { lines: lines.length, imported, matched, unmatched: imported - matched };
+  });
+  route("GET", "/admin/treasury/instruments", ({ q }) => instruments(q.operatorId));
+  route("POST", "/admin/treasury/instruments", ({ b, user }) => instrAdd(b, user));
+  route("POST", "/admin/treasury/instruments/:id/release", ({ p, user }) => {
+    const i = INSTR.find((x) => x.id === Number(p.id)); if (!i) throw notFound("Póliza o carta de crédito no encontrada");
+    if (i.status !== "active") throw conflict("not_active", `Ya está ${i.status}`);
+    instrClose(i, "released", user); return { id: i.id, status: "released" };
+  });
+  route("POST", "/admin/treasury/instruments/:id/execute", ({ p, b, user }) => {
+    const i = INSTR.find((x) => x.id === Number(p.id)); if (!i) throw notFound("Póliza o carta de crédito no encontrada");
+    if (!b.bankRef?.trim()) throw bad("missing_bank_ref", "Indica la referencia del pago de la aseguradora o del banco");
+    if (i.status !== "active") throw conflict("not_active", `Está ${i.status}: ya no se puede ejecutar`);
+    const x = T.settlements.find((y) => y.id === Number(b.settlementId) && y.operator_id === i.operatorId);
+    if (!x || !["pending", "overdue"].includes(x.status) || x.amount <= 0) throw conflict("not_collectable", "Solo se ejecuta para una liquidación que el casino debe y no pagó");
+    const take = Math.min(x.amount - x.covered_from_guarantee, i.amount - i.executed);
+    i.executed += take; if (i.executed >= i.amount) Object.assign(i, { status: "executed", closedAt: iso(now()), closedBy: user });
+    jpost("garantia_ejecucion", b.bankRef.trim(), [{ account: acct(i.operatorId), amount: take }, { account: `casino:${i.operatorId}`, amount: -take }, { account: `contingente:${i.operatorId}`, amount: -take }, { account: "contingente:emisores", amount: take }], `Ejecución de ${KIND_LABEL[i.kind]} ${i.number} por LIQ-${x.id}`, user);
+    x.covered_from_guarantee += take; if (x.covered_from_guarantee >= x.amount) x.status = "covered";
+    return { instrumentId: i.id, settlementId: x.id, collected: take };
   });
   route("POST", "/admin/treasury/usdc/simulate", ({ b, user }) => {
     const amount = Math.round(Number(b.amountUsd) * 1e6), addr = String(b.address ?? "").toLowerCase();
@@ -1162,6 +1204,66 @@
     }
     try { placeOrder(pid, { marketId: mid, side: "BUY", outcome: yes ? "YES" : "NO", type: "MARKET", amount: [1, 2, 5, 5, 10, 10, 20, 25, 50][Math.floor(rnd() * 9)] }); } catch {}
   }
+  // Incentivos de liquidez (server: services/rewards.ts con engine/rewards.ts). En la demo se muestrea
+  // cada 15 s y "Pagar días cerrados" cierra el día en curso, para verlo funcionar sin esperar.
+  const RW = { cfg: { ...DEFAULT_REWARDS, enabled: true, sampleSec: 15, maxDailyUsd: 1000, defaultDailyUsd: 0 }, pools: new Map(), samples: new Map(), shares: new Map(), paid: [] };
+  function rwOrders(mid) {
+    const book = bookOf(mid);
+    return [...book.bids.map((o) => ({ owner: o.ownerId, side: "BUY", outcome: "YES", price: o.yesPrice, shares: o.remaining / 100 })),
+            ...book.asks.map((o) => ({ owner: o.ownerId, side: "SELL", outcome: "YES", price: o.yesPrice, shares: o.remaining / 100 }))];
+  }
+  const rwMid = (mid) => { const m = S.markets.get(mid); return bookMid(rwOrders(mid), m.fairExact != null ? m.fairExact * 100 : m.fair); };
+  function rwSample() {
+    for (const [mid, pool] of RW.pools) {
+      const m = S.markets.get(mid); if (!m || m.status !== "open" || !pool) continue;
+      const competing = rwOrders(mid).filter((o) => o.owner === HOUSE || (S.players.get(o.owner)?.isMM && S.players.get(o.owner).active));
+      const shares = sampleShares(sampleScores(competing, rwMid(mid), RW.cfg));
+      RW.samples.set(mid, (RW.samples.get(mid) ?? 0) + 1);
+      for (const [pid, sh] of shares) RW.shares.set(`${mid}|${pid}`, (RW.shares.get(`${mid}|${pid}`) ?? 0) + sh);
+    }
+  }
+  setInterval(rwSample, RW.cfg.sampleSec * 1000);
+  function rwPay() {
+    const raw = [];
+    for (const [k, sum] of RW.shares) {
+      const [mid, pid] = k.split("|").map(Number), p = S.players.get(pid), n = RW.samples.get(mid) ?? 0;
+      if (!p?.isMM || !n) continue;
+      raw.push({ mid, pid, share: sum / n, amount: (RW.pools.get(mid) ?? 0) * sum / n });
+    }
+    const total = raw.reduce((a, r) => a + r.amount, 0), k = total > RW.cfg.maxDailyUsd * 1e6 ? (RW.cfg.maxDailyUsd * 1e6) / total : 1;
+    const pays = raw.map((r) => ({ ...r, amount: Math.floor((r.amount * k) / 1e4) * 1e4 })).filter((r) => r.amount > 0);
+    const sum = pays.reduce((a, r) => a + r.amount, 0), day = `${iso(now()).slice(0, 10)} #${RW.paid.length + 1}`;
+    for (const r of pays) { S.players.get(r.pid).balance += r.amount; RW.paid.push({ day, ...r }); }
+    if (sum) { const by = new Map(); for (const r of pays) by.set(r.pid, (by.get(r.pid) ?? 0) + r.amount);
+      jpost("incentivo_liquidez", `LIQRW-${day}`, [{ account: "fideicomiso", amount: -sum }, { account: "custodia_mm", amount: sum }, { account: "gasto:incentivos_liquidez", amount: sum }, ...[...by].map(([id, a]) => ({ account: `mm:${id}`, amount: -a }))], `Incentivos de liquidez (${by.size} market maker(s))`, "sistema"); }
+    RW.samples.clear(); RW.shares.clear();
+    return { day, paid: sum, rewards: pays.length };
+  }
+  function rwOverview() {
+    const current = [...RW.pools].filter(([mid, pool]) => pool > 0 && S.markets.get(mid)?.status === "open").map(([mid, pool]) => {
+      const m = S.markets.get(mid), e = S.events.find((x) => x.id === m.eventId);
+      return { marketId: mid, title: e?.title, label: m.label, poolUsd: pool / 1e6, own: true, midCents: Math.round(rwMid(mid) * 10) / 10 };
+    }).sort((a, b) => b.poolUsd - a.poolUsd);
+    const today = current.map((c) => { const n = RW.samples.get(c.marketId) ?? 0;
+      const participants = [...RW.shares].filter(([k]) => Number(k.split("|")[0]) === c.marketId).map(([k, v]) => { const pid = Number(k.split("|")[1]), p = S.players.get(pid);
+        return { playerId: pid, name: pid === HOUSE ? "Casa" : p?.name ?? String(pid), house: pid === HOUSE, share: n ? v / n : 0 }; }).sort((a, b) => b.share - a.share);
+      return { marketId: c.marketId, title: c.title, label: c.label, poolUsd: c.poolUsd, samples: n, participants }; });
+    const days = new Map(); for (const r of RW.paid) { const d = days.get(r.day) ?? { day: r.day, amountUsd: 0, makers: new Set() }; d.amountUsd += r.amount / 1e6; d.makers.add(r.pid); days.set(r.day, d); }
+    const mms = new Map(); for (const r of RW.paid) mms.set(r.pid, (mms.get(r.pid) ?? 0) + r.amount);
+    return { config: RW.cfg, rewardedMarkets: current.length, dailyBudgetUsd: current.reduce((a, c) => a + c.poolUsd, 0), current, today,
+      paidByDay: [...days.values()].reverse().map((d) => ({ day: d.day, amountUsd: d.amountUsd, makers: d.makers.size })),
+      byMarketMaker: [...mms].map(([pid, a]) => ({ playerId: pid, name: S.players.get(pid)?.name, last7dUsd: a / 1e6, last30dUsd: a / 1e6 })) };
+  }
+  route("GET", "/admin/liquidity-rewards", () => rwOverview());
+  route("POST", "/admin/liquidity-rewards/pay", () => ({ days: [rwPay()] }));
+  route("POST", "/admin/liquidity-rewards/sample", () => { rwSample(); return { markets: RW.pools.size }; });
+  route("PATCH", "/admin/markets/:id/reward", ({ p, b }) => {
+    const mid = Number(p.id); if (!S.markets.get(mid)) throw notFound("Mercado no encontrado");
+    const v = b.dailyUsd == null ? 0 : Math.round(Number(b.dailyUsd) * 1e6); if (!(v >= 0)) throw bad("invalid_amount", "Indica un monto de 0 o más");
+    if (v) RW.pools.set(mid, v); else RW.pools.delete(mid);
+    return { marketId: mid, rewardDaily: v, effectiveDaily: v };
+  });
+
   // El market maker externo de demostración recotiza los 20 mercados con más volumen, 1¢ por dentro de la casa
   function mmBotQuote() {
     const bot = S.players.get(MMBOT);
@@ -1235,7 +1337,10 @@
     Object.assign(S.operators[1], { settlement_rail: "usdc", usdc_address: "0x2222222222222222222222222222222222222222" });
     jpost("garantia_deposito", "0x5151…demo", [{ account: "boveda_usdc", amount: 1000e6 }, { account: "garantia:casino-aliado", amount: -1000e6 }], "Depósito de garantía de casino-aliado (USDC simulado)", "Demo");
     simVault(1000e6);
+    instrAdd({ operatorId: "demo-casino", kind: "poliza", issuer: "Seguros Equinoccial", number: "PC-2026-118", amountUsd: 3000, expiresAt: new Date(now() + 25 * 864e5).toISOString(), notes: "renovación anual" }, "Demo");
+    instrAdd({ operatorId: "casino-aliado", kind: "carta_credito", issuer: "Banco Pichincha", number: "SBLC-0457", amountUsd: 5000, expiresAt: new Date(now() + 180 * 864e5).toISOString() }, "Demo");
     jpost("reserva", "CAP-2001", [{ account: "fideicomiso", amount: 50000e6 }, { account: "capital:reserva_casa", amount: -50000e6 }], "Aporte a la reserva de la casa", "Demo");
+    [...S.markets.values()].filter((m) => m.status === "open").sort((a, b) => b.volume - a.volume).slice(0, 3).forEach((m) => RW.pools.set(m.id, 25e6));
     jpost("custodia_mm", "MM-3001", [{ account: "custodia_mm", amount: 25000e6 }, { account: `mm:${MMBOT}`, amount: -25000e6 }], "Depósito del market maker externo", "Demo");
     console.info(`demo lista en ${Math.round(performance.now() - t0)} ms: ${S.events.length} eventos, ${S.markets.size} mercados`);
   }

@@ -18,6 +18,7 @@ import { listEvents } from "../services/marketdata.js";
 import { listMarketMakers, createMarketMaker, moveFunds, setMarketMaker } from "../services/marketmakers.js";
 import { clearingReport } from "../services/clearing.js";
 import * as treasury from "../services/treasury.js";
+import * as rewards from "../services/rewards.js";
 import * as chain from "../services/chain.js";
 import { toxicityReport, setSurchargeOverride, setShock } from "../services/toxicity.js";
 import { integrityReport, setExternalRef, addReferencePrice, refreshExternalPrices } from "../services/integrity.js";
@@ -208,6 +209,14 @@ export async function adminRoutes(app: FastifyInstance) {
   });
 
   // ---------- P2P: market makers externos y liquidación entre casinos ----------
+  // Incentivos de liquidez
+  app.get("/admin/liquidity-rewards", async () => rewards.rewardsOverview());
+  app.post("/admin/liquidity-rewards/pay", async () => ({ days: await rewards.payLiquidityRewards() }));
+  app.post("/admin/liquidity-rewards/sample", async () => rewards.sampleLiquidity());
+  app.patch<{ Params: { id: string } }>("/admin/markets/:id/reward", async (req) => {
+    const b = parse(z.object({ dailyUsd: z.number().min(0).nullable() }), req.body);
+    return rewards.setMarketReward(Number(req.params.id), b.dailyUsd);
+  });
   app.get("/admin/market-makers", async () => listMarketMakers());
   app.post("/admin/market-makers", async (req) => {
     const b = parse(z.object({ name: z.string().min(2).max(80), rebateBps: z.number().int().min(0).max(1000).nullable().optional() }), req.body);
@@ -239,6 +248,18 @@ export async function adminRoutes(app: FastifyInstance) {
   app.post<{ Params: { id: string } }>("/admin/treasury/guarantees/:id", async (req) => {
     const b = parse(Money, req.body);
     return treasury.moveGuarantee(req.params.id, b.amountUsd, b.direction, adminUser(req), b.bankRef);
+  });
+  // Pólizas de caución y cartas de crédito
+  app.get("/admin/treasury/instruments", async (req) => treasury.listInstruments((req.query as any).operatorId || undefined));
+  app.post("/admin/treasury/instruments", async (req) => {
+    const b = parse(z.object({ operatorId: z.string(), kind: z.enum(["poliza", "carta_credito"]), issuer: z.string().min(1).max(120), number: z.string().min(1).max(80),
+      amountUsd: z.number().positive(), expiresAt: z.string().min(10), issuedAt: z.string().optional(), documentUrl: z.string().url().max(500).optional(), notes: z.string().max(500).optional() }), req.body);
+    return treasury.addInstrument(b, adminUser(req));
+  });
+  app.post<{ Params: { id: string } }>("/admin/treasury/instruments/:id/release", async (req) => treasury.releaseInstrument(Number(req.params.id), adminUser(req)));
+  app.post<{ Params: { id: string } }>("/admin/treasury/instruments/:id/execute", async (req) => {
+    const b = parse(z.object({ settlementId: z.number().int(), bankRef: z.string().min(1).max(120), amountUsd: z.number().positive().optional() }), req.body);
+    return treasury.executeInstrument(Number(req.params.id), b, adminUser(req));
   });
   app.post("/admin/treasury/reserve", async (req) => {
     const b = parse(Money.extend({ rail: z.enum(["bank", "usdc"]).optional() }), req.body);

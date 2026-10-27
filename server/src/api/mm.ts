@@ -6,6 +6,7 @@ import { pool, many } from "../db/pool.js";
 import { parse, requireMarketMaker } from "./auth.js";
 import { placeOrder, cancelOrder, cancelAllOf } from "../services/trading.js";
 import { accountSummary, batch } from "../services/marketmakers.js";
+import { mmRewards } from "../services/rewards.js";
 import { config } from "../config.js";
 
 const Order = z.object({
@@ -22,6 +23,9 @@ const Order = z.object({
 export async function mmRoutes(app: FastifyInstance) {
   app.register(async (r) => {
     r.addHook("preHandler", requireMarketMaker);
+
+    // Incentivos de liquidez: reglas, mercados con pozo, mi parte estimada de hoy y lo cobrado
+    r.get("/mm/v1/rewards", async (req) => mmRewards(req.mm!.playerId));
 
     r.get("/mm/v1/account", async (req) => ({ ...(await accountSummary(req.mm!.playerId)), takerFeeBps: config.takerFeeBps, maxBatch: config.p2p.maxBatch }));
 

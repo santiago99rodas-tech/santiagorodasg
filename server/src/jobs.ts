@@ -7,12 +7,13 @@ import { aiEnabled } from "./ai/claude.js";
 import { closeExpired, finalizeDue } from "./services/resolution.js";
 import { refreshQuotes, updateFairPrices } from "./services/marketmaker.js";
 import { scoreMarkouts } from "./services/toxicity.js";
-import { runSettlement, markOverdue, evaluatePauses, ingestChainTransfers } from "./services/treasury.js";
+import { runSettlement, markOverdue, evaluatePauses, ingestChainTransfers, expireInstruments } from "./services/treasury.js";
 import { anchorIfDue, syncUsdc, usdcEnabled } from "./services/chain.js";
 import { retryCredits } from "./services/wallet.js";
 import { deliverWebhooks } from "./services/webhooks.js";
 import { pool } from "./db/pool.js";
 import { refreshExternalPrices } from "./services/integrity.js";
+import { sampleLiquidity, payLiquidityRewards } from "./services/rewards.js";
 
 const timers: NodeJS.Timeout[] = [];
 
@@ -35,8 +36,13 @@ export function startJobs() {
   every("webhooks", 15_000, deliverWebhooks);
   every("market-maker", config.jobs.mmRefreshEverySec * 1000, async () => { await updateFairPrices(); await refreshQuotes(); });
   if (config.toxicity.enabled) every("markouts", 5 * 60_000, () => scoreMarkouts());
+  // Incentivos de liquidez: muestra las cotizaciones de los market makers y paga los días cerrados
+  if (config.rewards.enabled) {
+    every("incentivos-muestra", config.rewards.sampleSec * 1000, () => sampleLiquidity());
+    every("incentivos-pago", 60 * 60_000, () => payLiquidityRewards());
+  }
   // Tesorería: emite las liquidaciones que tocan, marca vencidas y pausa o reanuda casinos
-  every("tesoreria", config.treasury.jobEveryMin * 60_000, async () => { await runSettlement({ onlyDue: true }); await markOverdue(); await evaluatePauses(); });
+  every("tesoreria", config.treasury.jobEveryMin * 60_000, async () => { await runSettlement({ onlyDue: true }); await markOverdue(); await expireInstruments(); await evaluatePauses(); });
   // Modelo mixto: sello diario del libro en Bitcoin y lectura de la bóveda USDC
   if (config.anchor.enabled) every("anclaje", 60 * 60_000, () => anchorIfDue());
   if (usdcEnabled()) every("usdc", config.usdc.syncEveryMin * 60_000, () => syncUsdc(ingestChainTransfers));

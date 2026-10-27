@@ -1,6 +1,6 @@
 // API servidor-a-servidor para el casino (firmada con HMAC).
 import { clearingReport } from "../services/clearing.js";
-import { casinoStatus, statementOf } from "../services/treasury.js";
+import { casinoStatus, statementOf, listInstruments } from "../services/treasury.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { pool, one, many } from "../db/pool.js";
@@ -60,7 +60,8 @@ export async function operatorRoutes(app: FastifyInstance) {
     const [status] = await casinoStatus(req.operator!.id);
     const settlements = await many(pool, `SELECT id, period_from, period_to, amount, status, due_at, paid_at, bank_ref, covered_from_guarantee
                                           FROM settlements WHERE operator_id=$1 ORDER BY id DESC LIMIT 100`, [req.operator!.id]);
-    return { ...status, settlements: settlements.map((s) => ({ ...s, paymentReference: `LIQ-${s.id}` })) };
+    const instruments = (await listInstruments(req.operator!.id)).map(({ createdBy, closedBy, name, ...x }) => x);
+    return { ...status, instruments, settlements: settlements.map((s) => ({ ...s, paymentReference: `LIQ-${s.id}` })) };
   });
   app.get<{ Params: { id: string } }>("/operator/v1/treasury/statements/:id", async (req, reply) => {
     const s = await statementOf(Number(req.params.id), req.operator!.id);
