@@ -18,6 +18,7 @@ Cada acción Sí neta que compran los jugadores sube el precio un poco. Cada acc
 - `b` es la profundidad, `MM_B_SHARES`, por defecto 1.500 acciones. Con más `b` el precio se mueve más despacio.
 - Ejemplo: a 50% y con b = 1.500, si los jugadores compran 300 acciones Sí netas, el precio pasa a ~55%.
 - Las compras de la casa no cuentan. Solo cuenta lo que hacen los jugadores.
+- Solo cuenta lo que le compran **a la casa**. Si un jugador negocia con un market maker externo o con otro jugador, el precio de la casa se acerca al precio de ese cruce, en vez de contar sus acciones ([P2P.md](P2P.md#la-casa-queda-de-respaldo)).
 
 **Por qué importa:** el techo de pérdida. Aunque todos los que compren tengan razón, en un tramo la casa pierde a lo sumo `b · ln(1/π)`, donde π es la probabilidad de la opción que termina ganando.
 

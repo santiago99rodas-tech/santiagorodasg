@@ -65,6 +65,37 @@ Si no se configura ni garantía ni límite, no hay pausa por deuda, solo por liq
 
 **Cobro de la garantía:** con una liquidación vencida, el botón **Cobrar de garantía** descuenta lo adeudado, o lo que alcance. Con `TREASURY_AUTO_COLLECT_GUARANTEE=true` se hace solo al vencer. Después el casino tiene que reponer la garantía o queda pausado.
 
+### Pólizas de caución y cartas de crédito
+
+Un casino no tiene que inmovilizar dinero para dar garantía. Puede entregar:
+- una **póliza de caución**: una aseguradora se compromete a pagar si el casino no paga;
+- una **carta de crédito stand-by**: lo mismo, pero de un banco.
+
+Al casino le cuesta una prima anual, normalmente del 1% al 3% del monto. Para empezar suele ser más fácil que un fideicomiso.
+
+**Cómo se usa** (Tesorería → **Pólizas y cartas de crédito** → Registrar):
+- Se registra el casino, el tipo, la aseguradora o el banco, el número, el monto, el vencimiento y, si quieres, el enlace al documento firmado.
+- **Cuenta como garantía** igual que el dinero depositado, para la garantía exigida y para el límite de deuda. En la tabla de casinos se ve separado: efectivo y pólizas.
+- **Deja de contar 7 días antes de vencer** (`GUARANTEE_MIN_VALIDITY_DAYS`). Así, si el casino no paga justo antes del vencimiento, todavía hay tiempo de ejecutarla. Si no la renueva antes, la operación del casino se pausa sola.
+- **Aviso desde 30 días antes** (`GUARANTEE_WARN_DAYS`), en rojo, en la tabla de casinos y en la de pólizas.
+- Al llegar la fecha, **vence sola**.
+
+**Ejecutarla.** Si el casino no paga una liquidación, se reclama a la aseguradora o al banco con la documentación de la póliza. Cuando pagan, el botón **Ejecutar** registra el cobro con la referencia de su transferencia:
+- el dinero entra al fideicomiso;
+- la liquidación queda cubierta;
+- la póliza queda con el saldo que le reste.
+
+**Devolver.** Si el casino la reemplaza o termina la relación, **Devolver** la saca de vigor.
+
+**En el libro contable** las pólizas van en cuentas de orden (`contingente:<casino>` y `contingente:emisores`). No son dinero, así que **no entran en las reservas**: aparecen aparte, como "Pólizas y cartas de crédito vigentes". Su alta, vencimiento, devolución y ejecución quedan encadenadas en el libro como cualquier otro asiento.
+
+El casino ve sus pólizas en `GET /operator/v1/treasury`.
+
+**Antes de aceptar una póliza:**
+- Revisa que la aseguradora esté autorizada por la superintendencia de su país.
+- La póliza debe ser **a primer requerimiento**: paga cuando la reclamas, sin esperar un juicio.
+- El beneficiario debe ser la plataforma o el fideicomiso.
+
 ## 3. Libro contable encadenado
 
 Cada movimiento de tesorería es un asiento de doble partida (las partidas suman cero) en la tabla `journal`:
@@ -210,6 +241,8 @@ Mientras están en pruebas hay dos modos. Ninguno mueve dinero con valor, y el b
 | `SETTLEMENT_PAYMENT_TERM_HOURS` | 48 | Plazo para pagarla |
 | `TREASURY_AUTO_COLLECT_GUARANTEE` | false | Cobrar de la garantía automáticamente al vencer |
 | `TREASURY_JOB_EVERY_MIN` | 30 | Cada cuánto revisa liquidaciones, vencimientos y pausas |
+| `GUARANTEE_MIN_VALIDITY_DAYS` | 7 | Días antes del vencimiento en que una póliza deja de contar como garantía |
+| `GUARANTEE_WARN_DAYS` | 30 | Desde cuántos días antes del vencimiento se avisa |
 | `ANCHOR_ENABLED` / `ANCHOR_EVERY_HOURS` | true / 24 | Sello diario del libro en Bitcoin |
 | `ANCHOR_CALENDARS` | a.pool y b.pool de opentimestamps.org | Calendarios de OpenTimestamps |
 | `USDC_RPC_URL` / `USDC_CHAIN` / `USDC_VAULT_ADDRESS` | — / polygon / — | Vía USDC (se activa con las tres). `USDC_CHAIN=simulado` la activa sin cadena; `base-sepolia`, `sepolia`, `polygon-amoy` y `arbitrum-sepolia` son redes de prueba |
@@ -223,6 +256,7 @@ La garantía exigida y el límite de deuda se fijan por casino en el back-office
 | Quién | Llamada |
 |---|---|
 | Admin | `GET /admin/treasury` (resumen) · `POST /admin/treasury/settle` · `POST /admin/treasury/settlements/:id/pay { bankRef }` · `POST /admin/treasury/settlements/:id/collect` · `GET /admin/treasury/settlements/:id/statement` |
+| Admin | `GET /admin/treasury/instruments` · `POST /admin/treasury/instruments { operatorId, kind: poliza\|carta_credito, issuer, number, amountUsd, expiresAt, documentUrl?, notes? }` · `POST /admin/treasury/instruments/:id/execute { settlementId, bankRef }` · `POST /admin/treasury/instruments/:id/release` |
 | Admin | `POST /admin/treasury/guarantees/:casino { direction, amountUsd, bankRef? }` · `POST /admin/treasury/reserve { … }` · `PATCH /admin/treasury/casinos/:casino { guaranteeRequiredUsd?, debtLimitUsd?, paused? }` |
 | Admin | `POST /admin/treasury/bank-statements { csv }` · `GET /admin/treasury/journal` · `GET /admin/treasury/reserves` |
 | Admin | `POST /admin/treasury/anchor` (sellar ya) · `POST /admin/treasury/usdc/sync` (leer la bóveda ya) · `POST /admin/treasury/usdc/simulate { direction, address, amountUsd }` (solo modo simulado) · `POST /admin/treasury/bank-lines/:id/guarantee { operatorId }` |

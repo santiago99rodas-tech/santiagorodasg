@@ -237,8 +237,11 @@
         const amount = dry.fills.reduce((a, f) => a + notional(ownPrice(kind, f.yesPrice), f.qty), 0);
         publish({ type: "trade", marketId: m.id, eventId: m.eventId, yesPrice: last, qty: dry.filled, outcome: input.outcome, side: input.side, amount, player: mask(pid), at: iso(now()) });
         player.lastSeen = now();
-        const yesFlow = dry.fills.reduce((a, f) => a + f.qty, 0) / 100;
-        learnFlow(m, kind === "BUY_YES" || kind === "SELL_NO" ? yesFlow : -yesFlow);
+        // Como en el servidor: las acciones cuentan solo en lo que se le compra a la casa; lo negociado con otros acerca el precio al del cruce
+        const sign = kind === "BUY_YES" || kind === "SELL_NO" ? 1 : -1, other = dry.fills.filter((f) => f.makerOwnerId !== HOUSE);
+        const otherQty = other.reduce((a, f) => a + f.qty, 0) / 100;
+        learnFlow(m, (sign * dry.fills.filter((f) => f.makerOwnerId === HOUSE).reduce((a, f) => a + f.qty, 0)) / 100,
+          otherQty, otherQty ? other.reduce((a, f) => a + f.qty * f.yesPrice, 0) / 100 / otherQty / 100 : NaN);
         refreshQuotes(m.id);
       }
     }
@@ -294,13 +297,15 @@
   // spread Avellaneda-Stoikov, liquidez que baja con √(tiempo al cierre) y límites de pérdida.
   const eventMarkets = (m) => { const e = S.events.find((x) => x.id === m.eventId); return e.kind === "multi" ? e.marketIds.map((id) => S.markets.get(id)).filter((x) => x.status === "open") : [m]; };
   const tauOf = (m) => Math.max(0, (new Date(m.closeTime) - now()) / 864e5);
-  function learnFlow(m, yesShares) {
+  function learnFlow(m, yesShares, otherShares = 0, otherVwap = NaN) {
     const ms = eventMarkets(m);
     const b = MM.bShares * liquidityFactor(tauOf(m), MM);
     const kind = ms.length > 1 ? "multi" : "binary";
     const prev = ms.map((x) => x.fairExact ?? x.fair / 100);
     const sum = prev.reduce((a, x) => a + x, 0);
-    const next = flowUpdate(kind, kind === "multi" ? prev.map((x) => x / sum) : prev, ms.map((x) => (x.id === m.id ? yesShares : 0)), b);
+    let next = flowUpdate(kind, kind === "multi" ? prev.map((x) => x / sum) : prev, ms.map((x) => (x.id === m.id ? yesShares : 0)), b);
+    next = next.map((p, i) => (ms[i].id === m.id ? tradePriceUpdate(p, otherVwap, otherShares, b) : p));
+    if (kind === "multi") { const z = next.reduce((a, x) => a + x, 0); next = next.map((x) => x / z); }
     ms.forEach((x, i) => { x.fairExact = clamp(next[i], 0.02, 0.98); x.fair = clamp(Math.round(x.fairExact * 100), 2, 98); trackFair(x); });
   }
   function trackFair(x) {

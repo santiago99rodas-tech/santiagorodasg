@@ -17,7 +17,7 @@ import { houseAccount } from "./house.js";
 import { MICRO } from "../lib/money.js";
 import { flowImbalances, trackFair } from "./toxicity.js";
 import {
-  quoteV1, quoteV2, flowUpdate, poolLogOdds, liquidityFactor, worstCaseLoss,
+  quoteV1, quoteV2, flowUpdate, tradePriceUpdate, poolLogOdds, liquidityFactor, worstCaseLoss,
   type EventState, type Quote, type QuoteParamsV2, type V2Diagnostics,
 } from "../engine/quoting.js";
 
@@ -81,22 +81,26 @@ async function updateFairPricesV1() {
 }
 
 /**
- * v2: cada acción Sí neta que compran los jugadores mueve el log-odds en 1/b (curva LMSR); después se
- * combina en log-odds con la referencia externa nueva, si llegó una (cada referencia se aplica una sola vez,
- * así una foto vieja no arrastra el precio en cada pasada). Las compras de la casa no cuentan.
+ * v2: cada acción Sí neta que los jugadores le compran a la casa mueve el log-odds en 1/b (curva LMSR).
+ * Lo que negocian contra otros (market makers externos u otros jugadores) acerca el precio al que se
+ * negoció (tradePriceUpdate). Después se combina en log-odds con la referencia externa nueva, si llegó
+ * una (cada referencia se aplica una sola vez, así una foto vieja no arrastra el precio en cada pasada).
+ * Las compras de la casa no cuentan.
  */
 async function updateFairPricesV2() {
   const house = await houseAccount();
   const rows = await many(pool, `
     SELECT m.id, m.event_id, e.kind, m.fair_price, m.fair_exact, m.flow_cursor,
            EXTRACT(EPOCH FROM (m.close_time - now())) / 86400 AS tau,
-           f.flow, f.last_id,
+           f.flow, f.other_qty, f.other_vwap, f.last_id,
            x.price AS ext, x.id AS ext_id
     FROM markets m JOIN events e ON e.id = m.event_id
     LEFT JOIN LATERAL (
-      SELECT SUM(CASE WHEN (o.side='BUY' AND o.outcome='YES') OR (o.side='SELL' AND o.outcome='NO') THEN t.qty ELSE -t.qty END)::float8 / 100 AS flow,
+      SELECT SUM(CASE WHEN om.player_id <> $1 THEN 0 WHEN (o.side='BUY' AND o.outcome='YES') OR (o.side='SELL' AND o.outcome='NO') THEN t.qty ELSE -t.qty END)::float8 / 100 AS flow,
+             SUM(t.qty) FILTER (WHERE om.player_id <> $1)::float8 / 100 AS other_qty,
+             (SUM(t.qty * t.yes_price) FILTER (WHERE om.player_id <> $1))::float8 / NULLIF(SUM(t.qty) FILTER (WHERE om.player_id <> $1), 0) / 100 AS other_vwap,
              MAX(t.id) AS last_id
-      FROM trades t JOIN orders o ON o.id = t.taker_order_id
+      FROM trades t JOIN orders o ON o.id = t.taker_order_id JOIN orders om ON om.id = t.maker_order_id
       WHERE t.market_id = m.id AND t.id > m.flow_cursor AND o.player_id <> $1
     ) f ON TRUE
     LEFT JOIN LATERAL (
@@ -113,7 +117,8 @@ async function updateFairPricesV2() {
     const kind = ms[0].kind === "multi" && ms.length > 1 ? "multi" : "binary";
     const flow = ms.map((m) => Number(m.flow ?? 0));
     const ext = ms.map((m) => (m.ext == null ? undefined : Number(m.ext) / 100));
-    if (flow.every((x) => x === 0) && ext.every((x) => x === undefined) && ms.every((m) => m.fair_exact != null)) {
+    const otherQty = ms.map((m) => Number(m.other_qty ?? 0));
+    if (flow.every((x) => x === 0) && otherQty.every((x) => x === 0) && ext.every((x) => x === undefined) && ms.every((m) => m.fair_exact != null)) {
       // Sin flujo ni referencias: solo avanzar el cursor si hubo cruces de la casa
       for (const m of ms) if (m.last_id && Number(m.last_id) > Number(m.flow_cursor)) await pool.query("UPDATE markets SET flow_cursor=$2 WHERE id=$1", [m.id, m.last_id]);
       continue;
@@ -123,6 +128,7 @@ async function updateFairPricesV2() {
     for (const g of groups) {
       const prev = g.map((i) => (ms[i].fair_exact != null ? Number(ms[i].fair_exact) : ms[i].fair_price / 100));
       let next = flowUpdate(kind, kind === "multi" ? normalize(prev) : prev, g.map((i) => flow[i]), b);
+      next = next.map((p, k) => tradePriceUpdate(p, Number(ms[g[k]].other_vwap), otherQty[g[k]], b));
       next = next.map((p, k) => {
         const e = ext[g[k]];
         return e === undefined ? p : poolLogOdds([{ p, w: config.mm.weightPrev }, { p: clamp(e, 0.01, 0.99), w: config.mm.weightExternal }]);

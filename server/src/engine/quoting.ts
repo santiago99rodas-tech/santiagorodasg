@@ -122,6 +122,18 @@ export function flowUpdate(kind: "binary" | "multi", fair: number[], flow: numbe
   return xs.map((x) => Math.exp(x - z));
 }
 
+/**
+ * Cruces en los que la casa no fue la contraparte (contra market makers externos u otros jugadores):
+ * su información está en el precio al que se negoció, no en la cantidad de acciones (con el mismo
+ * dinero se compran más acciones del lado barato, y ese sesgo solo se corrige solo cuando la casa pone
+ * el precio). El precio justo se acerca en log-odds al precio medio de esos cruces, con un peso que
+ * crece con lo negociado: acciones / b (hasta igualar el peso del precio anterior).
+ */
+export function tradePriceUpdate(fair: number, vwap: number, shares: number, b: number): number {
+  if (!(shares > 0) || !Number.isFinite(vwap)) return fair;
+  return poolLogOdds([{ p: fair, w: 1 }, { p: clamp(vwap, 0.01, 0.99), w: Math.min(1, shares / b) }]);
+}
+
 // ---------- Riesgo ----------
 
 /**

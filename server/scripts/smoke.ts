@@ -29,7 +29,7 @@ await check("salud y base de datos", async () => {
   must(r.status === 200, `HTTP ${r.status}: ${r.text.slice(0, 200)}`);
   const h = r.json();
   must(h.db === "ok", "la base no responde");
-  must(h.migrations >= 8, `solo ${h.migrations} migraciones aplicadas (se esperan 8 o más)`);
+  must(h.migrations >= 10, `solo ${h.migrations} migraciones aplicadas (se esperan 10 o más)`);
   return `${h.migrations} migraciones, ${h.openMarkets} mercados abiertos${h.version ? `, versión ${h.version}` : ""}`;
 });
 await check("catálogo", async () => {

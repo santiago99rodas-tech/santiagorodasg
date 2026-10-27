@@ -57,3 +57,33 @@
 | Con referencia externa | v1 | −$2087 | $2067 | $0 | −$312 | — |
 | Con referencia externa | v2 | −$1191 | −$393 | $0 | −$166 | — |
 | Con referencia externa | v2+ | −$1187 | −$430 | $0 | −$218 | 0.0% / 0.0% / 0.0% / 0.0% |
+
+## Market makers externos e incentivos
+
+Generado con `npm run sim -- --liquidez --runs 200`. Market makers: 2, con su propia estimación (la verdad con un error persistente de 0,3 en log-odds; "poco informados": 0,7), medio spread de 1,5¢, 300 acciones por lado, corrimiento por inventario y tope de 3.000 acciones netas. Cobran el reembolso (0,5%) y, con incentivos, la parte del pozo que les toca según `engine/rewards.ts` (la casa compite por la parte, pero no cobra). La casa queda de respaldo donde ellos dan profundidad.
+
+200 mercados por escenario y configuración, semilla 1, market maker de la casa v2+. Montos en dólares por mercado (promedio).
+
+| Escenario | Configuración | Casa | Mercados con pérdida (casa) | Market makers | Peor 5% (MM) | Parte del volumen de los MM | Reembolsos + incentivos | Medio spread | Casuales |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Normal (mayoría casual) | Solo la casa | $3135 | 0.0% | — | — | — | — | 3.2¢ | −$4405 |
+| Normal (mayoría casual) | Casa + 2 MM | $2395 | 1.0% | $341 | −$2940 | 46.9% | $104 | 1.7¢ | −$3894 |
+| Normal (mayoría casual) | Casa + 2 MM + incentivos $20/día | $2101 | 3.0% | $635 | −$2454 | 46.9% | $398 | 1.7¢ | −$3894 |
+| Normal (mayoría casual) | Casa + 2 MM poco informados | $2311 | 4.0% | −$1628 | −$6732 | 52.1% | $118 | 1.5¢ | −$3527 |
+| Muchos informados | Solo la casa | $2174 | 1.0% | — | — | — | — | 2.7¢ | −$2077 |
+| Muchos informados | Casa + 2 MM | $1371 | 2.0% | −$61 | −$3637 | 81.6% | $243 | 1.1¢ | −$1918 |
+| Muchos informados | Casa + 2 MM + incentivos $20/día | $962 | 4.5% | $349 | −$3128 | 81.6% | $653 | 1.1¢ | −$1918 |
+| Muchos informados | Casa + 2 MM poco informados | $1570 | 4.0% | −$3986 | −$11.229 | 80.1% | $267 | 1.1¢ | −$1784 |
+| Múltiple, 5 opciones | Solo la casa | $7594 | 0.0% | — | — | — | — | 2.8¢ | −$5059 |
+| Múltiple, 5 opciones | Casa + 2 MM | $4716 | 6.5% | $1437 | −$5662 | 74.5% | $310 | 1.2¢ | −$4776 |
+| Múltiple, 5 opciones | Casa + 2 MM + incentivos $20/día | $2820 | 14.0% | $3332 | −$3655 | 74.5% | $2205 | 1.2¢ | −$4776 |
+| Múltiple, 5 opciones | Casa + 2 MM poco informados | $4406 | 4.0% | −$3383 | −$11.389 | 79.3% | $355 | 1.1¢ | −$4216 |
+| Con referencia externa | Solo la casa | $1835 | 8.0% | — | — | — | — | 3.6¢ | −$1187 |
+| Con referencia externa | Casa + 2 MM | $1397 | 9.0% | $1054 | −$2671 | 92.4% | $280 | 1.3¢ | −$2999 |
+| Con referencia externa | Casa + 2 MM + incentivos $20/día | $906 | 13.5% | $1545 | −$2159 | 92.4% | $771 | 1.3¢ | −$2999 |
+| Con referencia externa | Casa + 2 MM poco informados | $1541 | 8.0% | −$2140 | −$8972 | 90.8% | $286 | 1.3¢ | −$2825 |
+
+**Cómo leerla:**
+- "Casa" ya descuenta los reembolsos y los incentivos, porque los paga la plataforma.
+- "Casuales" es lo que pierden en conjunto los jugadores casuales. "Con referencia externa" muestra más pérdida con market makers porque se apuesta 2,5 veces más: solo con la casa, que llega a su límite de pérdida con tantos informados, muchas apuestas no encuentran precio.
+

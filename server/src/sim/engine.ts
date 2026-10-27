@@ -6,13 +6,14 @@
 // Usa el mismo motor de órdenes (engine/orderbook.ts) y las mismas fórmulas de cotización
 // (engine/quoting.ts) que la plataforma real.
 
-import { OrderBook, type Kind } from "../engine/orderbook.js";
+import { OrderBook, isBid, type Kind } from "../engine/orderbook.js";
+import { sampleScores, sampleShares, bookMid, DEFAULT_REWARDS, type RewardOrder, type RewardParams } from "../engine/rewards.js";
 import {
   markoutCents, addMarkout, emptyStats, toxicityScore, surchargeBps, flowImbalance, breakerTripped,
   type FlowStats, type ToxicityParams,
 } from "../engine/toxicity.js";
 import {
-  quoteV1, quoteV2, poolLogOdds, worstCaseLoss, logit, sigmoid, flowUpdate, liquidityFactor,
+  quoteV1, quoteV2, poolLogOdds, worstCaseLoss, logit, sigmoid, flowUpdate, tradePriceUpdate, liquidityFactor,
   type EventState, type QuoteParamsV1, type QuoteParamsV2,
 } from "../engine/quoting.js";
 
@@ -31,8 +32,28 @@ export interface Scenario {
   openingNoise: number; // error de la probabilidad de apertura (desvío en log-odds)
 }
 
+/**
+ * Market makers externos (P2P): cotizan en el mismo libro que la casa con su propia estimación de la
+ * probabilidad (la verdad con un error persistente), corren su precio según su inventario y tienen un
+ * tope de posición. Cobran el reembolso sobre lo que les toman y, si hay pozo, los incentivos de
+ * liquidez (engine/rewards.ts). La casa queda de respaldo cuando ellos ya dan profundidad cerca del precio.
+ */
+export interface Liquidity {
+  mms: number;                 // cuántos market makers externos
+  noise: number;               // error de su estimación (desvío en log-odds; 0,3 ≈ una buena referencia externa)
+  halfSpreadCents: number;     // medio spread que cotizan
+  shares: number;              // tamaño por lado
+  skewCentsPer1000: number;    // corrimiento por cada 1.000 acciones de inventario neto
+  maxInventory: number;        // con más inventario neto dejan de cotizar ese lado
+  rebateBps: number;           // reembolso sobre lo que les toma un jugador (sale de la comisión)
+  rewardDailyUsd: number;      // pozo diario de incentivos por mercado (0 = sin incentivos)
+  reward: RewardParams;
+  backstop: { cents: number; minShares: number; spreadMult: number };
+}
+
 export interface Strategy {
   name: "v1" | "v2" | "v2+"; // v2+ = v2 con protección contra informados
+  liquidity?: Liquidity;
   tox?: ToxicityParams; // solo v2+
   v1: QuoteParamsV1;
   v2: QuoteParamsV2;
@@ -54,6 +75,7 @@ export interface RunResult {
   errorCents: number; // error medio |precio − verdad| durante la vida del mercado
   halfSpread: number; // medio spread medio que ve el jugador (centavos)
   agents: Record<Agent, number>; // resultado de cada tipo de jugador
+  mm: { pnl: number; rebates: number; rewards: number; volumeShare: number }; // market makers externos (en conjunto)
 }
 
 // ---------- azar reproducible ----------
@@ -136,6 +158,15 @@ export function runMarket(sc: Scenario, st: Strategy, seed: number, trace?: (row
   let oid = 0;
   const HOUSE = 0;
 
+  // Market makers externos
+  const liq = st.liquidity, MM0 = 500;
+  const mmRng = rng(seed * 31337 + 3); // azar propio: no cambia la verdad ni a los jugadores
+  const mms = Array.from({ length: liq?.mms ?? 0 }, () => ({ yes: new Array(books).fill(0), no: new Array(books).fill(0), cost: new Array(books).fill(0), rebates: 0, rewards: 0,
+    err: new Array(books).fill(0).map(() => (liq?.noise ?? 0) * mmRng.normal()) }));
+  let rebates = 0, rewardsPaid = 0, mmVolume = 0;
+  const asReward = (owner: number, kind: Kind, yesPrice: number, shares: number): RewardOrder =>
+    ({ owner, side: kind.startsWith("BUY") ? "BUY" : "SELL", outcome: kind.endsWith("YES") ? "YES" : "NO", price: kind.endsWith("YES") ? yesPrice : 100 - yesPrice, shares });
+
   for (let step = 0; step < steps; step++) {
     const tau = sc.days - step * dt;
 
@@ -158,20 +189,61 @@ export function runMarket(sc: Scenario, st: Strategy, seed: number, trace?: (row
       })),
     };
     peakWorst = Math.max(peakWorst, worstCaseLoss(ev));
-    const quotes = st.name === "v1" ? quoteV1(ev, st.v1) : quoteV2(ev, tox ? { ...st.v2, ...tox } : st.v2).quotes;
     const book = Array.from({ length: books }, () => new OrderBook());
-    for (const q of quotes) book[q.outcome].add({ id: ++oid, ownerId: HOUSE, kind: q.kind as Kind, yesPrice: q.yesPrice, remaining: q.shares * 100 });
+    const posted: RewardOrder[][] = Array.from({ length: books }, () => []);
+
+    // 2a. Primero cotizan los market makers externos (órdenes de compra de Sí y de No, como el bot real)
+    if (liq) {
+      // En orden rotativo: como en el libro real, las órdenes son post-only y no pueden cruzar lo que ya hay
+      for (const j of mms.map((_, k) => (k + step) % mms.length)) {
+        const mm = mms[j];
+        mm.err = mm.err.map((e) => 0.95 * e + liq.noise * Math.sqrt(1 - 0.95 ** 2) * mmRng.normal());
+        for (let i = 0; i < books; i++) {
+          const inv = mm.yes[i] - mm.no[i];
+          const center = sigmoid(logit(Math.min(0.995, Math.max(0.005, truthYes()[i]))) + mm.err[i]) * 100 - (liq.skewCentsPer1000 * inv) / 1000;
+          const bestAsk = book[i].bestAsk() ?? 100, bestBid = book[i].bestBid() ?? 0;
+          const bid = Math.min(bestAsk - 1, Math.max(1, Math.min(97, Math.floor(center - liq.halfSpreadCents))));
+          const ask = Math.max(bestBid + 1, Math.min(99, Math.max(bid + 1, Math.ceil(center + liq.halfSpreadCents))));
+          if (bid >= 1 && inv < liq.maxInventory) { book[i].add({ id: ++oid, ownerId: MM0 + j, kind: "BUY_YES", yesPrice: bid, remaining: liq.shares * 100 }); posted[i].push(asReward(MM0 + j, "BUY_YES", bid, liq.shares)); }
+          if (ask <= 99 && ask > bid && inv > -liq.maxInventory) { book[i].add({ id: ++oid, ownerId: MM0 + j, kind: "BUY_NO", yesPrice: ask, remaining: liq.shares * 100 }); posted[i].push(asReward(MM0 + j, "BUY_NO", ask, liq.shares)); }
+        }
+      }
+      // La casa queda de respaldo donde ya hay profundidad externa cerca del precio a ambos lados
+      ev.outcomes.forEach((o, i) => {
+        const d = book[i].depthNear(HOUSE, Math.round(fair[i]), liq.backstop.cents);
+        o.backstop = d.bids >= liq.backstop.minShares * 100 && d.asks >= liq.backstop.minShares * 100;
+      });
+    }
+
+    // 2b. La casa cotiza (sin cruzar las órdenes que ya están en el libro)
+    const quotes = st.name === "v1" ? quoteV1(ev, st.v1) : quoteV2(ev, { ...st.v2, ...(tox ?? {}), ...(liq ? { backstopSpreadMult: liq.backstop.spreadMult } : {}) }).quotes;
+    for (const q of quotes) {
+      const bk = book[q.outcome], kind = q.kind as Kind;
+      const opp = isBid(kind) ? bk.bestAsk() : bk.bestBid();
+      if (opp !== undefined && (isBid(kind) ? q.yesPrice >= opp : q.yesPrice <= opp)) continue;
+      bk.add({ id: ++oid, ownerId: HOUSE, kind, yesPrice: q.yesPrice, remaining: q.shares * 100 });
+      posted[q.outcome].push(asReward(HOUSE, kind, q.yesPrice, q.shares));
+    }
 
     for (const bk of book) { const a = bk.bestAsk(), b = bk.bestBid(); if (a !== undefined && b !== undefined) { spreadSum += (a - b) / 2; spreadN++; } }
 
+    // 2c. Incentivos de liquidez: cada hora se reparte la parte del pozo según el puntaje (la casa compite, no cobra)
+    if (liq && liq.rewardDailyUsd > 0) {
+      for (let i = 0; i < books; i++) {
+        const shares = sampleShares(sampleScores(posted[i], bookMid(posted[i], fair[i]), liq.reward));
+        for (const [owner, sh] of shares) if (owner !== HOUSE) { const r = liq.rewardDailyUsd * dt * sh; mms[Number(owner) - MM0].rewards += r; rewardsPaid += r; }
+      }
+    }
+
     // 3. Llegan los jugadores
     const last: (number | undefined)[] = new Array(books).fill(undefined);
-    const flow: number[] = new Array(books).fill(0);
+    const flow: number[] = new Array(books).fill(0); // acciones Sí netas que los jugadores le compran a la casa
+    const other = Array.from({ length: books }, () => ({ shares: 0, value: 0 })); // cruces contra otros (precio medio)
     const stepYes = new Array(books).fill(0), stepNo = new Array(books).fill(0);
     const take = (agent: Agent, i: number, buyYes: boolean, usd: number, yesLimit: number) => {
       if (usd < 1) return;
       const player = POOL[agent][0] + Math.floor(act.next() * (agent === "informado" ? sc.informed.accounts ?? POOL.informado[1] : POOL[agent][1]));
-      // Recargo por markout: solo en lo que le compra a la casa (aquí la casa es el único maker)
+      // Recargo por markout: solo en lo que le compra a la casa (no en lo que toma de los market makers)
       const feeBps = st.feeBps + (tox ? surchargeBps(scoreOf(player), tox) : 0);
       const budget = Math.floor((usd * 1e6) / (1 + feeBps / 1e4));
       const r = book[i].match({ id: ++oid, ownerId: 1, kind: buyYes ? "BUY_YES" : "BUY_NO", yesLimit, qty: 1e9, budget });
@@ -179,17 +251,28 @@ export function runMarket(sc: Scenario, st: Strategy, seed: number, trace?: (row
         const sh = f.qty / 100;
         const agentPrice = (buyYes ? f.yesPrice : 100 - f.yesPrice) / 100;
         const housePrice = 1 - agentPrice;
-        const fee = (sh * agentPrice * feeBps) / 1e4;
+        const fromHouse = f.makerOwnerId === HOUSE;
+        const fee = (sh * agentPrice * (fromHouse ? feeBps : st.feeBps)) / 1e4;
         const t = { step, player, i, fairAt: f.yesPrice, buyYes, usd: sh * agentPrice };
         pending.push(t); all.push(t);
         if (buyYes) stepYes[i] += sh * agentPrice; else stepNo[i] += sh * agentPrice;
         agentCash[agent] -= sh * agentPrice + fee;
         fees += fee;
         volume += sh * agentPrice;
-        house.cost[i] += sh * housePrice;
-        if (buyYes) { agentYes[agent][i] += sh; house.no[i] += sh; } else { agentNo[agent][i] += sh; house.yes[i] += sh; }
+        if (buyYes) agentYes[agent][i] += sh; else agentNo[agent][i] += sh;
+        if (fromHouse) {
+          house.cost[i] += sh * housePrice;
+          if (buyYes) house.no[i] += sh; else house.yes[i] += sh;
+        } else {
+          const mm = mms[f.makerOwnerId - MM0];
+          mm.cost[i] += sh * housePrice;
+          if (buyYes) mm.no[i] += sh; else mm.yes[i] += sh;
+          const rb = Math.min(fee, (sh * agentPrice * (liq?.rebateBps ?? 0)) / 1e4);
+          mm.rebates += rb; rebates += rb; mmVolume += sh * agentPrice;
+        }
         last[i] = f.yesPrice;
-        flow[i] += buyYes ? sh : -sh;
+        if (fromHouse) flow[i] += buyYes ? sh : -sh;
+        else { other[i].shares += sh; other[i].value += sh * f.yesPrice / 100; }
       }
     };
     const pick = () => Math.floor(act.next() * books);
@@ -233,6 +316,7 @@ export function runMarket(sc: Scenario, st: Strategy, seed: number, trace?: (row
     } else {
       const b = st.v2.bShares * liquidityFactor(tau, st.v2);
       fairExact = flowUpdate(binary ? "binary" : "multi", fairExact, flow, b);
+      fairExact = fairExact.map((f, i) => tradePriceUpdate(f, other[i].value / other[i].shares, other[i].shares, b));
       if (ext) fairExact = fairExact.map((f, i) => poolLogOdds([{ p: f, w: st.weights.prev }, { p: ext[i], w: st.weights.external }]));
       if (!binary) { const z = fairExact.reduce((a, x) => a + x, 0); fairExact = fairExact.map((x) => x / z); }
       fairExact = fairExact.map((f) => Math.min(0.98, Math.max(0.02, f)));
@@ -255,7 +339,7 @@ export function runMarket(sc: Scenario, st: Strategy, seed: number, trace?: (row
     // 5. Métricas con la probabilidad verdadera
     const ty = truthYes();
     for (let i = 0; i < books; i++) { errSum += Math.abs(fair[i] - ty[i] * 100); errN++; }
-    let value = fees;
+    let value = fees - rebates - rewardsPaid;
     for (let i = 0; i < books; i++) value += house.yes[i] * ty[i] + house.no[i] * (1 - ty[i]) - house.cost[i];
     peakValue = Math.max(peakValue, value);
     drawdown = Math.max(drawdown, peakValue - value);
@@ -267,15 +351,18 @@ export function runMarket(sc: Scenario, st: Strategy, seed: number, trace?: (row
   const pays = (i: number) => (binary ? winner === 0 : winner === i);
   // Markout final: contra el resultado ($1 o $0 por acción)
   for (const t of all) record(t.player, markoutCents(t.fairAt, pays(t.i) ? 100 : 0, t.buyYes), t.usd);
-  let pnl = fees;
+  let pnl = fees - rebates - rewardsPaid; // la plataforma paga los reembolsos y los incentivos
   for (let i = 0; i < books; i++) pnl += (pays(i) ? house.yes[i] : house.no[i]) - house.cost[i];
+  let mmPnl = rebates + rewardsPaid;
+  for (const mm of mms) for (let i = 0; i < books; i++) mmPnl += (pays(i) ? mm.yes[i] : mm.no[i]) - mm.cost[i];
   const agents = {} as Record<Agent, number>;
   for (const a of AGENTS) {
     let v = agentCash[a];
     for (let i = 0; i < books; i++) v += pays(i) ? agentYes[a][i] : agentNo[a][i];
     agents[a] = v;
   }
-  return { pnl, fees, volume, peakWorstLoss: peakWorst, drawdown, brierOpen, brier1d, errorCents: errSum / Math.max(1, errN), halfSpread: spreadSum / Math.max(1, spreadN), agents };
+  return { pnl, fees, volume, peakWorstLoss: peakWorst, drawdown, brierOpen, brier1d, errorCents: errSum / Math.max(1, errN), halfSpread: spreadSum / Math.max(1, spreadN), agents,
+    mm: { pnl: mmPnl, rebates, rewards: rewardsPaid, volumeShare: volume ? mmVolume / volume : 0 } };
 }
 
 const sum = (xs: number[]) => xs.reduce((a, x) => a + x, 0);
@@ -301,6 +388,7 @@ export interface Summary {
   brierOpen: number; brier1d: number; errorCents: number; halfSpread: number;
   agents: Record<Agent, number>;
   flagged: Record<Agent, number>; // fracción de jugadores de cada tipo con recargo al final
+  mm: { pnl: number; pnlP5: number; lossShare: number; rebates: number; rewards: number; volumeShare: number };
 }
 
 export function runMany(sc: Scenario, st: Strategy, runs: number, seed = 1): Summary {
@@ -333,6 +421,9 @@ export function runMany(sc: Scenario, st: Strategy, runs: number, seed = 1): Sum
     halfSpread: mean((r) => r.halfSpread),
     agents: Object.fromEntries(AGENTS.map((a) => [a, mean((r) => r.agents[a])])) as Record<Agent, number>,
     flagged,
+    mm: (() => { const m = rs.map((r) => r.mm.pnl).sort((a, b) => a - b);
+      return { pnl: mean((r) => r.mm.pnl), pnlP5: m[Math.floor(0.05 * (m.length - 1))], lossShare: rs.filter((r) => r.mm.pnl < 0).length / rs.length,
+        rebates: mean((r) => r.mm.rebates), rewards: mean((r) => r.mm.rewards), volumeShare: mean((r) => r.mm.volumeShare) }; })(),
   };
 }
 
@@ -357,3 +448,11 @@ export const SCENARIOS: Scenario[] = [
   { ...base, name: "cuentas", label: "Informados con cuentas nuevas", informed: { ...base.informed, rate: 1, accounts: 5000 } },
   { ...base, name: "referencia", label: "Con referencia externa", externalRef: true, informed: { ...base.informed, rate: 1 } },
 ];
+
+// ---------- liquidez externa ----------
+
+export const DEFAULT_LIQUIDITY: Liquidity = {
+  mms: 2, noise: 0.3, halfSpreadCents: 1.5, shares: 300, skewCentsPer1000: 2, maxInventory: 3000,
+  rebateBps: 50, rewardDailyUsd: 0, reward: DEFAULT_REWARDS,
+  backstop: { cents: 2, minShares: 200, spreadMult: 2 },
+};
