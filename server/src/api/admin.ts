@@ -283,6 +283,7 @@ export async function adminRoutes(app: FastifyInstance) {
     entries: await many(pool, "SELECT * FROM journal ORDER BY id DESC LIMIT $1", [Math.min(Number((req.query as any).limit ?? 200), 2000)]),
   }));
   app.get("/admin/treasury/reserves", async () => treasury.reservesReport());
+  app.post("/admin/treasury/mm-custody/true-up", async (req) => treasury.trueUpMmCustody(adminUser(req)));
   app.post<{ Params: { id: string } }>("/admin/treasury/bank-lines/:id/guarantee", async (req) => {
     const b = parse(z.object({ operatorId: z.string() }), req.body);
     return treasury.guaranteeFromLine(Number(req.params.id), b.operatorId, adminUser(req));

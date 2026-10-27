@@ -1014,6 +1014,19 @@
       obligations, coverage: obligations ? fiduciary / obligations : null, ok: fiduciary >= obligations, marketMakers: { custody: jbal("custodia_mm"), accounts: mmAcc, ok: jbal("custodia_mm") >= mmAcc },
       journal: { id: T.journal.length, hash: T.journal.at(-1)?.hash ?? "0".repeat(64) }, note: "En la demo el libro vive en tu navegador. En el servidor se guarda en la base y se concilia con el extracto del fideicomiso." };
   }
+  // Custodia de market makers al día con su resultado (server: treasury.trueUpMmCustody)
+  function tTrueUpMm(by = "sistema") {
+    const moves = [...S.players.values()].filter((x) => x.isMM).map((x) => {
+      const value = x.balance + [...S.orders.values()].filter((o) => o.playerId === x.id && o.status === "open" && o.side === "BUY").reduce((b, o) => b + o.reserved, 0)
+        + [...S.positions.values()].filter((p) => p.playerId === x.id).reduce((b, p) => b + p.cost, 0);
+      return { playerId: x.id, name: x.name, d: Math.round(value + jbal(`mm:${x.id}`)) };
+    }).filter((m) => m.d !== 0);
+    if (!moves.length) return { adjusted: 0, total: 0 };
+    const total = moves.reduce((a, m) => a + m.d, 0);
+    jpost("ajuste_custodia_mm", `MMC-${iso(now()).slice(0, 10)}`, [{ account: "custodia_mm", amount: total }, { account: "fideicomiso", amount: -total }, { account: "compensacion", amount: total }, ...moves.map((m) => ({ account: `mm:${m.playerId}`, amount: -m.d }))],
+      `Ajuste de la custodia de market makers por su resultado: ${moves.map((m) => `${m.name} ${(m.d / 1e6).toFixed(2)}`).join(", ")} USD`, by);
+    return { adjusted: moves.length, total, moves };
+  }
   function tSettle() {
     const created = [], clr = demoClearing({});
     for (const o of S.operators) {
@@ -1028,6 +1041,7 @@
       if (amount) jpost("liquidacion", `LIQ-${id}`, [{ account: `casino:${o.id}`, amount }, { account: "compensacion", amount: -amount }], `Liquidación de ${o.id}`);
       created.push({ id, operatorId: o.id, amount, status: x.status });
     }
+    if (created.length) tTrueUpMm();
     return created;
   }
   function tPay(id, ref, by) {
@@ -1045,6 +1059,7 @@
       unmatchedBankLines: T.bank.filter((b) => b.status === "unmatched").map((b) => ({ account: "fideicomiso", ...b })).reverse(), anchors: [], usdc: USDC, instruments: instruments(), config: { ...T.cfg, instrumentMinValidityDays: MIN_VALID_DAYS, instrumentWarnDays: WARN_DAYS, anchorEnabled: true, anchorEveryHours: 24 } };
   });
   route("POST", "/admin/treasury/settle", () => ({ created: tSettle() }));
+  route("POST", "/admin/treasury/mm-custody/true-up", ({ user }) => tTrueUpMm(user));
   route("POST", "/admin/treasury/settlements/:id/pay", ({ p, b, user }) => { if (!b.bankRef) throw bad("missing_bank_ref", "Indica la referencia de la transferencia"); return tPay(Number(p.id), b.bankRef, user); });
   route("POST", "/admin/treasury/settlements/:id/collect", ({ p, user }) => {
     const x = T.settlements.find((y) => y.id === Number(p.id)); if (!x || !["pending", "overdue"].includes(x.status) || x.amount <= 0) throw conflict("not_collectable", "Solo se cobra de la garantía una liquidación que el casino debe");

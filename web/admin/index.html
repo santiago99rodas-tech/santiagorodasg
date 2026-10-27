@@ -856,7 +856,7 @@ async function viewTesoreria(el) {
         <tr><td>Liquidaciones por pagar a casinos</td><td class="num">${money(R.payableToCasinos)}</td></tr>
         <tr><td>Pérdida de la casa en el peor escenario</td><td class="num">${money(R.houseRisk)}</td></tr>
         <tr><td><b>Sobra (o falta)</b></td><td class="num ${R.ok ? "ok" : "bad"}"><b>${money(R.fiduciary - R.obligations)}</b></td></tr>
-        <tr><td>Custodia de market makers / valor de sus cuentas</td><td class="num ${R.marketMakers.ok ? "" : "bad"}">${money(R.marketMakers.custody)} / ${money(R.marketMakers.accounts)}</td></tr>
+        <tr><td>Custodia de market makers / valor de sus cuentas${R.marketMakers.ok ? "" : `<div class="faint" style="font-size:11px">su resultado todavía no se traspasó; se ajusta solo en cada ronda de liquidaciones <button class="btn sm" id="tMmc">Ajustar ahora</button></div>`}</td><td class="num ${R.marketMakers.ok ? "" : "bad"}">${money(R.marketMakers.custody)} / ${money(R.marketMakers.accounts)}</td></tr>
       </tbody></table></div><p class="faint" style="font-size:12px;margin:8px 0 0">${esc(R.note)}</p></div>
     </div>
     <div class="panel" style="margin-top:14px"><h2>Sellos en Bitcoin <small>${t.config.anchorEnabled ? `cada ${t.config.anchorEveryHours} h con OpenTimestamps · públicos en /v1/oracle/anchors` : "anclaje desactivado"}</small></h2>
@@ -887,6 +887,8 @@ async function viewTesoreria(el) {
     const x = t.settlements.find((s) => String(s.id) === b.dataset.simpay), c = t.casinos.find((k) => k.operatorId === x.operator_id);
     simUsdc({ direction: x.amount > 0 ? "in" : "out", address: c.usdcAddress, amountUsd: Math.abs(x.amount - (x.covered_from_guarantee ?? 0)) / 1e6 });
   }));
+  const mmc = el.querySelector("#tMmc");
+  if (mmc) mmc.onclick = (e) => run(e.target, () => api("/admin/treasury/mm-custody/true-up", { method: "POST", body: {} }), (x) => x.adjusted ? `Custodia ajustada en ${money(x.total)}: traspásalo ${x.total >= 0 ? "del fideicomiso a la custodia" : "de la custodia al fideicomiso"}` : "La custodia ya estaba al día").then(after);
   el.querySelector("#tInstr").onclick = async () => {
     const f = await modal({ title: "Registrar póliza o carta de crédito", text: "Guarda la garantía que entregó el casino. Cuenta mientras esté vigente y deja de contar unos días antes de vencer, para que haya tiempo de ejecutarla. Te avisaremos antes.", ok: "Registrar",
       fields: [{ id: "op", label: "Casino", type: "select", options: t.casinos.map((c) => [c.operatorId, c.name]) }, { id: "kind", label: "Tipo", type: "select", options: [["poliza", "Póliza de caución (aseguradora)"], ["carta_credito", "Carta de crédito stand-by (banco)"]] },

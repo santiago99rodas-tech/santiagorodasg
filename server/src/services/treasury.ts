@@ -17,7 +17,8 @@
 //   casino:<id>            lo que el casino le debe a la plataforma (> 0) o ella a él (< 0)
 //   garantia:<id>          garantía del casino (pasivo: se le debe devolver; saldo negativo)
 //   capital:reserva_casa   capital aportado como reserva de la casa (saldo negativo)
-//   mm:<playerId>          lo que se le debe a cada market maker externo (saldo negativo)
+//   mm:<playerId>          lo que se le debe a cada market maker externo (saldo negativo; se pone al día
+//                          con su resultado en cada ronda de liquidaciones: trueUpMmCustody)
 //   compensacion           contrapartida de las liquidaciones: el resultado neto de la plataforma
 //   contingente:<id>       cuentas de orden: pólizas y cartas de crédito vigentes del casino (no es dinero;
 //   contingente:emisores   su contrapartida). Ver "pólizas y cartas de crédito" más abajo.
@@ -252,6 +253,34 @@ export async function recordMmCustody(playerId: number, amount: number, directio
     entries: [{ account: "custodia_mm", amount: sign * amount }, { account: `mm:${playerId}`, amount: -sign * amount }] });
 }
 
+/**
+ * Ajuste de la custodia de market makers. Sus cuentas cambian por más que depósitos y retiros: ganan o
+ * pierden negociando (contra jugadores de los casinos o contra la casa), cobran reembolsos y pagan
+ * comisiones. Esa plata entra o sale por las liquidaciones con los casinos y por el resultado de la
+ * casa, o sea, por el fideicomiso. Este asiento traspasa la diferencia para que la custodia vuelva a
+ * igualar lo que se le debe a cada uno (saldo + dinero en órdenes + costo de sus posiciones abiertas):
+ *   custodia_mm +d · fideicomiso −d · compensacion +d · mm:<id> −d_i   (d = Σ d_i; negativo si perdieron)
+ * Tesorería tiene que hacer esa transferencia de verdad entre las dos cuentas.
+ */
+export async function trueUpMmCustody(by = "sistema") {
+  const rows = await many(pool, `
+    SELECT a.player_id, a.name, COALESCE(b.balance, 0)::bigint AS balance,
+      (SELECT COALESCE(SUM(reserved), 0) FROM orders WHERE player_id = a.player_id AND status = 'open' AND side = 'BUY')::bigint AS reserved,
+      (SELECT COALESCE(SUM(cost), 0) FROM positions WHERE player_id = a.player_id)::bigint AS positions
+    FROM mm_accounts a LEFT JOIN internal_balances b ON b.player_id = a.player_id`);
+  const owed = await balances("mm:");
+  const moves = rows.map((r) => ({ playerId: Number(r.player_id), name: r.name as string, d: Number(r.balance) + Number(r.reserved) + Number(r.positions) + (owed.get(`mm:${r.player_id}`) ?? 0) }))
+    .filter((m) => m.d !== 0);
+  if (!moves.length) return { adjusted: 0, total: 0 };
+  const total = moves.reduce((a, m) => a + m.d, 0);
+  await post({ kind: "ajuste_custodia_mm", ref: `MMC-${new Date().toISOString().slice(0, 10)}`, by,
+    memo: `Ajuste de la custodia de market makers por su resultado: ${moves.map((m) => `${m.name} ${m.d >= 0 ? "+" : ""}${usd(m.d)}`).join(", ")} USD`,
+    entries: [{ account: "custodia_mm", amount: total }, { account: "fideicomiso", amount: -total }, { account: "compensacion", amount: total },
+              ...moves.map((m) => ({ account: `mm:${m.playerId}`, amount: -m.d }))] });
+  console.log(`[tesorería] custodia de market makers ajustada en ${usd(total)} USD`);
+  return { adjusted: moves.length, total, moves };
+}
+
 // ---------- liquidaciones ----------
 
 /**
@@ -300,6 +329,8 @@ export async function runSettlement(opts: { to?: Date; onlyDue?: boolean; operat
     });
     created.push({ id, operatorId: o.id, amount, status: amount === 0 ? "paid" : "pending", dueAt });
   }
+  // Junto con cada ronda de liquidaciones, la custodia de market makers se pone al día con su resultado
+  if (created.length && !opts.operatorId) await trueUpMmCustody();
   await evaluatePauses();
   return created;
 }

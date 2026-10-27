@@ -129,6 +129,21 @@ Si la cobertura baja de 100% se marca en rojo: hay que aportar a la reserva. Apa
 
 El informe sale **del libro**. Se compara con el saldo real del banco con la conciliación.
 
+### Custodia de market makers
+
+El dinero de los market makers externos va en una cuenta separada (`custodia_mm`). Sus cuentas cambian por más que depósitos y retiros:
+- ganan o pierden negociando, contra jugadores de los casinos o contra la casa;
+- cobran reembolsos e incentivos;
+- pagan comisiones.
+
+Esa plata entra o sale por las liquidaciones con los casinos y por el resultado de la casa, es decir, por el fideicomiso.
+
+**En cada ronda de liquidaciones**, la plataforma pone la custodia al día. Compara lo que se le debe a cada market maker (saldo + dinero en órdenes + costo de sus posiciones abiertas) con lo que dice el libro, y asienta el traspaso:
+- **Si ganaron:** del fideicomiso a la custodia.
+- **Si perdieron:** de la custodia al fideicomiso.
+
+Tesorería tiene que hacer esa transferencia de verdad entre las dos cuentas. Si en Reservas la custodia no coincide con sus cuentas, el botón **Ajustar ahora** hace el asiento sin esperar a la próxima ronda (`POST /admin/treasury/mm-custody/true-up`).
+
 ## 5. Conciliación con el banco
 
 **Tesorería → Cargar extracto**: se pega el extracto del fideicomiso en CSV.

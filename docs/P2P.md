@@ -182,5 +182,4 @@ La parte de cada casino se configura por casino: `revenueShareBps` al crearlo o 
 
 ## Pendiente
 
-- **La custodia de market makers no recibe sus ganancias de trading ni los reembolsos.** La cuenta `custodia_mm` del libro solo registra depósitos, retiros e incentivos. Cuando un market maker gana, su cuenta vale más que la custodia hasta que Tesorería traspase esa diferencia, y el informe de reservas lo marca.
 - **Las transferencias reales entre casinos y plataforma se hacen por fuera** (banco). El informe dice cuánto y en qué sentido.
