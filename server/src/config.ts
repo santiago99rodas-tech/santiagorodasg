@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from "node:fs";
+import { createPrivateKey } from "node:crypto";
 
 // Carga .env sin dependencias externas (las variables ya definidas en el entorno tienen prioridad).
 const envPath = new URL("../.env", import.meta.url);
@@ -10,6 +11,28 @@ if (existsSync(envPath)) {
 }
 
 const str = (k: string, d: string) => process.env[k] || d;
+
+/**
+ * Clave del oráculo en cualquiera de las formas en que suele pegarse: el PEM completo (con saltos reales
+ * o con \n literales, o con los saltos perdidos) o solo el contenido base64 (lo que entrega gen:secrets).
+ * Devuelve un PEM bien formado; "" si no hay clave.
+ */
+export function normalizeOracleKey(raw: string) {
+  const v = raw.trim().replace(/^["']|["']$/g, "").replace(/\\n/g, "\n");
+  if (!v) return "";
+  const body = v.replace(/-----(BEGIN|END) PRIVATE KEY-----/g, "").replace(/\s+/g, "");
+  return `-----BEGIN PRIVATE KEY-----\n${body.match(/.{1,64}/g)?.join("\n") ?? ""}\n-----END PRIVATE KEY-----\n`;
+}
+/** null si la clave sirve; si no, el motivo en palabras simples. */
+export function oracleKeyProblem(pem: string, rawLength: number) {
+  if (!pem) return null;
+  try {
+    const k = createPrivateKey(pem);
+    return k.asymmetricKeyType === "ed25519" ? null : `ORACLE_PRIVATE_KEY es una clave ${k.asymmetricKeyType}, no Ed25519: genera otra con npm run gen:secrets`;
+  } catch {
+    return `ORACLE_PRIVATE_KEY no es una clave válida (llegaron ${rawLength} caracteres; la de npm run gen:secrets mide 64). Probablemente se cortó al copiarla: genera otra con npm run gen:secrets y pega la línea completa`;
+  }
+}
 const num = (k: string, d: number) => (process.env[k] ? Number(process.env[k]) : d);
 
 export const config = {
@@ -66,7 +89,8 @@ export const config = {
   },
   oracle: {
     name: str("ORACLE_NAME", "Predicciones"),
-    privateKeyPem: (process.env.ORACLE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
+    // Si la clave configurada no sirve, se ignora (con advertencia al arrancar) y se usa la guardada en la base
+    privateKeyPem: ((pem) => (oracleKeyProblem(pem, 0) ? "" : pem))(normalizeOracleKey(process.env.ORACLE_PRIVATE_KEY || "")),
     cacheSeconds: num("ORACLE_CACHE_SECONDS", 30),
   },
   mm: {
@@ -144,7 +168,6 @@ export function productionProblems() {
   if (!process.env.DATABASE_URL) out.push("Falta DATABASE_URL (la Internal Connection URL del Postgres de Easypanel)");
   if (config.adminApiKey === DEFAULTS.adminApiKey || config.adminApiKey.length < 24) out.push("ADMIN_API_KEY falta o es corta: usa una de 24 caracteres o más (npm run gen:secrets)");
   if (config.sessionSecret === DEFAULTS.sessionSecret || config.sessionSecret.length < 24) out.push("SESSION_SECRET falta o es corta: usa una de 24 caracteres o más (npm run gen:secrets)");
-  if (config.oracle.privateKeyPem && !config.oracle.privateKeyPem.includes("BEGIN PRIVATE KEY")) out.push("ORACLE_PRIVATE_KEY no parece una clave PEM (debe empezar con -----BEGIN PRIVATE KEY-----)");
   return out;
 }
 
@@ -153,7 +176,10 @@ export function productionWarnings() {
   if (process.env.NODE_ENV !== "production") return [];
   const out: string[] = [];
   if (!process.env.PUBLIC_URL || /localhost|127\.0\.0\.1/.test(config.publicUrl)) out.push("PUBLIC_URL apunta a localhost: los enlaces del módulo para los casinos no van a funcionar");
-  if (!config.oracle.privateKeyPem) out.push("sin ORACLE_PRIVATE_KEY: se usa una clave generada y guardada en la base (fíjala con npm run gen:secrets)");
+  const rawKey = (process.env.ORACLE_PRIVATE_KEY || "").trim();
+  const keyProblem = oracleKeyProblem(normalizeOracleKey(rawKey), rawKey.length);
+  if (keyProblem) out.push(`${keyProblem}. Mientras tanto se usa la clave guardada en la base`);
+  else if (!config.oracle.privateKeyPem) out.push("sin ORACLE_PRIVATE_KEY: se usa una clave generada y guardada en la base (fíjala con npm run gen:secrets)");
   if (!config.anthropicApiKey) out.push("sin ANTHROPIC_API_KEY: la IA (generar y resolver preguntas) queda desactivada");
   if (config.usdc.chain === "simulado") out.push("USDC_CHAIN=simulado: las transferencias USDC son simuladas desde el back-office; no usar con dinero real");
   else if (/sepolia|amoy/.test(config.usdc.chain) && config.usdc.rpcUrl) out.push(`USDC en red de prueba (${config.usdc.chain}): el USDC no tiene valor`);

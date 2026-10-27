@@ -48,7 +48,7 @@ Te da tres líneas: `ADMIN_API_KEY`, `SESSION_SECRET` y `ORACLE_PRIVATE_KEY`. Gu
    PUBLIC_URL=https://predicciones.bo-sio.com
    ADMIN_API_KEY=<del paso 0>
    SESSION_SECRET=<del paso 0>
-   ORACLE_PRIVATE_KEY=<del paso 0, en una sola línea con \n>
+   ORACLE_PRIVATE_KEY=<del paso 0: 64 caracteres, la línea completa>
    ```
    - `PUBLIC_URL` es la dirección pública de la API (la del paso 5). Con ella se arma el enlace del módulo que reciben los casinos.
    - Sin `ANTHROPIC_API_KEY` la IA queda apagada (generar y resolver preguntas). Todo lo demás funciona.

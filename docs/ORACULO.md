@@ -81,7 +81,8 @@ const ok = verify(null, Buffer.from(body), createPublicKey(keys.keys[0].publicKe
 
 **La clave:**
 - Si no configuras `ORACLE_PRIVATE_KEY`, el servidor genera una al arrancar y la guarda en la tabla `oracle_keys`.
-- Para fijarla entre despliegues, genera una con `openssl genpkey -algorithm ed25519` y pon el PEM en `ORACLE_PRIVATE_KEY`, con los saltos de línea como `\n`.
+- Para fijarla entre despliegues, genérala con `npm run gen:secrets`: son 64 caracteres sin saltos de línea, fáciles de copiar. También acepta el PEM completo (con saltos reales o como `\n`), por ejemplo uno de `openssl genpkey -algorithm ed25519`.
+- Si la clave no es válida (por ejemplo, se cortó al copiarla), el servidor la ignora, sigue con la clave guardada en la base y lo advierte al arrancar, con cuántos caracteres le llegaron.
 - Cambiar la clave invalida las firmas viejas para quien no guardó la clave pública anterior.
 
 ## 2. Resolución con fianzas
@@ -144,7 +145,7 @@ Un administrador también puede **rechazar** una propuesta sin disputa, por ejem
 | Variable | Por defecto | Qué hace |
 |---|---|---|
 | `ORACLE_NAME` | Predicciones | Nombre en las respuestas del oráculo |
-| `ORACLE_PRIVATE_KEY` | (se genera) | Clave Ed25519 en PEM |
+| `ORACLE_PRIVATE_KEY` | (se genera) | Clave Ed25519: los 64 caracteres de `npm run gen:secrets` o el PEM |
 | `ORACLE_CACHE_SECONDS` | 30 | Caché pública de las respuestas |
 | `RESOLUTION_BOND_USD` | 10 | Fianza del jugador para proponer o disputar |
 | `HOUSE_BOND_USD` | 100 | Fianza de la casa al proponer |
