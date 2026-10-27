@@ -52,3 +52,14 @@ test("fuentes: GDELT no envía la parte '#…' de la URL y avisa claro si no res
   await assert.rejects(fetchSource(src("https://api.gdeltproject.org/api/v2/doc/doc", "gdelt", { query: "x" }), slow), /no respondió en 45 s/);
   ingestTiming.gdeltGapMs = 6000;
 });
+
+test("fuentes: GDELT vacío se reintenta una vez; 'fetch failed' dice la causa", async () => {
+  ingestTiming.gdeltGapMs = 0;
+  let calls = 0;
+  const f: Fetcher = () => reply(200, JSON.stringify(++calls === 1 ? {} : { articles: [{ url: "https://g.test/2", title: "Telescopio", seendate: "20261027T100000Z" }] }));
+  const items = await fetchSource(src("https://api.gdeltproject.org/api/v2/doc/doc#ciencia", "gdelt", { query: "telescopio" }), f);
+  assert.equal(calls, 2); assert.equal(items.length, 1);
+  const down: Fetcher = () => Promise.reject(Object.assign(new Error("fetch failed"), { cause: { code: "ECONNRESET" } }));
+  await assert.rejects(fetchSource(src("https://infobae.test/rss"), down), /no se pudo conectar \(ECONNRESET\)/);
+  ingestTiming.gdeltGapMs = 6000;
+});

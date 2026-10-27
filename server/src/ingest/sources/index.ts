@@ -102,6 +102,9 @@ export async function fetchSource(s: SourceRow, fetcher: Fetcher = fetch as unkn
       r = await fetcher(url, { headers: { "user-agent": "Mozilla/5.0 (compatible; PrediccionesBot/1.0; agregador de noticias)", accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, application/json;q=0.9, */*;q=0.8", ...headers }, signal: AbortSignal.timeout(timeoutMs) });
     } catch (e) {
       if ((e as Error).name === "TimeoutError" || /aborted due to timeout/i.test((e as Error).message)) throw new Error(`no respondió en ${timeoutMs / 1000} s; se reintenta en la próxima lectura`);
+      // "fetch failed" no dice nada: la causa real viene en e.cause (sitio no encontrado, conexión cortada, certificado…)
+      const cause = (e as any).cause;
+      if ((e as Error).message === "fetch failed" && cause) throw new Error(`no se pudo conectar (${cause.code ?? cause.message ?? "sin detalle"}); se reintenta en la próxima lectura`);
       throw e;
     }
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -136,6 +139,11 @@ export async function fetchSource(s: SourceRow, fetcher: Fetcher = fetch as unkn
       // Con la consulta mal formada GDELT responde texto, no JSON
       let json: any;
       try { json = JSON.parse(body); } catch { throw new Error(`GDELT respondió: ${body.slice(0, 120)}`); }
+      // A veces GDELT responde vacío cuando está cargado: un reintento después de la pausa
+      if (!arr(json.articles).length) {
+        await sleep(ingestTiming.gdeltGapMs);
+        try { json = JSON.parse(await get(`${base}?${q}`, {}, 45000)); } catch { /* se queda con la respuesta vacía */ } finally { lastGdelt = Date.now(); }
+      }
       return arr(json.articles).map((a: any) => ({
         url: a.url,
         title: a.title,

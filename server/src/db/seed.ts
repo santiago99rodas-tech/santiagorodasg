@@ -27,6 +27,9 @@ const REPLACED: Record<string, string> = {
   "https://www.primicias.ec/feed/": gnews("site:primicias.ec", "EC"),
   "https://www.espn.com.co/espn/rss/news": gnews("site:espn.com.co OR site:espndeportes.espn.com"),
 };
+// GDELT Ciencia y espacio: la primera búsqueda era muy angosta (0 resultados en 24 h); se amplía sola al arrancar
+const GDELT_CIENCIA = { query: "(nasa OR spacex OR astronomía OR telescopio OR cohete OR marte OR ovni OR asteroide OR \"cambio climático\" OR científicos) sourcelang:spanish", timespan: "72h", maxrecords: 75 };
+const GDELT_CIENCIA_OLD = "(nasa OR spacex OR ovni OR \"vida extraterrestre\" OR extinción) sourcelang:spanish";
 const trends = (geo: string, country: string) => ({ kind: "google_trends", name: `Google Trends ${country}`, url: `https://trends.google.com/trending/rss?geo=${geo}`, category: null, country: geo });
 export const SOURCES = [
   // Noticias generales
@@ -57,7 +60,7 @@ export const SOURCES = [
   { kind: "gdelt", name: "GDELT Latinoamérica", url: "https://api.gdeltproject.org/api/v2/doc/doc", category: null, country: "INT",
     config: { query: "(ecuador OR colombia OR venezuela OR \"miss universo\" OR farándula) sourcelang:spanish", timespan: "24h", maxrecords: 75 } },
   { kind: "gdelt", name: "GDELT Ciencia y espacio", url: "https://api.gdeltproject.org/api/v2/doc/doc#ciencia", category: null, country: "INT",
-    config: { query: "(nasa OR spacex OR ovni OR \"vida extraterrestre\" OR extinción) sourcelang:spanish", timespan: "24h", maxrecords: 50 } },
+    config: GDELT_CIENCIA },
 ];
 
 export async function seedSources() {
@@ -65,6 +68,7 @@ export async function seedSources() {
     const r = await pool.query("UPDATE sources SET url=$2, last_status=NULL WHERE kind='rss' AND url=$1 AND NOT EXISTS (SELECT 1 FROM sources WHERE kind='rss' AND url=$2)", [old, url]);
     if (r.rowCount) console.log(`fuente actualizada: ${old} -> ${url}`);
   }
+  await pool.query("UPDATE sources SET config=$2, last_status=NULL WHERE kind='gdelt' AND config->>'query' = $1", [GDELT_CIENCIA_OLD, JSON.stringify(GDELT_CIENCIA)]);
   for (const s of SOURCES) {
     await pool.query(
       "INSERT INTO sources (kind, name, url, category, country, config) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (kind, url) DO NOTHING",
