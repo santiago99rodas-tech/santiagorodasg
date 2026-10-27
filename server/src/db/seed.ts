@@ -19,18 +19,26 @@ export async function seedCategories() {
 
 // Fuentes iniciales. Son URLs públicas conocidas; verifica que respondan desde tu servidor
 // antes de producción (pueden cambiar sin aviso). Se administran desde la API /admin/sources.
+// Google News por medio: para los sitios que quitaron su feed o bloquean lecturas automáticas
+const gnews = (q: string, gl = "US") => `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=es-419&gl=${gl}&ceid=${gl}:es-419`;
+// URLs de fuentes que dejaron de funcionar, con su reemplazo (se corrigen solas al arrancar)
+const REPLACED: Record<string, string> = {
+  "https://cnnespanol.cnn.com/feed/": gnews("site:cnnespanol.cnn.com"),
+  "https://www.primicias.ec/feed/": gnews("site:primicias.ec", "EC"),
+  "https://www.espn.com.co/espn/rss/news": gnews("site:espn.com.co OR site:espndeportes.espn.com"),
+};
 const trends = (geo: string, country: string) => ({ kind: "google_trends", name: `Google Trends ${country}`, url: `https://trends.google.com/trending/rss?geo=${geo}`, category: null, country: geo });
 export const SOURCES = [
   // Noticias generales
   { kind: "rss", name: "BBC Mundo", url: "https://feeds.bbci.co.uk/mundo/rss.xml", category: "internacional", country: "INT" },
-  { kind: "rss", name: "CNN en Español", url: "https://cnnespanol.cnn.com/feed/", category: null, country: "INT" },
+  { kind: "rss", name: "CNN en Español", url: gnews("site:cnnespanol.cnn.com"), category: null, country: "INT" },
   { kind: "rss", name: "Infobae", url: "https://www.infobae.com/arc/outboundfeeds/rss/", category: null, country: "INT" },
   { kind: "rss", name: "El Universo (Ecuador)", url: "https://www.eluniverso.com/arc/outboundfeeds/rss/?outputType=xml", category: null, country: "EC" },
-  { kind: "rss", name: "Primicias (Ecuador)", url: "https://www.primicias.ec/feed/", category: null, country: "EC" },
+  { kind: "rss", name: "Primicias (Ecuador)", url: gnews("site:primicias.ec", "EC"), category: null, country: "EC" },
   { kind: "rss", name: "El Tiempo (Colombia)", url: "https://www.eltiempo.com/rss/colombia.xml", category: null, country: "CO" },
   { kind: "rss", name: "Semana (Colombia)", url: "https://www.semana.com/arc/outboundfeeds/rss/?outputType=xml", category: null, country: "CO" },
   // Deportes
-  { kind: "rss", name: "ESPN Deportes", url: "https://www.espn.com.co/espn/rss/news", category: "deportes", country: "INT" },
+  { kind: "rss", name: "ESPN Deportes", url: gnews("site:espn.com.co OR site:espndeportes.espn.com"), category: "deportes", country: "INT" },
   { kind: "rss", name: "Marca", url: "https://e00-marca.uecdn.es/rss/portada.xml", category: "futbol", country: "ES" },
   // Entretenimiento, cine, TV, música
   { kind: "rss", name: "Variety", url: "https://variety.com/feed/", category: "cine", country: "US" },
@@ -53,6 +61,10 @@ export const SOURCES = [
 ];
 
 export async function seedSources() {
+  for (const [old, url] of Object.entries(REPLACED)) {
+    const r = await pool.query("UPDATE sources SET url=$2, last_status=NULL WHERE kind='rss' AND url=$1 AND NOT EXISTS (SELECT 1 FROM sources WHERE kind='rss' AND url=$2)", [old, url]);
+    if (r.rowCount) console.log(`fuente actualizada: ${old} -> ${url}`);
+  }
   for (const s of SOURCES) {
     await pool.query(
       "INSERT INTO sources (kind, name, url, category, country, config) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (kind, url) DO NOTHING",

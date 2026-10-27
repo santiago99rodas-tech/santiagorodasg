@@ -149,5 +149,5 @@ Las versiones nuevas (market maker v2, protección contra informados, oráculo c
 - **Apagado ordenado.** En cada redeploy el contenedor recibe SIGTERM: deja de aceptar peticiones, frena las tareas programadas, espera las que están en curso y cierra la base.
 - **Recursos.** Recién arrancada, con el catálogo completo, usó unos 70 MB de RAM en la prueba. Con tráfico sube; un límite de 512 MB y 1 vCPU alcanzan para empezar.
 - **Auto Deploy.** Si lo activas, cada push a la rama vuelve a desplegar. Los datos no se pierden: el catálogo solo se carga si la base está vacía (`SEED_CATALOG=false` lo desactiva siempre).
-- **Salida a internet.** El servidor debe poder leer RSS, Google Trends, GDELT, la API de Polymarket (referencias externas) y los calendarios de OpenTimestamps (sellos en Bitcoin); y el nodo de USDC si usas esa vía. Revisa en el back-office (*Fuentes*) que ninguna quede en error.
+- **Salida a internet.** El servidor debe poder leer RSS, Google News, Google Trends, GDELT, la API de Polymarket (referencias externas) y los calendarios de OpenTimestamps (sellos en Bitcoin); y el nodo de USDC si usas esa vía. Revisa en el back-office (*Fuentes*) que ninguna quede en error.
 - **Versión visible en `/health`.** En Easypanel, en *Build Args*, puedes poner `APP_VERSION=<lo que quieras>` (por ejemplo la fecha) para saber qué versión está corriendo.

@@ -31,8 +31,23 @@ const date = (v: any) => {
   return isNaN(+d) ? new Date() : d;
 };
 
+/** ¿La respuesta es un feed (RSS 2.0, RSS 1.0/RDF o Atom)? Muchos sitios devuelven una página HTML de bloqueo con código 200. */
+export function isFeed(body: string) {
+  const doc = xml.parse(body);
+  return !!(doc.rss?.channel || doc.feed || doc["rdf:RDF"]);
+}
+
 export function parseFeed(body: string): Item[] {
   const doc = xml.parse(body);
+  if (doc["rdf:RDF"]) {
+    // RSS 1.0: los ítems van al mismo nivel que el canal
+    return arr(doc["rdf:RDF"].item).map((it: any) => ({
+      url: txt(it.link) || txt(it["@_rdf:about"]),
+      title: stripHtml(txt(it.title)),
+      summary: stripHtml(txt(it.description)).slice(0, 600),
+      publishedAt: date(it["dc:date"] ?? it.pubDate),
+    }));
+  }
   if (doc.rss?.channel) {
     return arr(doc.rss.channel.item).map((it: any) => ({
       url: txt(it.link) || txt(it.guid),
@@ -71,22 +86,47 @@ export function parseGoogleTrends(body: string, geo: string): Item[] {
   });
 }
 
+// GDELT acepta una consulta cada 5 segundos por IP: entre consultas seguidas se espera y, si igual
+// responde 429 (demasiadas consultas), se reintenta una vez
+let lastGdelt = 0;
+export const ingestTiming = { gdeltGapMs: 6000 };
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Google News pone " - Medio" al final de cada título. */
+const stripPublisher = (title: string) => title.replace(/\s+-\s+[^-]{2,60}$/, "");
+
 export async function fetchSource(s: SourceRow, fetcher: Fetcher = fetch as unknown as Fetcher): Promise<Item[]> {
   const get = async (url: string, headers: Record<string, string> = {}) => {
-    const r = await fetcher(url, { headers: { "user-agent": "PrediccionesBot/0.1 (+agregador de noticias)", ...headers }, signal: AbortSignal.timeout(15000) });
+    const r = await fetcher(url, { headers: { "user-agent": "Mozilla/5.0 (compatible; PrediccionesBot/1.0; agregador de noticias)", accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, application/json;q=0.9, */*;q=0.8", ...headers }, signal: AbortSignal.timeout(15000) });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     return r.text();
   };
   switch (s.kind) {
-    case "rss":
-      return parseFeed(await get(s.url)).filter((i) => i.url && i.title);
+    case "rss": {
+      const body = await get(s.url);
+      if (!isFeed(body)) throw new Error(/<html/i.test(body) ? "la respuesta es una página web, no un feed (el sitio puede estar bloqueando lecturas automáticas o la URL cambió)" : "la respuesta no es un feed RSS ni Atom");
+      const items = parseFeed(body).filter((i) => i.url && i.title);
+      if (!items.length) throw new Error("el feed no trae noticias: revisa la URL");
+      return new URL(s.url).hostname === "news.google.com" ? items.map((i) => ({ ...i, title: stripPublisher(i.title) })) : items;
+    }
     case "google_trends": {
       const geo = new URL(s.url).searchParams.get("geo") ?? s.country ?? "";
       return parseGoogleTrends(await get(s.url), geo).map((i) => ({ ...i, category: undefined }));
     }
     case "gdelt": {
       const q = new URLSearchParams({ query: s.config.query ?? "", mode: "artlist", format: "json", maxrecords: String(s.config.maxrecords ?? 50), timespan: s.config.timespan ?? "24h", sort: "datedesc" });
-      const json = JSON.parse(await get(`${s.url}?${q}`));
+      const wait = lastGdelt + ingestTiming.gdeltGapMs - Date.now();
+      if (wait > 0) await sleep(wait);
+      let body: string;
+      try { body = await get(`${s.url}?${q}`); }
+      catch (e) {
+        if ((e as Error).message !== "HTTP 429") throw e;
+        await sleep(ingestTiming.gdeltGapMs * 2);
+        body = await get(`${s.url}?${q}`).catch((e2) => { throw new Error(e2.message === "HTTP 429" ? "HTTP 429: GDELT limita las consultas; se reintenta en la próxima lectura" : e2.message); });
+      } finally { lastGdelt = Date.now(); }
+      // Con la consulta mal formada GDELT responde texto, no JSON
+      let json: any;
+      try { json = JSON.parse(body); } catch { throw new Error(`GDELT respondió: ${body.slice(0, 120)}`); }
       return arr(json.articles).map((a: any) => ({
         url: a.url,
         title: a.title,
