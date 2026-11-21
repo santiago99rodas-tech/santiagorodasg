@@ -34,6 +34,15 @@ Santiago **no sale a cámara**. Todo se arma sobre **su voz en off** + material 
 | Herramienta | `editor/editar.py` |
 | Referencia de su estilo actual | Video de Georgia (96 s, 32 cortes, todo material real, mapa, subtítulo palabra a palabra) |
 
+### Las dos referencias de Instagram/TikTok (no confundirlas)
+
+| Referencia | Qué se toma | Qué NO se toma |
+|---|---|---|
+| **Video de Georgia (de Santiago)** = **el formato base** | Voz en off de Santiago sobre sus fotos y videos reales, un cambio de toma cada ~3 s, mapa de ubicación, subtítulos palabra por palabra, cierre pidiendo seguir. Así son todos sus videos y así siguen siendo | — |
+| **Video "Comenta CALENDARIO" (de otra creadora)** = **la capa de edición** | Tipografías de varios tamaños bien organizadas (sans negra + serif itálica + palabra clave grande en color), stickers y emojis, etiquetas con datos, cambios de color (blanco y negro con marco REC), efectos de sonido, burbujas de chat, cursor. Se implementa poco a poco, "por ese estilo", no una copia exacta | Ella sale a cámara: Santiago no. Su paleta verde y su contenido |
+
+Maquetas aprobables del resultado esperado (antes / después sobre cuadros de Georgia): `estilo-reels/antes-despues.jpg`.
+
 ## Cómo comprobarlo antes de entregar
 
 Antes de pasar un video a la revisión semanal, el agente cuenta los segundos:

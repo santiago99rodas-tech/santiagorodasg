@@ -1,0 +1,79 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  :root{--acc:#FFD54A;--osc:#2B1A12}
+  html,body{margin:0;background:#111}
+  .f{position:relative;width:1080px;height:1920px;overflow:hidden;font-family:Inter,sans-serif;color:#fff}
+  .bg{position:absolute;inset:0;background-size:cover;background-position:center;transform:scale(1.06)}
+  .bw{filter:grayscale(1) contrast(1.15)}
+  .sh{text-shadow:0 6px 24px rgba(0,0,0,.45)}
+  .sans{font-weight:900;letter-spacing:-2px;line-height:.92}
+  .serif{font-family:'Liberation Serif',serif;font-style:italic;font-weight:400;line-height:.9}
+  .c{position:absolute;left:0;right:0;text-align:center}
+  .word{position:absolute;left:0;right:0;top:1180px;text-align:center;font-weight:800;font-size:64px}
+  .tag{position:absolute;background:#fff;color:var(--osc);border-radius:26px;padding:18px 30px;font-weight:800;font-size:46px;box-shadow:0 14px 30px rgba(0,0,0,.3);display:flex;gap:14px;align-items:center}
+  .tag b{color:#E2412F}
+  .emoji{font-family:'Noto Color Emoji';font-size:80px}
+  .corner{position:absolute;width:110px;height:110px;border:6px solid #fff;filter:drop-shadow(0 0 6px rgba(0,0,0,.6))}
+  .note{position:absolute;bottom:40px;right:40px;font-size:24px;opacity:.6}
+  .label{position:absolute;top:40px;left:40px;background:rgba(0,0,0,.6);padding:10px 22px;border-radius:12px;font-weight:800;font-size:30px;letter-spacing:2px}
+</style></head><body>
+<div id="r"></div>
+<script>
+const n = +(new URLSearchParams(location.search).get('n') || 1);
+const bg = (f, cls='') => `<div class="bg ${cls}" style="background-image:url(fondos/${f}.jpg)"></div>`;
+const frames = {
+// 0: antes (el video original de Georgia tal cual)
+0: `${bg('f1')}<div class="label">ANTES · VIDEO ACTUAL</div>`,
+// 1: gancho
+1: `${bg('f4')}
+  <div style="position:absolute;inset:0;background:linear-gradient(rgba(0,0,0,.45),rgba(0,0,0,0) 45%)"></div>
+  <div class="c sh" style="top:230px">
+    <div class="sans" style="font-size:118px">El país más</div>
+    <div class="sans" style="font-size:250px;color:var(--acc)">BARATO</div>
+    <div class="serif" style="font-size:150px;margin-top:6px">de Europa<span style="font-family:Inter;font-weight:900">?</span></div>
+  </div>
+  <div class="emoji" style="position:absolute;left:40px;top:150px;transform:rotate(-14deg)">📍</div>
+  <div class="tag" style="left:620px;top:860px;transform:rotate(5deg);font-size:40px">🇬🇪 Georgia</div>
+  <div class="label">DESPUÉS · GANCHO 0–2 s</div>`,
+// 2: datos con etiquetas y mini mapa
+2: `${bg('f7')}
+  <div class="tag" style="left:90px;top:330px;transform:rotate(-4deg)"><span class="emoji" style="font-size:56px">🏨</span>Hotel · <b>25 USD</b></div>
+  <div class="tag" style="left:330px;top:480px;transform:rotate(3deg)"><span class="emoji" style="font-size:56px">🍷</span>Cena · <b>12 USD</b></div>
+  <div class="tag" style="left:150px;top:630px;transform:rotate(-2deg)"><span class="emoji" style="font-size:56px">🚐</span>Tour · <b>30 USD</b></div>
+  <div style="position:absolute;right:60px;top:860px;width:300px;height:210px;background:#fff;border-radius:22px;box-shadow:0 14px 30px rgba(0,0,0,.3);overflow:hidden">
+    <svg viewBox="0 0 300 210" width="300" height="210"><rect width="300" height="210" fill="#BFE3F2"/>
+      <path d="M30 90 L90 60 L170 55 L250 80 L270 120 L200 150 L120 150 L60 135 Z" fill="#F3E3B6" stroke="#C9A56A" stroke-width="3"/>
+      <circle cx="200" cy="118" r="10" fill="#E2412F"/><text x="150" y="190" text-anchor="middle" font-family="Inter" font-weight="800" font-size="24" fill="#2B1A12">Svaneti</text></svg>
+  </div>
+  <div class="word sh"><span>tan</span> <span style="color:var(--acc)">barato</span></div>
+  <div class="label">DESPUÉS · DATOS COMO ETIQUETAS</div>
+  <div class="note">precios de ejemplo</div>`,
+// 3: objeción en blanco y negro con marco REC
+3: `${bg('f6','bw')}
+  <div style="position:absolute;inset:0;background:linear-gradient(rgba(0,0,0,.55),rgba(0,0,0,.1) 55%)"></div>
+  <div class="corner" style="left:50px;top:50px;border-right:0;border-bottom:0"></div>
+  <div class="corner" style="right:50px;top:50px;border-left:0;border-bottom:0"></div>
+  <div class="corner" style="left:50px;bottom:50px;border-right:0;border-top:0"></div>
+  <div class="corner" style="right:50px;bottom:50px;border-left:0;border-top:0"></div>
+  <div style="position:absolute;right:90px;top:90px;font-size:40px;font-weight:600;display:flex;align-items:center;gap:12px"><span style="width:22px;height:22px;border-radius:50%;background:#E2412F;display:inline-block"></span>REC</div>
+  <div style="position:absolute;left:90px;bottom:90px;font-size:34px;font-weight:600">4K 60FPS</div>
+  <div class="c sh" style="top:380px">
+    <div class="sans" style="font-size:230px">pero…</div>
+    <div class="serif" style="font-size:140px;color:var(--acc)">¿es seguro?</div>
+  </div>
+  <div style="position:absolute;left:180px;top:900px;background:#fff;color:#111;border-radius:30px;padding:22px 34px;font-size:42px;font-weight:600;box-shadow:0 12px 28px rgba(0,0,0,.35)">¿Y el idioma? 🤔<div style="position:absolute;left:40px;bottom:-22px;width:0;height:0;border:22px solid transparent;border-top-color:#fff;border-bottom:0"></div></div>
+  <div class="label" style="top:auto;bottom:160px;left:auto;right:40px">DESPUÉS · OBJECIÓN (CÁMARA 2)</div>`,
+// 4: llamado a la acción
+4: `${bg('f5')}
+  <div style="position:absolute;inset:0;background:linear-gradient(rgba(0,0,0,0) 30%,rgba(0,0,0,.55))"></div>
+  <div class="c sh" style="top:1050px">
+    <div class="serif" style="font-size:140px">comenta</div>
+    <div class="sans" style="font-size:165px;color:var(--acc)">“GEORGIA”</div>
+    <div class="sans" style="font-size:70px;margin-top:20px">y te mando <span class="serif" style="font-size:80px">mi ruta</span></div>
+  </div>
+  <div class="emoji" style="position:absolute;left:820px;top:1420px;font-size:110px;transform:rotate(-15deg)">👆</div>
+  <div class="label">DESPUÉS · CIERRE</div>`,
+};
+document.getElementById('r').innerHTML = `<div class="f">${frames[n]}</div>`;
+</script></body></html>
