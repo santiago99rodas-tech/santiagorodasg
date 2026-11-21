@@ -28,18 +28,18 @@ Instagram **@SantiagoRodas** · TikTok **@SantiagoRodasTravel**. Reglas obligato
 - **Sonido**: whoosh en textos grandes, pop en stickers, clic con cursor, tecleo, obturador en la cámara 2, sonido ambiente del lugar.
 - **Cierre**: "comenta *PALABRA* y te mando mi ruta" (en vez de botones like/follow).
 
-Maquetas de referencia (antes/después sobre cuadros de Georgia): `../reels/maquetas/antes-despues.jpg`.
+Maquetas de referencia (antes/después sobre cuadros de Georgia): `../reels/maquetas/antes-despues.jpg`. Opciones de color comparadas: `../reels/maquetas/opciones-color.jpg` (elegida la C).
 
 ## Identidad visual
 
 | Elemento | Valor | Estado |
 |---|---|---|
-| Acento | Amarillo pasaporte `#FFD54A` | Propuesto, falta confirmar |
+| **Color (opción C)** | **Amarillo `#FFD54A` fijo** para gancho y palabras clave en todos los videos + **color del país** solo en detalles pequeños (sello de pasaporte, pines del mapa, etiquetas). Si el fondo es amarillo/naranja (desierto, atardecer), las palabras clave van en blanco sobre franja oscura | **Decidido por Santiago** |
 | Oscuro | Café `#2B1A12` | Propuesto |
 | **Tipografía principal** | **Bebas Neue**: ganchos, palabra clave gigante, subtítulos palabra por palabra | **Decidido por Santiago** |
 | Secundaria emocional | **Playfair Display Italic**: el matiz ("de Europa?", "¿es seguro?", "comenta", "mi ruta") | Propuesto |
 | Secundaria de lectura | **Montserrat** (Medium/Bold/ExtraBold): etiquetas de precio, burbujas, datos pequeños, REC | Propuesto |
-| Firma propia | Sello de pasaporte con el nombre del país al aparecer cada destino | Idea |
+| Firma propia | Sello de pasaporte con el nombre del país (en el color del país) al aparecer cada destino | **Decidido** (parte de la opción C) |
 
 ## Formatos de serie (rotar, no repetir el mismo seguido)
 

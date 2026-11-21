@@ -23,6 +23,7 @@ Santiago graba su voz y sube su material a Drive; Claude produce todo; Santiago 
 | 9 | Los textos se apoyan en las **13 skills `ig-*`** (guiones, captions, carruseles, DMs) |
 | 10 | Un agente distinto por plataforma: `editor-reels` y `editor-youtube` (`.claude/agents/`) |
 | 12 | Tipografía principal **Bebas Neue**; secundarias Playfair Display Italic y Montserrat. Todas gratis |
+| 13 | Color: **amarillo fijo** en palabras clave + **color de cada país** en el sello de pasaporte y detalles (opción C) |
 | 11 | Antes de cada destino se investiga **qué quiere ver la gente** y después de publicar se mide **la retención**, todo con herramientas **gratis** (YouTube Data API, vidIQ plan gratis, YouTube Studio). Nada de NexLev ni clonación de voz |
 
 ## Documentación
@@ -73,7 +74,7 @@ contenido-viajes/
 | # | Qué | Para qué |
 |---|---|---|
 | 1 | ~~Aprobar a Santi~~ ✔ aprobado | — |
-| 2 | Opinar sobre las **maquetas de reels** y confirmar el **amarillo** `#FFD54A` | Fijar la guía de estilo |
+| 2 | ~~Maquetas, tipografía y color~~ ✔ decididos | — |
 | 3 | Subir **`Fotos viajes/Georgia/`** con audio y tomas originales sin subtítulos | Primer reel real: rehacer Georgia y comparar |
 | 4 | Subir **`Fotos viajes/Guiones/`** con los guiones grabados y su material | Primer lote de reels |
 | 5 | Responder las 4 preguntas de `guiones/egipto-youtube-largo.md`, grabar ese guion y subir **`Fotos viajes/Egipto/`** con el audio y el material | Piloto de YouTube |
