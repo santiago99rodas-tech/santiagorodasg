@@ -2,6 +2,32 @@
 
 Perfil: **@SantiagoRodas** (Instagram) · **@SantiagoRodasTravel** (TikTok)
 
+## 0. Formato y forma de trabajo decididos (actualizado)
+
+**Formato: voz en off + fotos y videos del viaje. Santiago no sale a cámara.** Es lo que mejor le ha funcionado al perfil. Del referente se toma todo el lenguaje de edición (tipografías, subtítulos, cambios, cámara 2, stickers, sonido), pero aplicado sobre material del viaje en vez de sobre una persona hablando.
+
+**División del trabajo:**
+
+| Quién | Qué | Cuándo |
+|---|---|---|
+| Santiago | Graba la voz leyendo el guion (nota de voz del celular basta) y sube fotos/videos del destino a una carpeta de Google Drive | Cuando pueda; idealmente un lote por semana |
+| Claude | Guiones, edición de reels, carruseles, posts, historias, captions | Durante la semana |
+| Santiago | **Revisión semanal** (un solo día): aprueba, rechaza o pide cambios en todo | 1 día fijo por semana |
+| Claude | Corrige lo pedido y programa lo aprobado en Instagram y TikTok | Después de la revisión |
+
+**Gramática de edición sin cara (reemplaza al talking head):**
+
+- **Un clip o foto nuevo por cada frase** (cada 1.5–3 s). La voz manda el ritmo; cada sustantivo tiene su imagen.
+- **Fotos con movimiento**: zoom lento hacia adentro o paneo (efecto Ken Burns), nunca una foto quieta.
+- **Subtítulos de una palabra** son obligatorios: sin cara, el texto es lo que retiene.
+- **Gancho**: el primer cuadro es la toma más impactante del viaje + el texto gigante con el dato ("$0 en hotel").
+- **Cámara 2** se mantiene: la toma pasa a blanco y negro con marco REC en las objeciones ("¿pero no es carísimo?").
+- **Mapas animados** con la ruta, precios que aparecen como etiquetas, sello de pasaporte al entrar a cada lugar.
+- **Transiciones** con flash blanco o barrido rápido en los cambios de lugar; cambios de clip al golpe de la música.
+- **Sonido**: voz al frente, música baja que baja aún más cuando hablas, whoosh/pop/clic en cada texto y sonido ambiente del lugar (olas, calle) en los cortes.
+
+**Programación**: no puedo publicar directo en Instagram ni TikTok desde aquí. La vía propuesta es conectar **Metricool** (conector disponible para Claude: programa posts en ambas redes y trae estadísticas). Alternativa sin conector: dejar en Drive los videos finales con su caption y programarlos a mano en Meta Business Suite y en TikTok.
+
 Este documento junta tres cosas:
 
 1. Qué hace el video de referencia ("Comenta CALENDARIO") y por qué funciona.
@@ -113,8 +139,9 @@ Sobre "editado con IA desde Claude": no puedo confirmar con qué lo editó ella.
 
 ### Lo que te toca a ti
 
-- Grabar: talking head (con luz lateral cálida) + B-roll del destino. **Grabar siempre vertical 4K o 1080p, y 5–10 s de B-roll por cada idea del guion.**
-- Mandar el clip y las fotos a Claude, revisar el render y publicar.
+- Grabar la voz leyendo el guion (en un lugar sin eco, celular cerca de la boca).
+- Grabar en viaje: tomas verticales de 5–10 s, en 4K o 1080p, con movimiento (caminando, desde el carro, girando). Muchas.
+- Subir todo a Drive y hacer la revisión semanal.
 - Responder DMs en vivo (o usar los textos de `/ig-dm`).
 
 ---
@@ -158,34 +185,36 @@ El mismo render sirve para ambas; solo cambian el CTA final y la zona segura (se
 ## 4. Flujo de producción por video
 
 ```
-Idea ──► /ig-reel ──► guion + ganchos + hoja de tiempos
-                          │
-             grabas talking head + B-roll
-                          │
-Clip ──► transcripción (Whisper) ──► Claude escribe plan.json
-                          │            (gancho, cámara 2 en objeciones,
-                          │             palabras, zooms, stickers, CTA)
-                          ▼
-              editor/editar.py ──► final_ig.mp4 / final_tiktok.mp4
-                          │
-         /ig-caption + /ig-human ──► publicas
-                          │
-       /ig-reply + /ig-dm (keyword "RUTA") ──► /ig-audit cada 2 semanas
+Idea ──► /ig-reel ──► guion (Claude) ──► Santiago graba la voz
+                                              │
+                    voz + fotos/videos del viaje en Google Drive
+                                              │
+   transcripción ──► Claude elige qué toma va en cada frase y escribe plan.json
+                     (gancho, cortes, subtítulos, cámara 2, mapas, stickers, CTA)
+                                              ▼
+                     editor/editar.py ──► versión IG + versión TikTok
+                                              │
+                     /ig-caption + /ig-human ──► tablero de revisión
+                                              │
+                Santiago aprueba / rechaza / pide cambios (1 día a la semana)
+                                              │
+                     Claude corrige y programa (Metricool) ──► se publica solo
+                                              │
+           /ig-reply + /ig-dm (palabra "RUTA") ──► /ig-audit cada 2 semanas
 ```
 
 ### Semana tipo
 
-| Día | Tarea | Skill / herramienta |
+| Día | Quién | Tarea |
 |---|---|---|
-| Lunes | Plan de la semana | `/ig-plan` |
-| Lunes | Guiones de 3 reels | `/ig-reel` ×3 |
-| Martes | Grabar los 3 (1 hora, misma luz y ropa por lote) | tú |
-| Martes | Editar | `editar.py` |
-| Mar / Jue / Sáb | Publicar en IG y TikTok | `/ig-caption`, `/ig-human` |
-| Miércoles | 1 carrusel (itinerario o presupuesto) | `/ig-carousel` |
-| Diario | Historias + 15 min de comentarios | `/ig-story`, `/ig-comment`, `/ig-reply` |
-| Cada 2 semanas | Qué funcionó | `/ig-audit` |
-| Mensual | Qué funciona en el nicho | `/ig-viral` |
+| Día de revisión (p. ej. domingo) | Santiago | Revisa el lote: 3 reels, 1–2 carruseles, posts e historias. Aprueba, rechaza o comenta |
+| Mismo día / lunes | Claude | Corrige lo pedido y programa todo lo aprobado para la semana siguiente. Entrega los 3 guiones nuevos |
+| Lunes a miércoles | Santiago | Graba las 3 voces y sube material nuevo a Drive (15–20 min) |
+| Miércoles a sábado | Claude | Edita reels, arma carruseles e historias, escribe captions, deja todo en el tablero |
+| Cada 2 semanas | Claude | Auditoría de qué funcionó, con propuestas de cambio |
+| Mensual | Claude | Revisión del nicho y nuevas ideas |
+
+Así siempre hay una semana programada por delante y Santiago solo dedica dos ratos: la revisión y la grabación de voces.
 
 ---
 
@@ -211,5 +240,6 @@ Palabra clave para DM: RUTA
 
 1. Instalar las 13 skills en Claude Code en tu computadora (comandos arriba) y llenar `voice.md`.
 2. Pasar capturas de tu perfil actual por `/ig-profile` y tus estadísticas por `/ig-audit`.
-3. Mandarme **un clip real tuyo** (talking head de 30–60 s + B-roll del viaje) para hacer el primer video completo con este editor y ajustar el estilo sobre tu imagen.
-4. Con eso agregamos al editor: Whisper, corte de silencios, capas de fotos/stickers y música.
+3. Crear una carpeta en Google Drive con: una nota de voz leyendo un guion corto + 20–40 fotos/videos del mismo viaje. Con eso hago el primer reel real y definimos el estilo de edición.
+4. Agregar al editor lo que necesita el formato sin cara: montaje de varias tomas sobre la voz, movimiento en fotos, mapas, transiciones, música con ducking y transcripción.
+5. Conectar Metricool (o decidir programación manual) y montar el tablero de revisión semanal.
