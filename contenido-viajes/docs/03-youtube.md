@@ -26,7 +26,7 @@ Estilo **póster de viaje** (propuesta 4) **con expresiones**, basado en la foto
 - Expresiones: neutral, sonrisa, sorpresa, duda, ¡ojo!, risa. La expresión cambia con lo que dice la voz.
 
 Archivos: `../youtube/personaje/santi-hoja.png`, `santi-egipto.png`, fuente `santi.html`.
-**Estado:** propuesto, falta aprobación final y ajustes (parecido, ropa fija o por destino, intensidad de expresiones).
+**Estado:** aprobado por Santiago. Siguiente paso: animarlo en Remotion.
 
 Descartados: viajero con sombrero (`../youtube/pruebas/prueba-v1-viajero-descartado.mp4`) y las propuestas 1–3 (`../youtube/personaje/descartadas/`).
 

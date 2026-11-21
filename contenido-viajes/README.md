@@ -16,7 +16,7 @@ Santiago graba su voz y sube su material a Drive; Claude produce todo; Santiago 
 | 2 | **Instagram y TikTok**: vertical, **≥ 90 % material real**, **≤ 10 % animaciones pequeñas** encima (precios, pins, stickers). **Cero muñequitos** |
 | 3 | La **base** de Instagram/TikTok es su formato del **video de Georgia**; la **capa de edición** sale del video **"Comenta CALENDARIO"** (tipografías, stickers, color, sonido), implementada poco a poco, sin copiarla |
 | 4 | **YouTube**: horizontal, 5–10 min, **~70 % animación 2D** (mínimo 50 %) + **~30 % material real** puntual |
-| 5 | El personaje de YouTube es **Santi**: estilo póster de viaje, proporciones adultas y **con expresiones**, para no perder credibilidad. Basado en su foto. *(Falta aprobación final)* |
+| 5 | El personaje de YouTube es **Santi**: estilo póster de viaje, proporciones adultas y **con expresiones**, para no perder credibilidad. Basado en su foto. **Aprobado.** |
 | 6 | Material de entrada en **Google Drive**, carpeta `Fotos viajes/`, una subcarpeta por destino |
 | 7 | **Revisión semanal**: un día fijo, Santiago aprueba / rechaza / comenta todo el lote |
 | 8 | **Programación desde el Chrome de Santiago** (Meta Business Suite, TikTok Studio, YouTube Studio) solo con lo aprobado |
@@ -42,7 +42,8 @@ contenido-viajes/
 ├─ README.md                  ← este índice
 ├─ CLAUDE.md                  ← reglas para agentes
 ├─ docs/                      ← documentación
-├─ investigacion/             ← tendencias_youtube.py (outliers del nicho) y un .md por destino
+├─ investigacion/             ← scripts de outliers del nicho y un .md por destino (egipto.md)
+├─ guiones/                   ← guiones listos para grabar (egipto-youtube-largo.md)
 ├─ reels/                     ← Instagram y TikTok
 │  ├─ editar.py               editor (ffmpeg) que aplica la capa de edición
 │  ├─ plan-demo.json          ejemplo de plan de edición
@@ -69,14 +70,14 @@ contenido-viajes/
 ### Pendiente de Santiago
 | # | Qué | Para qué |
 |---|---|---|
-| 1 | Aprobar o ajustar a **Santi** (parecido, ropa fija o por destino, expresiones) | Animarlo y usarlo en YouTube |
+| 1 | ~~Aprobar a Santi~~ ✔ aprobado | — |
 | 2 | Opinar sobre las **maquetas de reels** y confirmar el **amarillo** `#FFD54A` | Fijar la guía de estilo |
 | 3 | Subir **`Fotos viajes/Georgia/`** con audio y tomas originales sin subtítulos | Primer reel real: rehacer Georgia y comparar |
 | 4 | Subir **`Fotos viajes/Guiones/`** con los guiones grabados y su material | Primer lote de reels |
-| 5 | Subir **`Fotos viajes/Egipto/`** con audio de 5–10 min y material | Piloto de YouTube |
-| 6 | Elegir el **día de revisión** semanal | Calendario |
+| 5 | Responder las 4 preguntas de `guiones/egipto-youtube-largo.md`, grabar ese guion y subir **`Fotos viajes/Egipto/`** con el audio y el material | Piloto de YouTube |
+| 6 | Confirmar **domingo** como día de revisión (propuesto) | Calendario |
 | 7 | Instalar **Claude in Chrome** y las **skills `ig-*`** en su computador | Programación y textos |
-| 8 | Completar **nicho, público y qué vende** en `voice.md` | Tono de los textos |
+| 8 | Estudio de **nicho y público** a partir de sus redes (lo hace la sesión del PC con Chrome; Santiago aporta capturas de estadísticas de audiencia si hace falta) | Tono y temas |
 | 9 | Crear la **clave gratis de YouTube Data API** (pasos en `docs/05`) | Investigación de tendencias |
 | 10 | Dar acceso a **YouTube Studio Analytics** (vía Chrome) | Análisis de retención |
 
