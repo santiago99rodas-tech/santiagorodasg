@@ -1,0 +1,183 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  html,body{margin:0;padding:0;background:#111}
+  svg{display:block}
+</style></head>
+<body>
+<div id="root"></div>
+<script>
+// Propuestas de personaje para YouTube. Cada estilo dibuja la misma escena de Egipto
+// con el personaje en 3 poses, para comparar. Uso: propuestas.html?s=1..4
+const W = 1920, H = 1080;
+const q = new URLSearchParams(location.search);
+const S = +(q.get('s') || 1);
+
+// ---------------------------------------------------------------- persona
+// Origen en los pies; y negativo hacia arriba. Extremidades = líneas redondeadas.
+function persona(o) {
+  const p = Object.assign({
+    head: 42, torso: 92, torsoW: 66, leg: 88, arm: 72, limb: 18,
+    skin: '#E9B98F', hair: '#2B1A12', shirt: '#2BB3A3', shirt2: null, pants: '#3B4A6B', shoes: '#2B1A12',
+    outline: null, ow: 0, face: 'dots', hairStyle: 'short', beard: false, hat: null, backpack: '#F28C38',
+    pose: {armL: 10, armR: -10, legL: 4, legR: -4}, prop: null, headOval: 1, sunglasses: false,
+  }, o);
+  const hipY = -p.leg, shY = -p.leg - p.torso + 14, headY = -p.leg - p.torso - p.head * p.headOval + 8;
+  const hx = p.torsoW / 2 - p.limb / 2;
+  const L = (x, y, ang, len, color, w) => {
+    const r = ang * Math.PI / 180, x2 = x + Math.sin(r) * len, y2 = y + Math.cos(r) * len;
+    const base = p.outline ? `<line x1="${x}" y1="${y}" x2="${x2}" y2="${y2}" stroke="${p.outline}" stroke-width="${w + p.ow * 2}" stroke-linecap="round"/>` : '';
+    return { svg: base + `<line x1="${x}" y1="${y}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${w}" stroke-linecap="round"/>`, x2, y2 };
+  };
+  const st = p.outline ? `stroke="${p.outline}" stroke-width="${p.ow}"` : '';
+  let s = '';
+  s += `<ellipse cx="0" cy="4" rx="${p.torsoW * 0.8}" ry="9" fill="rgba(0,0,0,0.15)"/>`;
+  if (p.backpack) s += `<rect x="${-p.torsoW / 2 - 22}" y="${shY + 4}" width="40" height="${p.torso * 0.66}" rx="12" fill="${p.backpack}" ${st}/>`;
+  // brazo de atrás
+  const aL = L(-hx, shY + 8, p.pose.armL, p.arm, p.shirt2 || p.shirt, p.limb);
+  s += aL.svg + `<circle cx="${aL.x2}" cy="${aL.y2}" r="${p.limb * 0.55}" fill="${p.skin}" ${st}/>`;
+  // piernas
+  for (const [dx, ang] of [[-p.torsoW * 0.2, p.pose.legL], [p.torsoW * 0.2, p.pose.legR]]) {
+    const g = L(dx, hipY, ang, p.leg - 8, p.pants, p.limb + 2);
+    s += g.svg + `<ellipse cx="${g.x2 + 6}" cy="${g.y2 + 2}" rx="${p.limb * 0.85}" ry="${p.limb * 0.45}" fill="${p.shoes}" ${st}/>`;
+  }
+  // torso
+  s += `<rect x="${-p.torsoW / 2}" y="${shY - 6}" width="${p.torsoW}" height="${hipY - shY + 18}" rx="${p.torsoW * 0.36}" fill="${p.shirt}" ${st}/>`;
+  if (p.shirt2) s += `<path d="M${-p.torsoW / 2 + 6} ${shY} L${-8} ${shY} L${-8} ${hipY + 10} L${-p.torsoW / 2 + 8} ${hipY + 10} Z" fill="${p.shirt2}" opacity="0.95"/><path d="M${p.torsoW / 2 - 6} ${shY} L${8} ${shY} L${8} ${hipY + 10} L${p.torsoW / 2 - 8} ${hipY + 10} Z" fill="${p.shirt2}" opacity="0.95"/>`;
+  if (p.backpack) s += `<rect x="${-p.torsoW / 2 + 8}" y="${shY - 4}" width="8" height="${p.torso * 0.75}" rx="4" fill="#C9572A"/>`;
+  // brazo de adelante
+  const aR = L(hx, shY + 8, p.pose.armR, p.arm, p.shirt2 || p.shirt, p.limb);
+  s += aR.svg + `<circle cx="${aR.x2}" cy="${aR.y2}" r="${p.limb * 0.55}" fill="${p.skin}" ${st}/>`;
+  if (p.prop === 'camara') s += `<g transform="translate(${aR.x2 - 18} ${aR.y2 - 30})"><rect width="46" height="32" rx="6" fill="#2E2E3A" ${st}/><circle cx="23" cy="16" r="9" fill="#6FA8DC" stroke="#111" stroke-width="3"/></g>`;
+  if (p.prop === 'mapa') s += `<g transform="translate(${aR.x2 - 10} ${aR.y2 - 52}) rotate(-8)"><rect width="70" height="56" fill="#FFF4DE" ${st || 'stroke="#C9A56A" stroke-width="3"'}/><path d="M8 40 Q30 10 60 30" stroke="#E2412F" stroke-width="4" fill="none" stroke-dasharray="6 5"/></g>`;
+  // cuello y cabeza
+  s += `<rect x="-9" y="${headY + p.head * p.headOval - 10}" width="18" height="22" fill="${p.skin}"/>`;
+  s += `<ellipse cx="0" cy="${headY}" rx="${p.head}" ry="${p.head * p.headOval}" fill="${p.skin}" ${st}/>`;
+  const hy = headY, R = p.head, Ry = p.head * p.headOval;
+  if (p.beard) s += `<path d="M${-R * 0.92} ${hy + Ry * 0.05} Q${-R * 0.8} ${hy + Ry * 1.05} 0 ${hy + Ry * 1.02} Q${R * 0.8} ${hy + Ry * 1.05} ${R * 0.92} ${hy + Ry * 0.05} Q${R * 0.55} ${hy + Ry * 0.62} 0 ${hy + Ry * 0.6} Q${-R * 0.55} ${hy + Ry * 0.62} ${-R * 0.92} ${hy + Ry * 0.05} Z" fill="${p.hair}" opacity="0.85"/>`;
+  // cara
+  const ex = R * 0.36, ey = hy + Ry * 0.02;
+  if (p.face === 'dots') {
+    s += `<circle cx="${-ex}" cy="${ey}" r="${R * 0.09}" fill="#2B1A12"/><circle cx="${ex}" cy="${ey}" r="${R * 0.09}" fill="#2B1A12"/>`;
+    s += `<path d="M${-R * 0.22} ${hy + Ry * 0.32} Q0 ${hy + Ry * 0.5} ${R * 0.22} ${hy + Ry * 0.32}" stroke="#2B1A12" stroke-width="${R * 0.07}" fill="none" stroke-linecap="round"/>`;
+    s += `<circle cx="${-R * 0.6}" cy="${hy + Ry * 0.25}" r="${R * 0.13}" fill="#F2A08C" opacity="0.6"/><circle cx="${R * 0.6}" cy="${hy + Ry * 0.25}" r="${R * 0.13}" fill="#F2A08C" opacity="0.6"/>`;
+  } else if (p.face === 'big') {
+    for (const sx of [-1, 1]) s += `<ellipse cx="${sx * ex}" cy="${ey}" rx="${R * 0.2}" ry="${R * 0.25}" fill="#fff" ${st}/><circle cx="${sx * ex + R * 0.04}" cy="${ey + R * 0.04}" r="${R * 0.13}" fill="#2B1A12"/><circle cx="${sx * ex + R * 0.09}" cy="${ey - R * 0.04}" r="${R * 0.05}" fill="#fff"/>`;
+    s += `<path d="M${-R * 0.18} ${hy + Ry * 0.38} Q0 ${hy + Ry * 0.6} ${R * 0.18} ${hy + Ry * 0.38} Z" fill="#7A2E2E" ${st}/>`;
+    s += `<ellipse cx="${-R * 0.62}" cy="${hy + Ry * 0.3}" rx="${R * 0.16}" ry="${R * 0.1}" fill="#FF8A80" opacity="0.7"/><ellipse cx="${R * 0.62}" cy="${hy + Ry * 0.3}" rx="${R * 0.16}" ry="${R * 0.1}" fill="#FF8A80" opacity="0.7"/>`;
+  } else if (p.face === 'line') {
+    s += `<path d="M${-ex - 6} ${ey} q6 -6 12 0 M${ex - 6} ${ey} q6 -6 12 0" stroke="#1d1d1d" stroke-width="4" fill="none" stroke-linecap="round"/>`;
+    s += `<path d="M${-R * 0.25} ${hy + Ry * 0.34} Q0 ${hy + Ry * 0.55} ${R * 0.25} ${hy + Ry * 0.34}" stroke="#1d1d1d" stroke-width="4" fill="none" stroke-linecap="round"/>`;
+  } // 'none' = sin rasgos
+  if (p.sunglasses) s += `<g fill="#1B1B24"><rect x="${-ex - R * 0.24}" y="${ey - R * 0.16}" width="${R * 0.48}" height="${R * 0.3}" rx="${R * 0.1}"/><rect x="${ex - R * 0.24}" y="${ey - R * 0.16}" width="${R * 0.48}" height="${R * 0.3}" rx="${R * 0.1}"/><rect x="${-ex}" y="${ey - R * 0.08}" width="${ex * 2}" height="${R * 0.06}"/></g>`;
+  // pelo
+  if (p.hairStyle === 'short') s += `<path d="M${-R * 1.02} ${hy - Ry * 0.05} Q${-R * 1.1} ${hy - Ry * 1.15} 0 ${hy - Ry * 1.08} Q${R * 1.1} ${hy - Ry * 1.15} ${R * 1.02} ${hy - Ry * 0.05} Q${R * 0.7} ${hy - Ry * 0.62} ${R * 0.1} ${hy - Ry * 0.55} Q${-R * 0.6} ${hy - Ry * 0.5} ${-R * 1.02} ${hy - Ry * 0.05} Z" fill="${p.hair}" ${st}/>`;
+  if (p.hairStyle === 'bun') s += `<circle cx="${R * 0.1}" cy="${hy - Ry * 1.1}" r="${R * 0.38}" fill="${p.hair}" ${st}/><path d="M${-R * 1.02} ${hy + Ry * 0.3} Q${-R * 1.1} ${hy - Ry * 1.15} 0 ${hy - Ry * 1.02} Q${R * 1.1} ${hy - Ry * 1.15} ${R * 1.02} ${hy + Ry * 0.3} Q${R * 0.8} ${hy - Ry * 0.55} 0 ${hy - Ry * 0.6} Q${-R * 0.8} ${hy - Ry * 0.55} ${-R * 1.02} ${hy + Ry * 0.3} Z" fill="${p.hair}" ${st}/>`;
+  if (p.hat === 'safari') s += `<ellipse cx="0" cy="${hy - Ry * 0.62}" rx="${R * 1.45}" ry="${R * 0.28}" fill="#B8924A" ${st}/><path d="M${-R * 0.9} ${hy - Ry * 0.62} Q${-R * 0.85} ${hy - Ry * 1.45} 0 ${hy - Ry * 1.45} Q${R * 0.85} ${hy - Ry * 1.45} ${R * 0.9} ${hy - Ry * 0.62} Z" fill="#D9B46C" ${st}/><rect x="${-R * 0.88}" y="${hy - Ry * 0.86}" width="${R * 1.76}" height="${R * 0.2}" fill="#2B1A12" opacity="0.85"/>`;
+  if (p.hat === 'gorra') s += `<path d="M${-R * 0.98} ${hy - Ry * 0.38} Q${-R} ${hy - Ry * 1.2} 0 ${hy - Ry * 1.18} Q${R} ${hy - Ry * 1.2} ${R * 0.98} ${hy - Ry * 0.38} Z" fill="${p.hatColor || '#E2412F'}" ${st}/><path d="M${R * 0.5} ${hy - Ry * 0.42} Q${R * 1.5} ${hy - Ry * 0.5} ${R * 1.6} ${hy - Ry * 0.28} L${R * 0.6} ${hy - Ry * 0.28} Z" fill="${p.hatColor2 || '#B8302A'}" ${st}/>`;
+  if (p.hat === 'gafasCabeza') s += `<g fill="#1B1B24"><rect x="${-ex - R * 0.26}" y="${hy - Ry * 0.75}" width="${R * 0.5}" height="${R * 0.26}" rx="${R * 0.1}"/><rect x="${ex - R * 0.24}" y="${hy - Ry * 0.75}" width="${R * 0.5}" height="${R * 0.26}" rx="${R * 0.1}"/></g>`;
+  return `<g>${s}</g>`;
+}
+
+// ---------------------------------------------------------------- piezas de escena
+const piramides = (c) => {
+  const pir = (x, b, h) => `<polygon points="${x},${780 - h} ${x - b / 2},780 ${x + b / 2},780" fill="${c.p1}" ${c.st || ''}/><polygon points="${x},${780 - h} ${x},780 ${x + b / 2},780" fill="${c.p2}" ${c.st || ''}/>`;
+  return pir(1180, 640, 440) + pir(1560, 440, 300) + pir(860, 300, 200);
+};
+const etiqueta = (x, y, txt, bg, fg, rot = -4, font = 'Inter', st = '') => `<g transform="translate(${x} ${y}) rotate(${rot})"><rect x="-10" y="-46" width="${txt.length * 26 + 30}" height="64" rx="14" fill="${bg}" ${st}/><text x="5" y="0" font-family="${font}" font-weight="900" font-size="40" fill="${fg}">${txt}</text></g>`;
+const subt = (txt, clave, font = 'Inter', color = '#fff', acc = '#FFD54A', stroke = '#2B1A12') => {
+  const words = txt.split(' ');
+  return `<text x="960" y="110" text-anchor="middle" font-family="${font}" font-weight="800" font-size="62" fill="${color}" stroke="${stroke}" stroke-width="10" paint-order="stroke fill">${words.map(w => w === clave ? `<tspan fill="${acc}">${w}</tspan>` : w).join(' ')}</text>`;
+};
+const titulo = (n, nombre, desc, oscuro = false) => `<g><rect x="0" y="${H - 120}" width="${W}" height="120" fill="${oscuro ? 'rgba(0,0,0,0.75)' : 'rgba(255,255,255,0.9)'}"/><text x="40" y="${H - 66}" font-family="Inter" font-weight="900" font-size="40" fill="${oscuro ? '#fff' : '#2B1A12'}">PROPUESTA ${n} · ${nombre}</text><text x="40" y="${H - 24}" font-family="Inter" font-weight="500" font-size="28" fill="${oscuro ? '#ddd' : '#5a4a40'}">${desc}</text></g>`;
+const poseSet = {
+  parado: {armL: 12, armR: -12, legL: 4, legR: -4},
+  senala: {armL: 14, armR: 135, legL: 6, legR: -8},
+  camina: {armL: -28, armR: 28, legL: 24, legR: -22},
+  sorpresa: {armL: -150, armR: 150, legL: 10, legR: -10},
+};
+
+// ---------------------------------------------------------------- estilos
+const estilos = {
+  // 1. Caricatura de Santiago: plano, colores limpios, sin contorno
+  1: () => {
+    const base = {skin: '#E8B48C', hair: '#3A2418', beard: true, shirt: '#F5F1E8', shirt2: '#3E8E6B', pants: '#C8B08A', shoes: '#F5F1E8', hairStyle: 'short', backpack: '#2B3A55', face: 'dots'};
+    return `<rect width="${W}" height="${H}" fill="url(#cielo1)"/>
+      <defs><linearGradient id="cielo1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8FD3F4"/><stop offset="0.65" stop-color="#FCE1A8"/></linearGradient></defs>
+      <circle cx="1550" cy="250" r="100" fill="#FFF2C2"/>
+      ${piramides({p1: '#EDBE74', p2: '#D39A4E'})}
+      <path d="M0 770 Q400 720 900 780 T1920 760 L1920 1080 L0 1080 Z" fill="#F2CF8E"/>
+      <path d="M0 880 Q500 830 1000 890 T1920 870 L1920 1080 L0 1080 Z" fill="#E8B96E"/>
+      <g transform="translate(560 900) scale(2.3)">${persona({...base, pose: poseSet.senala})}</g>
+      ${etiqueta(820, 420, 'GIZA · 2026', '#FFD54A', '#2B1A12')}
+      <g transform="translate(1540 1000)"><rect x="-200" y="-360" width="420" height="380" rx="28" fill="rgba(255,255,255,0.75)"/>
+        <g transform="translate(-110 -20) scale(1.05)">${persona({...base, pose: poseSet.camina})}</g>
+        <g transform="translate(110 -20) scale(1.05)">${persona({...base, pose: poseSet.sorpresa, prop: null})}</g></g>
+      ${subt('Así llegué a las pirámides', 'pirámides')}
+      ${titulo(1, 'SANTI EN CARICATURA', 'Un personaje parecido a ti (lo ajustamos con una foto tuya) · plano, limpio, sin contornos')}`;
+  },
+  // 2. Garabato de libreta: papel, contorno negro tembloroso, un solo color de acento
+  2: () => {
+    const base = {skin: '#FFFFFF', hair: '#1d1d1d', shirt: '#FFD54A', pants: '#FFFFFF', shoes: '#1d1d1d', outline: '#1d1d1d', ow: 5, face: 'line', hairStyle: 'short', backpack: '#FFFFFF', limb: 14, torsoW: 58};
+    const st = 'stroke="#1d1d1d" stroke-width="5"';
+    return `<defs><filter id="sk"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="3"/><feDisplacementMap in="SourceGraphic" scale="5"/></filter>
+        <pattern id="lin" width="60" height="60" patternUnits="userSpaceOnUse"><path d="M0 59 H60" stroke="#c9d6e8" stroke-width="2"/></pattern>
+        <pattern id="hatch" width="14" height="14" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><line x1="0" y1="0" x2="0" y2="14" stroke="#1d1d1d" stroke-width="2.5"/></pattern></defs>
+      <rect width="${W}" height="${H}" fill="#FBF7EE"/><rect width="${W}" height="${H}" fill="url(#lin)"/>
+      <line x1="140" y1="0" x2="140" y2="${H}" stroke="#F2A0A0" stroke-width="3"/>
+      <g filter="url(#sk)">
+        <circle cx="1560" cy="250" r="90" fill="#FFD54A" ${st}/>
+        <polygon points="1180,340 860,780 1500,780" fill="#fff" ${st}/><polygon points="1180,340 1180,780 1500,780" fill="url(#hatch)" ${st}/>
+        <polygon points="1560,480 1340,780 1780,780" fill="#fff" ${st}/><polygon points="1560,480 1560,780 1780,780" fill="url(#hatch)" ${st}/>
+        <path d="M150 790 Q600 760 1000 800 T1900 790" stroke="#1d1d1d" stroke-width="5" fill="none"/>
+        <g transform="translate(560 900) scale(2.3)">${persona({...base, pose: poseSet.senala})}</g>
+        <path d="M760 420 q60 -40 120 -10" stroke="#1d1d1d" stroke-width="5" fill="none"/><path d="M870 400 l14 16 l-22 6" stroke="#1d1d1d" stroke-width="5" fill="none"/>
+        <g transform="translate(1540 1000)"><g transform="translate(-110 -20) scale(1.05)">${persona({...base, pose: poseSet.camina})}</g>
+        <g transform="translate(110 -20) scale(1.05)">${persona({...base, pose: poseSet.sorpresa})}</g></g>
+      </g>
+      <text x="700" y="380" font-family="Liberation Serif" font-style="italic" font-size="56" fill="#1d1d1d">¡4.500 años!</text>
+      ${subt('Así llegué a las pirámides', 'pirámides', 'Inter', '#1d1d1d', '#E2412F', '#FBF7EE')}
+      ${titulo(2, 'GARABATO DE LIBRETA', 'Dibujo a mano sobre papel · negro + un color · rápido de producir, muy explicativo')}`;
+  },
+  // 3. Chibi: cabeza grande, ojos brillantes, contorno grueso, colores vivos
+  3: () => {
+    const base = {head: 70, torso: 66, leg: 56, arm: 52, limb: 20, torsoW: 64, skin: '#F6CDA8', hair: '#3A2418', shirt: '#4FC3F7', pants: '#FF8A65', shoes: '#fff', outline: '#3B2230', ow: 5, face: 'big', hat: 'gorra', hatColor: '#FFD54A', hatColor2: '#F4B400', backpack: '#7E57C2'};
+    const st = 'stroke="#3B2230" stroke-width="6" stroke-linejoin="round"';
+    return `<defs><linearGradient id="c3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF9A8B"/><stop offset="0.7" stop-color="#FFD3A5"/></linearGradient></defs>
+      <rect width="${W}" height="${H}" fill="url(#c3)"/>
+      ${[[300, 200], [1300, 160], [900, 260]].map(([x, y]) => `<g transform="translate(${x} ${y})"><ellipse rx="80" ry="30" fill="#fff" ${st}/></g>`).join('')}
+      <circle cx="1620" cy="230" r="90" fill="#FFF176" ${st}/>
+      ${piramides({p1: '#FFCC80', p2: '#FFA726', st})}
+      <path d="M-10 780 Q400 730 900 790 T1930 770 L1930 1090 L-10 1090 Z" fill="#FFE0B2" ${st}/>
+      <g transform="translate(560 920) scale(2.4)">${persona({...base, pose: poseSet.senala})}</g>
+      ${['M760 380 l10 -30 l10 30 l30 10 l-30 10 l-10 30 l-10 -30 l-30 -10 Z', 'M840 470 l6 -18 l6 18 l18 6 l-18 6 l-6 18 l-6 -18 l-18 -6 Z'].map(d => `<path d="${d}" fill="#FFF176" ${st}/>`).join('')}
+      <g transform="translate(1540 1000)"><rect x="-210" y="-330" width="440" height="350" rx="34" fill="rgba(255,255,255,0.7)" ${st}/>
+        <g transform="translate(-110 -20) scale(1.05)">${persona({...base, pose: poseSet.camina})}</g>
+        <g transform="translate(110 -20) scale(1.05)">${persona({...base, pose: poseSet.sorpresa, prop: 'camara'})}</g></g>
+      ${subt('Así llegué a las pirámides', 'pirámides', 'Inter', '#fff', '#FFF176', '#3B2230')}
+      ${titulo(3, 'CHIBI', 'Cabezón y tierno, ojos brillantes, contorno grueso · el más "caricatura", muy amigable')}`;
+  },
+  // 4. Póster de viaje: proporciones altas, sin rasgos, paleta terrosa, textura de grano
+  4: () => {
+    const base = {head: 30, torso: 118, leg: 140, arm: 104, limb: 20, torsoW: 64, skin: '#C98B63', hair: '#2E2420', shirt: '#E9E1D0', pants: '#2F5D62', shoes: '#2E2420', face: 'none', hat: 'safari', backpack: '#B5553C', headOval: 1.15};
+    return `<defs><filter id="grano"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.16 0"/></filter></defs>
+      <rect width="${W}" height="${H}" fill="#E9C9A0"/>
+      <circle cx="1180" cy="460" r="340" fill="#E07A4F"/>
+      ${piramides({p1: '#C98A50', p2: '#A86B3A'})}
+      <rect y="780" width="${W}" height="300" fill="#D7AE7A"/>
+      <path d="M0 840 Q500 810 1000 850 T1920 830 L1920 1080 L0 1080 Z" fill="#C79C66"/>
+      <g transform="translate(560 960) scale(2.1)">${persona({...base, pose: poseSet.senala})}</g>
+      <g transform="translate(1540 1010)">
+        <g transform="translate(-110 -20) scale(0.95)">${persona({...base, pose: poseSet.camina})}</g>
+        <g transform="translate(110 -20) scale(0.95)">${persona({...base, pose: poseSet.parado, prop: 'mapa'})}</g></g>
+      <text x="1500" y="230" text-anchor="middle" font-family="Liberation Serif" font-style="italic" font-size="84" fill="#2E2420">Egipto</text>
+      <text x="1500" y="290" text-anchor="middle" font-family="Inter" font-weight="700" letter-spacing="12" font-size="28" fill="#2E2420">GIZA · EL CAIRO</text>
+      <rect width="${W}" height="${H}" filter="url(#grano)"/>
+      ${subt('Así llegué a las pirámides', 'pirámides', 'Inter', '#fff', '#FFD54A', '#2E2420')}
+      ${titulo(4, 'PÓSTER DE VIAJE', 'Figuras estilizadas sin rasgos, paleta terrosa y textura de papel · elegante, tipo documental', true)}`;
+  },
+};
+
+document.getElementById('root').innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${estilos[S]()}</svg>`;
+</script>
+</body></html>
