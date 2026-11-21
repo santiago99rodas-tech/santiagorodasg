@@ -1,0 +1,14 @@
+{
+  "name": "youtube-animacion",
+  "private": true,
+  "scripts": {
+    "render": "remotion render src/index.ts PruebaEgipto out/prueba-egipto.mp4 --browser-executable=/opt/pw-browsers/chromium"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.242",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.242",
+    "typescript": "^5.6.3"
+  }
+}

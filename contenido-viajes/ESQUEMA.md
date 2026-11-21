@@ -6,6 +6,15 @@ Perfil: **@SantiagoRodas** (Instagram) · **@SantiagoRodasTravel** (TikTok)
 
 **Formato: voz en off + fotos y videos del viaje. Santiago no sale a cámara.** Es lo que mejor le ha funcionado al perfil. Del referente se toma todo el lenguaje de edición (tipografías, subtítulos, cambios, cámara 2, stickers, sonido), pero aplicado sobre material del viaje en vez de sobre una persona hablando.
 
+**Separación por plataforma (regla fija):**
+
+| Plataforma | Estilo |
+|---|---|
+| Instagram y TikTok | **Solo material real** (fotos y videos de Santiago) + voz + edición del referente (tipografías, subtítulos, efectos, sonido). **Sin muñequitos ni animación de personajes.** En viajes la gente espera ver lugares reales |
+| YouTube (videos largos) | Animación 2D con mascota + material real. Ver `YOUTUBE.md` |
+
+**Punto de partida (video actual de Georgia, 96 s):** 32 cortes (uno cada ~3 s), solo material real, mapa de ubicación, subtítulo de una palabra en letra condensada, cierre con botones "like/subscribe/follow". Lo que se mejora: gancho con texto grande en los primeros 2 s, jerarquía tipográfica (hoy todas las palabras pesan igual y cambian de tamaño sin regla), datos visibles (precios, días, nombres de lugares como etiquetas), ruta animada en el mapa, cambios de clip al golpe de la música, efectos de sonido, movimiento en las fotos y exportar en 1080×1920 (el archivo actual es 576×1024).
+
 **División del trabajo:**
 
 | Quién | Qué | Cuándo |
