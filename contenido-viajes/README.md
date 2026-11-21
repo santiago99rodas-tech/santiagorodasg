@@ -18,10 +18,11 @@ Santiago graba su voz y sube su material a Drive; Claude produce todo; Santiago 
 | 4 | **YouTube**: horizontal, 5–10 min, **~70 % animación 2D** (mínimo 50 %) + **~30 % material real** puntual |
 | 5 | El personaje de YouTube es **Santi**: estilo póster de viaje, proporciones adultas y **con expresiones**, para no perder credibilidad. Basado en su foto. **Aprobado.** |
 | 6 | Material de entrada en **Google Drive**, carpeta `Fotos viajes/`, una subcarpeta por destino |
-| 7 | **Revisión semanal**: un día fijo, Santiago aprueba / rechaza / comenta todo el lote |
+| 7 | **Revisión semanal los domingos**: Santiago aprueba / rechaza / comenta todo el lote |
 | 8 | **Programación desde el Chrome de Santiago** (Meta Business Suite, TikTok Studio, YouTube Studio) solo con lo aprobado |
 | 9 | Los textos se apoyan en las **13 skills `ig-*`** (guiones, captions, carruseles, DMs) |
 | 10 | Un agente distinto por plataforma: `editor-reels` y `editor-youtube` (`.claude/agents/`) |
+| 12 | Tipografía principal **Bebas Neue**; secundarias Playfair Display Italic y Montserrat. Todas gratis |
 | 11 | Antes de cada destino se investiga **qué quiere ver la gente** y después de publicar se mide **la retención**, todo con herramientas **gratis** (YouTube Data API, vidIQ plan gratis, YouTube Studio). Nada de NexLev ni clonación de voz |
 
 ## Documentación
@@ -42,6 +43,7 @@ contenido-viajes/
 ├─ README.md                  ← este índice
 ├─ CLAUDE.md                  ← reglas para agentes
 ├─ docs/                      ← documentación
+├─ fuentes/                   ← Bebas Neue, Playfair Display, Montserrat (gratis, licencia OFL)
 ├─ investigacion/             ← scripts de outliers del nicho y un .md por destino (egipto.md)
 ├─ guiones/                   ← guiones listos para grabar (egipto-youtube-largo.md)
 ├─ reels/                     ← Instagram y TikTok
@@ -75,7 +77,6 @@ contenido-viajes/
 | 3 | Subir **`Fotos viajes/Georgia/`** con audio y tomas originales sin subtítulos | Primer reel real: rehacer Georgia y comparar |
 | 4 | Subir **`Fotos viajes/Guiones/`** con los guiones grabados y su material | Primer lote de reels |
 | 5 | Responder las 4 preguntas de `guiones/egipto-youtube-largo.md`, grabar ese guion y subir **`Fotos viajes/Egipto/`** con el audio y el material | Piloto de YouTube |
-| 6 | Confirmar **domingo** como día de revisión (propuesto) | Calendario |
 | 7 | Instalar **Claude in Chrome** y las **skills `ig-*`** en su computador | Programación y textos |
 | 8 | Estudio de **nicho y público** a partir de sus redes (lo hace la sesión del PC con Chrome; Santiago aporta capturas de estadísticas de audiencia si hace falta) | Tono y temas |
 | 9 | Crear la **clave gratis de YouTube Data API** (pasos en `docs/05`) | Investigación de tendencias |

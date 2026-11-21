@@ -5,14 +5,15 @@
   "marca": {
     "acento": "#FFD54A",
     "oscuro": "#2B1A12",
-    "fuente_sans": "Inter Black",
-    "fuente_serif": "Liberation Serif"
+    "fuente_sans": "Bebas Neue",
+    "fuente_serif": "Playfair Display",
+    "fuente_texto": "Montserrat"
   },
   "eventos": [
     {"tipo": "gancho", "inicio": 0.0, "fin": 2.8, "y": 300, "lineas": [
       {"t": "Gasté", "estilo": "sans"},
       {"t": "$0", "estilo": "big"},
-      {"t": "en hotel en", "estilo": "sans", "tam": 125},
+      {"t": "en hotel en", "estilo": "sans", "tam": 160},
       {"t": "Islandia", "estilo": "serifacc"}
     ]},
     {"tipo": "rec", "inicio": 2.8, "fin": 4.6, "texto": "¿En serio?!", "tam": 150, "y": 460},

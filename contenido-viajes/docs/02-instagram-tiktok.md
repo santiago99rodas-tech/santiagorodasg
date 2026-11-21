@@ -20,7 +20,7 @@ Instagram **@SantiagoRodas** · TikTok **@SantiagoRodasTravel**. Reglas obligato
 - **Un cambio de toma por frase** (cada 1.5–3 s). Cada sustantivo importante tiene su imagen.
 - **Fotos siempre con movimiento**: zoom lento o paneo.
 - **Subtítulo de una palabra** al centro; la palabra clave en color.
-- **Tres tipografías con rol fijo**: sans negra (Inter Black) para lo que se dice, serif itálica para el matiz, palabra clave enorme en el color de acento.
+- **Tres tipografías con rol fijo**: Bebas Neue para lo que se dice y la palabra clave enorme en el color de acento; Playfair Display Italic para el matiz; Montserrat para etiquetas y datos.
 - **Datos como etiquetas**: tarjeta blanca con emoji + precio.
 - **Mapa** con la ruta que se dibuja.
 - **Cámara 2**: la toma pasa a blanco y negro con marco REC en las objeciones ("pero… ¿es seguro?"), con burbuja de chat de la duda.
@@ -36,8 +36,9 @@ Maquetas de referencia (antes/después sobre cuadros de Georgia): `../reels/maqu
 |---|---|---|
 | Acento | Amarillo pasaporte `#FFD54A` | Propuesto, falta confirmar |
 | Oscuro | Café `#2B1A12` | Propuesto |
-| Sans | Inter Black | Propuesto |
-| Serif | Itálica tipo Playfair (en las maquetas: Liberation Serif) | Propuesto |
+| **Tipografía principal** | **Bebas Neue**: ganchos, palabra clave gigante, subtítulos palabra por palabra | **Decidido por Santiago** |
+| Secundaria emocional | **Playfair Display Italic**: el matiz ("de Europa?", "¿es seguro?", "comenta", "mi ruta") | Propuesto |
+| Secundaria de lectura | **Montserrat** (Medium/Bold/ExtraBold): etiquetas de precio, burbujas, datos pequeños, REC | Propuesto |
 | Firma propia | Sello de pasaporte con el nombre del país al aparecer cada destino | Idea |
 
 ## Formatos de serie (rotar, no repetir el mismo seguido)

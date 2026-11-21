@@ -31,7 +31,7 @@ Santiago **no sale a cámara**. Todo se arma sobre **su voz en off** + material 
 | **Material real** | **≥ 90 % del tiempo en pantalla**: fotos y videos que grabó Santiago. Se permiten imágenes de internet cuando no tomó esa foto, siempre de algo real (el lugar, el plato, el documento) y, cuando se pueda, de fuentes con licencia libre o citando la fuente |
 | **Animación** | **≤ 10 % y siempre pequeña**: un contador de dinero, una etiqueta de precio, un pin en el mapa, una flecha, un sticker, un sello. Ocupa una parte de la pantalla, **encima** del material real, nunca lo reemplaza |
 | **Prohibido** | **Muñequitos, el personaje Santi, personajes animados, escenas ilustradas a pantalla completa**. Nada que convierta el video en caricatura. La audiencia de estas redes busca ver lo que Santiago vivió de verdad |
-| Edición | Estilo del referente "Comenta CALENDARIO": gancho de texto grande en 0–2 s, subtítulos de una palabra, mezcla tipográfica (sans negra + serif itálica + palabra clave en amarillo `#FFD54A`), cambio de toma cada 1.5–3 s, zoom/paneo en fotos, toma en blanco y negro con marco REC en las objeciones, efectos de sonido en cada texto |
+| Edición | Estilo del referente "Comenta CALENDARIO": gancho de texto grande en 0–2 s, subtítulos de una palabra, mezcla tipográfica (**Bebas Neue** principal + Playfair Display Italic + Montserrat; palabra clave en amarillo `#FFD54A`; fuentes en `fuentes/`), cambio de toma cada 1.5–3 s, zoom/paneo en fotos, toma en blanco y negro con marco REC en las objeciones, efectos de sonido en cada texto |
 | Herramienta | `reels/editar.py` |
 | Referencia de su estilo actual | Video de Georgia (96 s, 32 cortes, todo material real, mapa, subtítulo palabra a palabra) |
 

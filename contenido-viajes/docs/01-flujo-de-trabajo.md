@@ -25,7 +25,7 @@ Claude tiene acceso de lectura a Drive desde las sesiones en la nube.
 
 | Día | Quién | Tarea |
 |---|---|---|
-| **Domingo** (propuesto, 30–45 min) | Santiago | Revisa el lote: 3 reels, 1–2 carruseles, posts, historias y (cada 2 semanas) el video largo. Aprueba, rechaza o comenta |
+| **Domingo** (30–45 min) | Santiago | Revisa el lote: 3 reels, 1–2 carruseles, posts, historias y (cada 2 semanas) el video largo. Aprueba, rechaza o comenta |
 | Domingo / lunes | Claude | Corrige y programa lo aprobado de lunes a sábado. Entrega los guiones nuevos |
 | Lunes a miércoles | Santiago | Graba voces y sube material (15–20 min) |
 | Miércoles a sábado | Claude | Produce el lote siguiente |

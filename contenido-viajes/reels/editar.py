@@ -53,17 +53,19 @@ def header(brand):
     white = "&H00FFFFFF"
     dark = bgr(brand["oscuro"])
     sans, serif = brand["fuente_sans"], brand["fuente_serif"]
+    texto = brand.get("fuente_texto", "Montserrat")
     styles = [
         # Nombre, fuente, tamano, color, negrita, italica, borde, sombra
-        ("Sans", sans, 120, white, -1, 0, 0, 3),
-        ("SansDark", sans, 120, dark, -1, 0, 0, 0),
-        ("Big", sans, 260, acc, -1, 0, 0, 4),
+        # Bebas Neue (principal) no tiene negrita: Bold=0 para no deformarla
+        ("Sans", sans, 120, white, 0, 0, 0, 3),
+        ("SansDark", sans, 120, dark, 0, 0, 0, 0),
+        ("Big", sans, 260, acc, 0, 0, 0, 4),
         ("Serif", serif, 120, white, 0, -1, 0, 3),
         ("SerifAcc", serif, 130, acc, -1, -1, 0, 3),
-        ("Word", sans, 64, white, -1, 0, 0, 3),
-        ("Tag", sans, 56, dark, -1, 0, 0, 0),
-        ("Rec", sans, 44, white, 0, 0, 0, 0),
-        ("Shape", sans, 20, white, 0, 0, 0, 0),
+        ("Word", sans, 96, white, 0, 0, 0, 3),
+        ("Tag", texto, 50, dark, -1, 0, 0, 0),
+        ("Rec", texto, 40, white, -1, 0, 0, 0),
+        ("Shape", texto, 20, white, 0, 0, 0, 0),
     ]
     out = [
         "[Script Info]",
@@ -94,7 +96,7 @@ def ev_hook(e, out):
     """Titulo de gancho: lineas apiladas que entran una por una con rebote."""
     y = e.get("y", 330)
     gap = e.get("intervalo", 0.18)
-    sizes = {"sans": 150, "big": 330, "serif": 150, "serifacc": 165, "sansdark": 150}
+    sizes = {"sans": 190, "big": 400, "serif": 150, "serifacc": 165, "sansdark": 190}
     styles = {"sans": "Sans", "big": "Big", "serif": "Serif", "serifacc": "SerifAcc", "sansdark": "SansDark"}
     for i, ln in enumerate(e["lineas"]):
         st = ln.get("estilo", "sans")
