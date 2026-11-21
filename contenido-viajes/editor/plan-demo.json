@@ -1,0 +1,29 @@
+{
+  "titulo": "Demo: Islandia sin pagar hotel",
+  "source": null,
+  "duracion": 13,
+  "marca": {
+    "acento": "#FFD54A",
+    "oscuro": "#2B1A12",
+    "fuente_sans": "Inter Black",
+    "fuente_serif": "Liberation Serif"
+  },
+  "eventos": [
+    {"tipo": "gancho", "inicio": 0.0, "fin": 2.8, "y": 300, "lineas": [
+      {"t": "Gasté", "estilo": "sans"},
+      {"t": "$0", "estilo": "big"},
+      {"t": "en hotel en", "estilo": "sans", "tam": 125},
+      {"t": "Islandia", "estilo": "serifacc"}
+    ]},
+    {"tipo": "rec", "inicio": 2.8, "fin": 4.6, "texto": "¿En serio?!", "tam": 150, "y": 460},
+    {"tipo": "palabras", "inicio": 4.6, "fin": 7.6, "y": 1150,
+     "texto": "dormí siete noches en una camper", "resaltar": ["camper"]},
+    {"tipo": "zoom", "inicio": 6.1, "fin": 7.6, "escala": 1.18},
+    {"tipo": "sticker", "inicio": 7.6, "fin": 10.0, "texto": "TIP #1: camping", "x": 540, "y": 520, "ancho": 520, "giro": -5},
+    {"tipo": "maquina", "inicio": 7.9, "fin": 10.0, "texto": "≈ 35 USD/noche", "y": 700, "tam": 105, "estilo": "Sans", "vel": 0.06},
+    {"tipo": "cta", "inicio": 10.0, "fin": 13.0, "pequeno": "comenta", "grande": "“RUTA”", "y": 360}
+  ],
+  "sfx": [
+    {"t": 12.2, "tipo": "ding"}
+  ]
+}
