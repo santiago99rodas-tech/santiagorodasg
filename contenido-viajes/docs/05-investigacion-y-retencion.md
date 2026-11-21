@@ -16,7 +16,14 @@ Inspiración: video "Claude hizo un video completo mientras me duchaba". Ahí Cl
 | Montar | Sí | `reels/editar.py` y Remotion (gratis) |
 | Subir con título, descripción y miniatura | Sí | YouTube Studio desde el Chrome de Santiago (gratis), solo lo aprobado |
 
-**Resultado: nada del flujo requiere pagar.** La única configuración es una clave gratis de la YouTube Data API.
+**Resultado: nada del flujo requiere pagar.** Regla del proyecto: **no se usa ninguna herramienta de pago**; vidIQ solo en su plan gratis y si deja de serlo, se quita.
+
+### Dos formas gratis de buscar outliers
+
+| Opción | Qué necesita | Cuándo usarla |
+|---|---|---|
+| **A. `investigacion/tendencias_sin_clave.py`** (recomendada para empezar) | Solo `pip install yt-dlp` (programa libre). Sin cuenta, sin clave, sin tarjeta | Desde el computador de Santiago, ya |
+| **B. `investigacion/tendencias_youtube.py`** | Clave gratis de la API oficial de YouTube (no pide tarjeta) | Si la opción A deja de funcionar o se necesitan fechas exactas y vistas por día |
 
 ## Agente "Investigador de tendencias" (antes de cada destino)
 
