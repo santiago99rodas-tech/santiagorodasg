@@ -1,12 +1,13 @@
 # Referencias analizadas
 
-Tres videos de referencia. Cada uno aporta una cosa distinta; no mezclarlos.
+Cuatro videos de referencia. Cada uno aporta una cosa distinta; no mezclarlos.
 
 | Video | Qué es | Para qué se usa |
 |---|---|---|
 | **Georgia** (de Santiago) | Su formato actual | **Base** de Instagram y TikTok |
 | **"Comenta CALENDARIO"** (de otra creadora) | Talking head muy editado | **Capa de edición** de Instagram y TikTok (no su formato: ella sale a cámara) |
 | **"Granja de videos para YT Shorts"** | Animación 2D con personajes | **Inspiración del estilo de YouTube** |
+| **"Claude hizo un video completo mientras me duchaba"** | Flujo de investigación → guion → montaje → subida | **Investigación de temas y retención** (ver `05-investigacion-y-retencion.md`) |
 
 ---
 

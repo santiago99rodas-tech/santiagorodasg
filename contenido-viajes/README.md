@@ -22,6 +22,7 @@ Santiago graba su voz y sube su material a Drive; Claude produce todo; Santiago 
 | 8 | **Programación desde el Chrome de Santiago** (Meta Business Suite, TikTok Studio, YouTube Studio) solo con lo aprobado |
 | 9 | Los textos se apoyan en las **13 skills `ig-*`** (guiones, captions, carruseles, DMs) |
 | 10 | Un agente distinto por plataforma: `editor-reels` y `editor-youtube` (`.claude/agents/`) |
+| 11 | Antes de cada destino se investiga **qué quiere ver la gente** y después de publicar se mide **la retención**, todo con herramientas **gratis** (YouTube Data API, vidIQ plan gratis, YouTube Studio). Nada de NexLev ni clonación de voz |
 
 ## Documentación
 
@@ -31,7 +32,8 @@ Santiago graba su voz y sube su material a Drive; Claude produce todo; Santiago 
 | [`docs/01-flujo-de-trabajo.md`](docs/01-flujo-de-trabajo.md) | Roles, Drive, semana tipo, revisión, programación, skills `ig-*`, `voice.md` |
 | [`docs/02-instagram-tiktok.md`](docs/02-instagram-tiktok.md) | Fórmula, lenguaje de edición, identidad visual, formatos de serie, IG vs TikTok |
 | [`docs/03-youtube.md`](docs/03-youtube.md) | Fórmula, personaje Santi, escenas, equipo de agentes, Remotion |
-| [`docs/04-referencias.md`](docs/04-referencias.md) | Análisis de los 3 videos de referencia |
+| [`docs/04-referencias.md`](docs/04-referencias.md) | Análisis de los videos de referencia |
+| [`docs/05-investigacion-y-retencion.md`](docs/05-investigacion-y-retencion.md) | Investigar temas que funcionan y medir retención, gratis |
 
 ## Estructura de carpetas
 
@@ -40,6 +42,7 @@ contenido-viajes/
 ├─ README.md                  ← este índice
 ├─ CLAUDE.md                  ← reglas para agentes
 ├─ docs/                      ← documentación
+├─ investigacion/             ← tendencias_youtube.py (outliers del nicho) y un .md por destino
 ├─ reels/                     ← Instagram y TikTok
 │  ├─ editar.py               editor (ffmpeg) que aplica la capa de edición
 │  ├─ plan-demo.json          ejemplo de plan de edición
@@ -74,6 +77,8 @@ contenido-viajes/
 | 6 | Elegir el **día de revisión** semanal | Calendario |
 | 7 | Instalar **Claude in Chrome** y las **skills `ig-*`** en su computador | Programación y textos |
 | 8 | Completar **nicho, público y qué vende** en `voice.md` | Tono de los textos |
+| 9 | Crear la **clave gratis de YouTube Data API** (pasos en `docs/05`) | Investigación de tendencias |
+| 10 | Dar acceso a **YouTube Studio Analytics** (vía Chrome) | Análisis de retención |
 
 ### Pendiente técnico (Claude)
 | # | Qué | Plataforma |
@@ -86,12 +91,14 @@ contenido-viajes/
 | 6 | Animar a Santi en Remotion y reemplazar el personaje de la prueba | YouTube |
 | 7 | Biblioteca de escenas reutilizables (desierto, ciudad, playa, montaña, aeropuerto, mapa, dinero, listas) | YouTube |
 | 8 | Tablero de revisión semanal | Ambas |
+| 9 | Probar `investigacion/tendencias_youtube.py` con la clave y generar el informe del primer destino | Ambas |
+| 10 | Analista de retención: informe cada 2 semanas | Ambas |
 
 ## Hoja de ruta
 
 | Fase | Contenido | Depende de |
 |---|---|---|
-| **1. Estilo** | Aprobar Santi y la guía visual de reels | Pendientes 1–2 de Santiago |
+| **1. Estilo e investigación** | Aprobar Santi y la guía visual de reels; informe de tendencias del primer destino | Pendientes 1–2 y 9 de Santiago |
 | **2. Primer reel** | Rehacer Georgia con el estilo nuevo, comparar antes/después | Pendiente 3 + técnicos 1–5 |
 | **3. Piloto YouTube** | Video completo de Egipto con Santi | Pendiente 5 + técnicos 4, 6, 7 |
 | **4. Operación semanal** | Lotes de 3 reels + 1 carrusel + historias; YouTube cada 2 semanas; revisión y programación | Pendientes 4, 6, 7 + técnico 8 |
