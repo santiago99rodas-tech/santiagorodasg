@@ -42,6 +42,9 @@ Santiago graba su voz y sube su material a Drive; Claude produce todo; Santiago 
 | [`docs/05-inventario.md`](docs/05-inventario.md) | Inventario de todos los videos de Instagram, TikTok y YouTube con vistas |
 | [`docs/06-rodi.md`](docs/06-rodi.md) | Integración con RODI / RODI CLUB y reglas de marca |
 | [`docs/07-nicho-y-publico.md`](docs/07-nicho-y-publico.md) | Estudio de nicho y público con las estadísticas de las 3 plataformas |
+| [`docs/08-parrilla.md`](docs/08-parrilla.md) | Parrilla de las primeras 4 semanas (tips buscables + lugares con emoción + series con cierre a RODI) |
+| [`voice.md`](voice.md) | Voz de Santiago para las skills `ig-*` (copiar a `~/.claude/instagram/voice.md`) |
+| [`investigacion/outliers/`](investigacion/outliers/) | Videos outlier de YouTube por destino (`tendencias_sin_clave.py`) |
 
 ## Estructura de carpetas
 
@@ -88,7 +91,7 @@ contenido-viajes/
 | 5 | ~~Responder las 4 preguntas~~ (respondidas desde sus videos: confirmar fecha y ruta, mandar precios), grabar el guion de `guiones/egipto-youtube-largo.md` y subir **`Fotos viajes/Egipto/`** con el audio y el material | Piloto de YouTube |
 | 7 | Instalar **Claude in Chrome** y las **skills `ig-*`** en su computador | Programación y textos |
 | 8 | ~~Estudio de nicho y público~~ ✔ hecho (`docs/07`). Falta: capturas de edad, sexo y país de Instagram desde la app | Tono y temas |
-| 9 | Crear la **clave gratis de YouTube Data API** (pasos en `docs/05`) | Investigación de tendencias |
+| 9 | ~~Clave de YouTube Data API~~: ya no hace falta por ahora, `tendencias_sin_clave.py` funciona en su PC (Python 3.12 + yt-dlp instalados el 21-nov-2026) | Investigación de tendencias |
 | 10 | Dar acceso a **YouTube Studio Analytics** (vía Chrome) | Análisis de retención |
 
 ### Pendiente técnico (Claude)

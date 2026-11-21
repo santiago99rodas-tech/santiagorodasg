@@ -55,7 +55,13 @@ Repo `Jakeschincariol/instagram-agent-skill` (MIT), 13 skills. Instalar en Claud
 /plugin install instagram-agent
 ```
 
-Luego llenar `~/.claude/instagram/voice.md`.
+Luego copiar `../voice.md` (ya lleno con el estudio de público) a `~/.claude/instagram/voice.md`. En Windows (PowerShell):
+
+```
+New-Item -ItemType Directory -Force "$HOME\.claude\instagram"; Copy-Item contenido-viajes\voice.md "$HOME\.claude\instagram\voice.md"
+```
+
+Si un script de las skills pide `python3`, en este PC Python está en `%LOCALAPPDATA%\Programs\Python\Python312\python.exe`.
 
 | Skill | Uso |
 |---|---|
