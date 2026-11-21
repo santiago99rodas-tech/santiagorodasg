@@ -20,7 +20,11 @@
 </style></head><body>
 <div id="r"></div>
 <script>
-const n = +(new URLSearchParams(location.search).get('n') || 1);
+const Q = new URLSearchParams(location.search);
+const n = +(Q.get('n') || 1);
+if (Q.get('acc')) document.documentElement.style.setProperty('--acc', '#' + Q.get('acc'));
+const acc2 = Q.get('acc2') ? '#' + Q.get('acc2') : null;  // color del país para detalles
+const rotulo = Q.get('rotulo');
 const bg = (f, cls='') => `<div class="bg ${cls}" style="background-image:url(fondos/${f}.jpg)"></div>`;
 const frames = {
 // 0: antes (el video original de Georgia tal cual)
@@ -75,5 +79,8 @@ const frames = {
   <div class="emoji" style="position:absolute;left:820px;top:1420px;font-size:110px;transform:rotate(-15deg)">👆</div>
   <div class="label">DESPUÉS · CIERRE</div>`,
 };
-document.getElementById('r').innerHTML = `<div class="f">${frames[n]}</div>`;
+let html = frames[n];
+if (acc2) html += `<div style="position:absolute;left:90px;top:1120px;width:230px;height:230px;border:8px solid ${acc2};border-radius:50%;transform:rotate(-14deg);display:flex;flex-direction:column;align-items:center;justify-content:center;color:${acc2};font-family:'Bebas Neue';font-size:58px;line-height:.9;text-align:center;background:rgba(255,255,255,.12)">GEORGIA<span style="font-family:Montserrat;font-weight:800;font-size:22px;letter-spacing:3px">SVANETI</span></div>`;
+if (rotulo) html = html.replace(/<div class="label"[^>]*>[^<]*<\/div>/, `<div class="label">${rotulo}</div>`);
+document.getElementById('r').innerHTML = `<div class="f">${html}</div>`;
 </script></body></html>
