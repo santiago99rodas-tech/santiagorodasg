@@ -1,6 +1,6 @@
 # Contenido de viajes de Santiago Rodas
 
-Sistema para producir el contenido de viajes con Claude: Reels de Instagram (**@SantiagoRodas**), TikToks (**@SantiagoRodasTravel**) y videos largos de YouTube (canal existente).
+Sistema para producir el contenido de viajes con Claude: Reels de Instagram (**@SantiagoRodas**), TikToks (**@SantiagoRodasTravel**) y videos largos de YouTube (canal existente), conectado con **RODI CLUB**, la app de viajes de Santiago.
 
 Santiago graba su voz y sube su material a Drive; Claude produce todo; Santiago revisa una vez por semana; Claude programa lo aprobado.
 
@@ -23,6 +23,7 @@ Santiago graba su voz y sube su material a Drive; Claude produce todo; Santiago 
 | 9 | Los textos se apoyan en las **13 skills `ig-*`** (guiones, captions, carruseles, DMs) |
 | 10 | Un agente distinto por plataforma: `editor-reels` y `editor-youtube` (`.claude/agents/`) |
 | 12 | Tipografía principal **Bebas Neue**; secundarias Playfair Display Italic y Montserrat. Todas gratis |
+| 14 | Todo el contenido se conecta con **RODI CLUB** (su app de viajes): los cierres llevan a guías e itinerarios en RODI, la app aparece como material real, el sello de pasaporte es el mismo de la app. Ver `docs/06-rodi.md` |
 | 13 | Color: **amarillo fijo** en palabras clave + **color de cada país** en el sello de pasaporte y detalles (opción C) |
 | 11 | Antes de cada destino se investiga **qué quiere ver la gente** y después de publicar se mide **la retención**, todo con herramientas **gratis** (YouTube Data API, vidIQ plan gratis, YouTube Studio). Nada de NexLev ni clonación de voz |
 
@@ -36,6 +37,7 @@ Santiago graba su voz y sube su material a Drive; Claude produce todo; Santiago 
 | [`docs/03-youtube.md`](docs/03-youtube.md) | Fórmula, personaje Santi, escenas, equipo de agentes, Remotion |
 | [`docs/04-referencias.md`](docs/04-referencias.md) | Análisis de los videos de referencia |
 | [`docs/05-investigacion-y-retencion.md`](docs/05-investigacion-y-retencion.md) | Investigar temas que funcionan y medir retención, gratis |
+| [`docs/06-rodi.md`](docs/06-rodi.md) | Integración con RODI / RODI CLUB y reglas de marca |
 
 ## Estructura de carpetas
 

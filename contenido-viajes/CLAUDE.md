@@ -44,6 +44,15 @@ Santiago **no sale a cámara**. Todo se arma sobre **su voz en off** + material 
 
 Maquetas aprobables del resultado esperado (antes / después sobre cuadros de Georgia): `reels/maquetas/antes-despues.jpg`.
 
+## Regla 3: RODI / RODI CLUB
+
+El contenido se conecta con **RODI CLUB** (rodiclub.com y la app *RODI – Planificador de viajes*), la marca y app de viajes de Santiago. Detalle completo en `docs/06-rodi.md`. Lo mínimo:
+
+- Los cierres ("comenta RUTA…") llevan a guías, itinerarios o la calculadora **dentro de RODI CLUB**, con `?src=ig|tiktok|yt`.
+- **El logo de RODI nunca se dibuja ni se genera con IA**: solo archivos maestros, sin cambios, sin ®. Siempre "RODI" / "RODI CLUB" en mayúsculas. Ningún claim sin prueba.
+- Los videos de Santiago mantienen su estilo; las piezas de **@rodi.club** usan la identidad RODI (Cormorant Garamond + Montserrat, Carbon/Ivory/Gold, voz contemplativa). No se mezclan.
+- Todo lo que hable en nombre de RODI requiere aprobación escrita de Santiago.
+
 ## Cómo comprobarlo antes de entregar
 
 Antes de pasar un video a la revisión semanal, el agente cuenta los segundos:
