@@ -2,7 +2,7 @@
   "name": "youtube-animacion",
   "private": true,
   "scripts": {
-    "render": "remotion render src/index.ts PruebaEgipto out/prueba-egipto.mp4 --browser-executable=/opt/pw-browsers/chromium"
+    "render": "remotion render src/index.ts PruebaEgipto pruebas/prueba.mp4 --browser-executable=/opt/pw-browsers/chromium"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.242",
