@@ -5,6 +5,8 @@ Sistema para producir el contenido de viajes con Claude: Reels de Instagram (**@
 Santiago graba su voz y sube su material a Drive; Claude produce todo; Santiago revisa una vez por semana; Claude programa lo aprobado.
 
 > **Agentes: lean primero [`CLAUDE.md`](CLAUDE.md).** Son las reglas obligatorias de estilo.
+>
+> **¿Sesión nueva?** Empieza por [`TRASPASO.md`](TRASPASO.md): todo el contexto de la conversación original, preferencias de Santiago y tareas inmediatas.
 
 ---
 
@@ -45,6 +47,8 @@ Santiago graba su voz y sube su material a Drive; Claude produce todo; Santiago 
 contenido-viajes/
 ├─ README.md                  ← este índice
 ├─ CLAUDE.md                  ← reglas para agentes
+├─ TRASPASO.md                ← contexto completo para una sesión nueva
+├─ referencias/               ← videos, fotos y PDF que envió Santiago
 ├─ docs/                      ← documentación
 ├─ fuentes/                   ← Bebas Neue, Playfair Display, Montserrat (gratis, licencia OFL)
 ├─ investigacion/             ← scripts de outliers del nicho y un .md por destino (egipto.md)
