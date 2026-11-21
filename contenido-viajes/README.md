@@ -37,7 +37,9 @@ Santiago graba su voz y sube su material a Drive; Claude produce todo; Santiago 
 | [`docs/03-youtube.md`](docs/03-youtube.md) | Fórmula, personaje Santi, escenas, equipo de agentes, Remotion |
 | [`docs/04-referencias.md`](docs/04-referencias.md) | Análisis de los videos de referencia |
 | [`docs/05-investigacion-y-retencion.md`](docs/05-investigacion-y-retencion.md) | Investigar temas que funcionan y medir retención, gratis |
+| [`docs/05-inventario.md`](docs/05-inventario.md) | Inventario de todos los videos de Instagram, TikTok y YouTube con vistas |
 | [`docs/06-rodi.md`](docs/06-rodi.md) | Integración con RODI / RODI CLUB y reglas de marca |
+| [`docs/07-nicho-y-publico.md`](docs/07-nicho-y-publico.md) | Estudio de nicho y público con las estadísticas de las 3 plataformas |
 
 ## Estructura de carpetas
 
@@ -79,9 +81,9 @@ contenido-viajes/
 | 2 | ~~Maquetas, tipografía y color~~ ✔ decididos | — |
 | 3 | Subir **`Fotos viajes/Georgia/`** con audio y tomas originales sin subtítulos | Primer reel real: rehacer Georgia y comparar |
 | 4 | Subir **`Fotos viajes/Guiones/`** con los guiones grabados y su material | Primer lote de reels |
-| 5 | Responder las 4 preguntas de `guiones/egipto-youtube-largo.md`, grabar ese guion y subir **`Fotos viajes/Egipto/`** con el audio y el material | Piloto de YouTube |
+| 5 | ~~Responder las 4 preguntas~~ (respondidas desde sus videos: confirmar fecha y ruta, mandar precios), grabar el guion de `guiones/egipto-youtube-largo.md` y subir **`Fotos viajes/Egipto/`** con el audio y el material | Piloto de YouTube |
 | 7 | Instalar **Claude in Chrome** y las **skills `ig-*`** en su computador | Programación y textos |
-| 8 | Estudio de **nicho y público** a partir de sus redes (lo hace la sesión del PC con Chrome; Santiago aporta capturas de estadísticas de audiencia si hace falta) | Tono y temas |
+| 8 | ~~Estudio de nicho y público~~ ✔ hecho (`docs/07`). Falta: capturas de edad, sexo y país de Instagram desde la app | Tono y temas |
 | 9 | Crear la **clave gratis de YouTube Data API** (pasos en `docs/05`) | Investigación de tendencias |
 | 10 | Dar acceso a **YouTube Studio Analytics** (vía Chrome) | Análisis de retención |
 
