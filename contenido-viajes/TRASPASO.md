@@ -58,12 +58,14 @@ Este documento resume una conversación larga con Claude en la nube (21-nov-2026
 
 ## 6. Tareas inmediatas para esta sesión (en orden)
 
-1. **Inventario de sus redes** desde Chrome: todos sus videos de Instagram, TikTok y YouTube (tema, destino, fecha, vistas, likes, comentarios, guardados). Mapa de temas, qué funcionó mejor, huecos. → `docs/05-inventario.md` *(nota: renombrar a `07-inventario.md` si choca con `05-investigacion-y-retencion.md`)*.
-2. **Estudio de nicho y público** con las estadísticas de audiencia de las 3 plataformas (edad, género, países, ciudades, horarios, qué temas dan guardados, compartidos y seguidores). → `docs/08-nicho-y-publico.md`.
-3. **Videos de Egipto en su Instagram**: con lo que se ve y se dice, responder las 4 preguntas del guion y ajustar `guiones/egipto-youtube-largo.md` a su viaje real.
-4. Instalar `yt-dlp` y correr `investigacion/tendencias_sin_clave.py` con sus destinos principales. Actualizar `investigacion/egipto.md` con los outliers.
-5. Instalar las skills `ig-*` en Claude Code del PC y llenar `~/.claude/instagram/voice.md` con lo que salga del estudio de público.
-6. Subir todo a la rama `ccr-103411ab-mfj82d`.
+**Ya hechas por la sesión del PC (21-nov-2026):** inventario de redes (`docs/05-inventario.md`), estudio de nicho y público (`docs/07-nicho-y-publico.md`) y respuestas del guion de Egipto sacadas de sus videos (`guiones/egipto-youtube-largo.md`). Hallazgos clave: lo que más rinde son los **tips prácticos** (maleta de 10 kg: 110 K IG / 122 K TikTok) y los **lugares poco comunes con relato emocional** (Oporto 64 K, "Vivir en silencio" 50 K); público hispano con base en **Colombia**, dos grupos (**25–34** y **55+**); casi nadie vuelve (falta comunidad); en TikTok **2/3 del tráfico es búsqueda**. Egipto fue en **sept-2023**, 5 días, en familia, con guía y crucero; **sin precios ni estafas** en los videos.
+
+Siguiente:
+1. Pedir a Santiago lo que falta del guion de Egipto: **precios** (vuelos, visa, paquete crucero + guía, hoteles, entradas, Abu Simbel, propinas), cómo se movió Cairo ↔ Luxor/Asuán, y confirmar la fecha. Aplicar los cambios propuestos al guion (gancho sin "estafas", bloque de regateo con los mercaderes del Nilo, bloque del museo antiguo vs. GEM).
+2. Instalar `yt-dlp` y correr `investigacion/tendencias_sin_clave.py` con Egipto y sus destinos fuertes (Portugal/Oporto, Georgia, Marruecos, EAU, Suiza). Actualizar `investigacion/`.
+3. Replantear la parrilla con el inventario: más **tips prácticos buscables** + **lugar poco común con emoción**; series con continuidad y cierres a RODI CLUB para crear comunidad. Pedir capturas de *Estadísticas → Seguidores* de la app de Instagram (la web no da edad/país).
+4. Instalar las skills `ig-*` y llenar `~/.claude/instagram/voice.md` con el estudio de público (tono antioqueño auténtico).
+5. Subir todo a la rama `ccr-103411ab-mfj82d`.
 
 ## 7. Pendientes de Santiago
 
