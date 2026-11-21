@@ -24,7 +24,7 @@ Canal existente (ya tiene seguidores y Shorts). Objetivo: sumar videos largos de
 
 Regla fija: **la animación siempre corresponde al destino y a la frase**. Nada genérico ni de otro país.
 
-Proporción objetivo por video: ~40 % material real de Santiago, ~60 % animación y gráficos. El material real aparece siempre en los momentos de experiencia ("yo viví", "me pasó") y la animación en los de información (precios, rutas, pasos, errores).
+Proporción objetivo por video: **~70 % animación y gráficos (mínimo 50 %)** y **~30 % material real** de Santiago, solo para mostrar cosas puntuales. Formato horizontal 1920×1080 con voz en off. (Reglas completas en `CLAUDE.md`.) El material real aparece siempre en los momentos de experiencia ("yo viví", "me pasó") y la animación en los de información (precios, rutas, pasos, errores).
 
 **Mascota del canal**: un personaje propio y original (p. ej. un viajero pequeño con mochila y sombrero, o una maleta con patas) que aparece en todos los videos. Da identidad y repetirlo abarata la producción. Se diseña una vez, con varias poses (camina, señala, se sorprende, paga, duerme, toma foto).
 
