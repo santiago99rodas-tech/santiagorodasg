@@ -1,0 +1,57 @@
+{
+ "voz": "voz-v3.mp3",
+ "musica": "../../../../../milan/musica/taking-flight.mp3",
+ "filtro_musica": "acompressor=threshold=-22dB:ratio=1.8:attack=30:release=400",
+ "volumen_musica": 1.0,
+ "duracion": 57.05,
+ "sfx": [
+  {
+   "t": 0.41,
+   "tipo": "impacto",
+   "dur": 1.5,
+   "vol": 0.3
+  },
+  {
+   "t": 17.33,
+   "tipo": "whoosh",
+   "dur": 1,
+   "vol": 0.3
+  },
+  {
+   "t": 18.53,
+   "tipo": "swoosh",
+   "dur": 0.6,
+   "vol": 0.3
+  },
+  {
+   "t": 26.72,
+   "tipo": "swoosh",
+   "dur": 0.6,
+   "vol": 0.3
+  },
+  {
+   "t": 34.2,
+   "tipo": "pop",
+   "dur": 0.5,
+   "vol": 0.35
+  },
+  {
+   "t": 36.53,
+   "tipo": "swoosh",
+   "dur": 0.6,
+   "vol": 0.3
+  },
+  {
+   "t": 43.53,
+   "tipo": "ding",
+   "dur": 1.2,
+   "vol": 0.3
+  },
+  {
+   "t": 44.53,
+   "tipo": "swoosh",
+   "dur": 0.6,
+   "vol": 0.3
+  }
+ ]
+}
