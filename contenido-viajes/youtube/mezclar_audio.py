@@ -10,6 +10,7 @@ Mismas reglas que los reels (docs/09-reglas-reels.md):
 Uso:
   python mezclar_audio.py plan_audio.json video-sin-audio.mp4 salida.mp4
 plan_audio.json: {"voz": "...wav", "musica": "...mp3", "volumen_musica": 0.9, "duracion": 70.6,
+                  "filtro_musica": "lowpass=f=6000" (opcional: suaviza la música para YouTube),
                   "sfx": [{"t": 2.6, "tipo": "impacto2", "vol": 0.5, "dur": 2}, ...]}
 Los efectos se buscan en ../reels/recursos/sfx/<tipo>.mp3
 """
@@ -27,7 +28,7 @@ def main(plan_path, video, salida):
     ins = ["-i", video, "-i", p["voz"], "-stream_loop", "-1", "-i", p["musica"]]
     g = [
         "[1:a]aformat=sample_rates=48000:channel_layouts=stereo,apad,asplit=3[v][k1][k2]",
-        f"[2:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={p.get('volumen_musica', 0.9)},"
+        f"[2:a]aformat=sample_rates=48000:channel_layouts=stereo,{p['filtro_musica'] + ',' if p.get('filtro_musica') else ''}volume={p.get('volumen_musica', 0.9)},"
         f"afade=t=in:d=1.5,afade=t=out:st={dur - 2.5}:d=2.5[m]",
         "[m][k1]sidechaincompress=threshold=0.03:ratio=2.5:attack=30:release=600:makeup=1[md]",
     ]

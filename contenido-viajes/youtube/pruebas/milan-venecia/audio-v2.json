@@ -1,0 +1,11 @@
+{
+ "voz": "voz-v2.mp3",
+ "musica": "../../../../../milan/musica/taking-flight.mp3",
+ "filtro_musica": "lowpass=f=5500,acompressor=threshold=-24dB:ratio=2:attack=20:release=300",
+ "volumen_musica": 0.7,
+ "duracion": 63.1,
+ "sfx": [
+  {"t": 18.9, "tipo": "whoosh", "dur": 1, "vol": 0.3},
+  {"t": 37.6, "tipo": "pop", "dur": 0.5, "vol": 0.35}
+ ]
+}

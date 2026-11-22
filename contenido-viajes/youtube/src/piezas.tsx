@@ -334,3 +334,88 @@ export const QR: React.FC<{tam: number}> = ({tam}) => {
   );
   return <svg width={tam} height={tam}><rect width={tam} height={tam} fill="#fff" />{celdas}{ojo(0, 0)}{ojo(n - 7, 0)}{ojo(0, n - 7)}</svg>;
 };
+
+// ================================================================ piezas de formato YouTube (v2)
+// Reglas: docs/03-youtube.md (borrador v2) + docs/10-referencias-youtube.md. Animación sobria: cortes limpios,
+// fondos lisos, fotos naturales solo como apoyo, texto escaso y funcional.
+
+// fondo liso del "plano base" de Santi (de frente, opina y presenta)
+export const FondoLiso: React.FC<{x?: number; color?: string; circulo?: string}> = ({x = 560, color = PAL.papel2, circulo = PAL.terracota}) => (
+  <AbsoluteFill style={{background: color}}>
+    <div style={{position: 'absolute', left: x - 380, top: 230, width: 760, height: 760, borderRadius: 380, background: circulo, opacity: 0.28}} />
+    <div style={{position: 'absolute', left: 0, right: 0, top: 1000, bottom: 0, background: '#000', opacity: 0.05}} />
+  </AbsoluteFill>
+);
+
+// foto real natural (sin filtro) en tarjeta tipo polaroid: es prueba, no protagonista
+export const Polaroid: React.FC<{f: number; desde?: number; src: string; x: number; y: number; ancho: number; alto: number; pie?: string; giro?: number; foco?: [number, number]}> = (
+  {f, desde = 0, src, x, y, ancho, alto, pie, giro = -3, foco = [50, 50]},
+) => {
+  const {fps} = useVideoConfig();
+  if (f < desde) return null;
+  const e = pop(f, fps, desde);
+  const z = 1 + Math.min(1, (f - desde) / 150) * 0.03; // casi quieta
+  return (
+    <div style={{position: 'absolute', left: x, top: y, transform: `translate(-50%, -50%) rotate(${giro}deg) scale(${e})`,
+      background: '#FFFFFF', padding: `22px 22px ${pie ? 86 : 22}px`, borderRadius: 4, boxShadow: '0 18px 40px rgba(46,36,32,0.18)'}}>
+      <div style={{width: ancho, height: alto, overflow: 'hidden'}}>
+        <Img src={staticFile(src)} style={{width: '100%', height: '100%', objectFit: 'cover', objectPosition: `${foco[0]}% ${foco[1]}%`, transform: `scale(${z})`}} />
+      </div>
+      {pie && <div style={{position: 'absolute', bottom: 22, left: 0, right: 0, textAlign: 'center', fontFamily: F.playfair, fontStyle: 'italic', fontSize: 46, color: PAL.tinta}}>{pie}</div>}
+    </div>
+  );
+};
+
+// etiqueta de capítulo arriba a la izquierda (se queda todo el capítulo)
+export const Capitulo: React.FC<{f: number; n: number; titulo: string}> = ({f, n, titulo}) => {
+  const t = entra(f, 0, 9);
+  return (
+    <div style={{position: 'absolute', left: 70, top: 56, transform: `translateX(${(1 - t) * -60}px)`, opacity: t, display: 'flex', alignItems: 'center', gap: 18}}>
+      <div style={{background: PAL.tinta, color: '#fff', fontFamily: F.mont, fontWeight: 800, fontSize: 26, letterSpacing: 4, padding: '10px 18px', borderRadius: 8}}>CAPÍTULO {n}</div>
+      <div style={{fontFamily: F.bebas, fontSize: 64, color: PAL.tinta, letterSpacing: 2, lineHeight: 1}}>{titulo}</div>
+    </div>
+  );
+};
+
+// tarjeta de título sobria (2 s, después de la intro)
+export const TarjetaTitulo: React.FC<{f: number; titulo: string; sub?: string}> = ({f, titulo, sub}) => {
+  const t = entra(f, 0, 10);
+  return (
+    <AbsoluteFill style={{background: PAL.tinta, alignItems: 'center', justifyContent: 'center'}}>
+      <div style={{fontFamily: F.bebas, fontSize: 170, color: '#F4E9D8', letterSpacing: 4, opacity: t, transform: `translateY(${(1 - t) * 24}px)`}}>{titulo}</div>
+      <div style={{width: 160 * t, height: 8, background: PAL.amarillo, margin: '6px 0 26px'}} />
+      {sub && <div style={{fontFamily: F.playfair, fontStyle: 'italic', fontSize: 56, color: '#E8D6BC', opacity: entra(f, 8, 12)}}>{sub}</div>}
+    </AbsoluteFill>
+  );
+};
+
+// lista que aparece línea por línea (agenda, resumen)
+export const Lista: React.FC<{f: number; x: number; y: number; items: {desde: number; texto: string}[]; tam?: number; numerada?: boolean; check?: boolean; gap?: number}> = (
+  {f, x, y, items, tam = 84, numerada, check, gap = 1.45},
+) => (
+  <>
+    {items.map((it, i) => {
+      if (f < it.desde) return null;
+      const t = entra(f, it.desde, 8);
+      return (
+        <div key={i} style={{position: 'absolute', left: x, top: y + i * tam * gap, transform: `translateX(${(1 - t) * 40}px)`, opacity: t,
+          display: 'flex', alignItems: 'center', gap: tam * 0.3, whiteSpace: 'nowrap'}}>
+          {numerada && <div style={{width: tam * 1.05, height: tam * 1.05, borderRadius: tam, background: PAL.amarillo, fontFamily: F.bebas, fontSize: tam * 0.8,
+            color: PAL.tinta, display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: tam * 0.06}}>{i + 1}</div>}
+          {check && <div style={{width: tam * 0.95, height: tam * 0.95, borderRadius: tam, background: PAL.verde, fontFamily: F.mont, fontWeight: 800, fontSize: tam * 0.55,
+            color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>✓</div>}
+          <div style={{fontFamily: F.bebas, fontSize: tam, color: PAL.tinta, letterSpacing: 2, lineHeight: 1, paddingTop: tam * 0.08}}>{it.texto}</div>
+        </div>
+      );
+    })}
+  </>
+);
+
+// sticker (emoji 3D) que aparece con un pop y flota apenas
+export const Sticker: React.FC<{f: number; desde: number; src: string; x: number; y: number; tam?: number; giro?: number}> = ({f, desde, src, x, y, tam = 150, giro = 8}) => {
+  const {fps} = useVideoConfig();
+  if (f < desde) return null;
+  const e = pop(f, fps, desde);
+  return <Img src={staticFile(src)} style={{position: 'absolute', left: x - tam / 2, top: y - tam / 2 + Math.sin(f / 14) * 5, width: tam, height: tam,
+    transform: `scale(${e}) rotate(${giro + Math.sin(f / 20) * 3}deg)`}} />;
+};

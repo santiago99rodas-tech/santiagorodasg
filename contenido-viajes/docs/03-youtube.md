@@ -81,7 +81,9 @@ Video hecho con código (React → MP4). Prueba actual: `src/PruebaEgipto.tsx` (
 
 **Firma de cierre obligatoria:** todo video termina con su voz diciendo **"Nos vemos pues"** y el texto en pantalla. Si no lo grabó, se toma de otra grabación suya (limpiada con la misma cadena e igualada en volumen).
 
-**Edición de la voz (`youtube/pulir_voz.py`)**: Santiago manda el audio crudo, con silencios y errores. Claude lo transcribe con tiempos por palabra, marca titubeos y repeticiones, corta las pausas (0,3 s entre frases y 0,4 s entre ideas), aplica **reducción de ruido obligatoria** (red neuronal RNNoise), ecualiza (menos caja, más presencia), comprime y deja el volumen estándar de YouTube (−14 a −16 LUFS, pico bajo 0 dB). Después vuelve a transcribir y compara palabra por palabra para confirmar que no se cortó nada.
+**Edición de la voz (`youtube/pulir_voz.py`)**: Santiago manda el audio crudo, con silencios y errores. Claude lo transcribe con tiempos por palabra, marca titubeos y repeticiones, corta las pausas (0,3 s entre frases y 0,4 s entre ideas), aplica **reducción de ruido obligatoria** (red neuronal RNNoise), ecualiza (menos caja, más presencia), comprime y deja el volumen estándar de YouTube (−14 a −16 LUFS, pico bajo 0 dB). Después vuelve a transcribir y compara palabra por palabra para confirmar que no se cortó nada. Por último se mete un **respiro de silencio antes de cada capítulo** (0,7 s, o 1,8 s después de la intro para la tarjeta de título), buscando el punto más silencioso para no cortar ninguna palabra.
+
+**Mezcla (`youtube/mezclar_audio.py`)**: la música pasa por un filtro que la suaviza (`filtro_musica`: paso bajo a 5,5 kHz + compresión suave) y se ajusta el volumen hasta medir **~16 dB bajo la voz** con `medir_audio_local.py` (prototipo v2: Taking Flight a 0,7 → 16,1 dB). Efectos: solo 2 en el minuto (*whoosh* suave en la tarjeta de título y *pop* en la cifra clave).
 
 - Audio de 5–10 min por destino, contado como a un amigo: qué hizo, cuánto costó, qué salió mal, qué recomienda. No tiene que ser perfecto.
 - Fotos y videos de ese viaje en `Fotos viajes/<Destino>/` en Drive.
