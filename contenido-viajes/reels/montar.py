@@ -136,9 +136,10 @@ def montar(plan, salida):
     color = plan.get("color", True)
     final = prev
     if color:
-        graph.append(f"{prev}eq=contrast=1.08:saturation=1.18:gamma=0.98,"
-                     f"colorbalance=rs=0.05:gs=0.01:bs=-0.05:rm=0.03:bm=-0.04,"
-                     f"vignette=angle=PI/4.5,noise=alls=6:allf=t+u,format=yuv420p[vf]")
+        # REGLA: color cálido y luminoso (golden hour), nunca oscuro: gamma >1, viñeta suave, grano leve
+        graph.append(f"{prev}eq=contrast=1.04:saturation=1.12:gamma=1.08:brightness=0.02,"
+                     f"colorbalance=rs=0.06:gs=0.02:bs=-0.07:rm=0.06:gm=0.01:bm=-0.06:rh=0.04:bh=-0.05,"
+                     f"vignette=angle=PI/7,noise=alls=4:allf=t+u,format=yuv420p[vf]")
         final = "[vf]"
     video = os.path.join(tmp, "video.mp4")
     run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", *inputs,

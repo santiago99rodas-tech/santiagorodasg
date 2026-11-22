@@ -122,7 +122,7 @@ def _ancho(txt, size, estilo):
     return int(len(txt) * size * k) + 50
 
 
-def _velo(y, h, a, b, alfa="78", layer=2):
+def _velo(y, h, a, b, alfa="A8", layer=2):
     """Velo oscuro difuso detrás de un bloque de texto (no toca la letra: la letra sigue sólida).
     y = centro vertical, h = alto. alfa: 00 opaco ... FF invisible."""
     return dia(layer, a, b, "Shape",
@@ -193,7 +193,7 @@ def ev_words(e, out):
         else:
             tramos.append([w["s"], w["e"]])
     for a, b in tramos:
-        out.append(_velo(y, 260, a, b, alfa="88", layer=1))
+        out.append(_velo(y, 240, a, b, alfa="B8", layer=1))
     for k, w in enumerate(words):
         clean = w["w"].strip(",.!?¡¿").lower()
         rot = (-3, 2, -1, 3, 0, -2)[k % 6]
