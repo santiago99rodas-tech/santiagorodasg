@@ -64,7 +64,6 @@ def header(brand):
         ("SansDark", sans, 120, dark, 0, 0, 0, 0),
         ("Big", sans, 260, acc, 0, 0, 0, 0),
         ("Anton", "Anton", 150, white, 0, 0, 0, 0),
-        ("Marker", "Permanent Marker", 110, acc, 0, 0, 0, 0),
         ("Texto", "Montserrat ExtraBold", 90, white, 0, 0, 0, 0),
         ("Serif", serif, 120, white, 0, -1, 0, 0),
         ("SerifAcc", serif, 130, acc, -1, -1, 0, 0),
@@ -119,7 +118,7 @@ def _caja(x, y, w, h, color, layer, a, b, rot=0, anim=""):
 
 def _ancho(txt, size, estilo):
     k = {"sans": 0.42, "big": 0.42, "sansdark": 0.42, "serif": 0.5, "serifacc": 0.5,
-         "anton": 0.5, "marker": 0.6, "texto": 0.66}.get(estilo, 0.45)
+         "anton": 0.5, "texto": 0.66}.get(estilo, 0.45)
     return int(len(txt) * size * k) + 50
 
 
@@ -135,15 +134,15 @@ def _velo(y, h, a, b, alfa="78", layer=2):
 CAJAS = {"amarilla": (None, None), "blanca": ("#FFFFFF", "#14110F"), "negra": ("#14110F", "#FFFFFF"),
          "roja": ("#CE2B37", "#FFFFFF"), "verde": ("#009246", "#FFFFFF")}
 ESTILOS = {"sans": "Sans", "big": "Big", "serif": "Serif", "serifacc": "SerifAcc", "sansdark": "SansDark",
-           "anton": "Anton", "marker": "Marker", "texto": "Texto"}
-# la manuscrita (Permanent Marker) y Montserrat se ven chicas al mismo s: se agrandan al dibujar
-FS_K = {"marker": 1.55, "texto": 1.15}
-TAMANOS = {"sans": 190, "big": 400, "serif": 150, "serifacc": 165, "sansdark": 190, "anton": 170, "marker": 120, "texto": 90}
+           "anton": "Anton", "texto": "Texto"}
+# Montserrat se ve chica al mismo \fs que Bebas: se agranda al dibujar
+FS_K = {"texto": 1.15}
+TAMANOS = {"sans": 190, "big": 400, "serif": 150, "serifacc": 165, "sansdark": 190, "anton": 170, "texto": 90}
 
 
 def ev_hook(e, out):
     """Bloque de texto cinético: líneas apiladas que entran una por una.
-    Cada línea: "t" texto, "estilo" (sans/big/anton/marker/texto/serif/serifacc), "tam", "t0" (segundo absoluto),
+    Cada línea: "t" texto, "estilo" (sans = Bebas, la principal / big / serif / serifacc / texto / anton), "tam", "t0" (segundo absoluto),
     "entrada" (pop/golpe/sube/foco), "caja" (true = amarilla, o "blanca"/"negra"/"roja"/"verde"),
     "color" (#hex), "x", "giro", "espacio".
     Texto sólido siempre: sin contorno, sin sombra, sin brillo. Si el bloque no va todo en cajas,
@@ -257,8 +256,8 @@ def ev_map(e, out):
         out.append(dia(8, t0, b, "Shape", f"{{\\an7\\pos({x},{y})\\1c{bgr(col)}\\bord0\\shad0{POP}\\p1}}{pin}{{\\p0}}"))
         out.append(dia(8, t0, b, "Sans", f"{{\\pos({x},{y + 70})\\fs92{POP}}}{nombre}"))
     if e.get("texto"):
-        out.append(dia(8, a + 0.4 + dur_dibujo, b, "Marker",
-                       f"{{\\pos({W//2},{cy + 195})\\fs126\\1c{bgr(e['_acento'])}{ENTRADAS['sube']}}}{e['texto']}"))
+        out.append(dia(8, a + 0.4 + dur_dibujo, b, "SerifAcc",
+                       f"{{\\pos({W//2},{cy + 195})\\fs90\\1c{bgr(e['_acento'])}{ENTRADAS['sube']}}}{e['texto']}"))
 
 
 def ev_rec(e, out):
@@ -305,8 +304,8 @@ def ev_cta(e, out):
     a, b = e["inicio"], e["fin"]
     y = e.get("y", 380)
     out.append(_velo(y + 90, 420, a, b))
-    out.append(dia(5, a, b, "Marker", f"{{\\pos({W//2},{y})\\fs165\\1c&HFFFFFF&{POP}}}{e['pequeno']}"))
-    out.append(dia(5, a + 0.2, b, "Anton", f"{{\\pos({W//2},{y+175})\\fs210\\1c{bgr(e['_acento'])}{POP}}}{e['grande']}"))
+    out.append(dia(5, a, b, "Serif", f"{{\\pos({W//2},{y})\\fs125\\1c&HFFFFFF&{POP}}}{e['pequeno']}"))
+    out.append(dia(5, a + 0.2, b, "Big", f"{{\\pos({W//2},{y+175})\\fs250\\1c{bgr(e['_acento'])}{POP}}}{e['grande']}"))
 
 
 def ev_typewriter(e, out):
@@ -516,8 +515,6 @@ def build(plan, out_path, demo=False):
 
     # --- audio: original + efectos con retardo
     af_parts, mix = [], []
-    if has_audio:
-        mix.append("[0:a]")
     for i, s in enumerate(sorted(sfx, key=lambda x: x["t"])):
         ms = int(s["t"] * 1000)
         real = _archivo("sfx", s["tipo"], (".mp3", ".wav"))
@@ -533,8 +530,26 @@ def build(plan, out_path, demo=False):
             af_parts.append(sfx_src(s["tipo"], i).replace(f"[s{i}]", f",adelay={ms}|{ms}[s{i}]"))
         mix.append(f"[s{i}]")
     graph = graph_v + af_parts
+    # REGLA: los efectos pueden sonar fuerte (impacto) pero NUNCA por encima de la voz.
+    # Van a un bus propio que se comprime con la voz como llave: cuando Santiago habla,
+    # los efectos bajan solos (~5-8 dB) y quedan por debajo de la voz; en los silencios suenan completos.
+    salida = []
+    if has_audio:
+        salida.append("[0:a]")
     if mix:
-        graph.append("".join(mix) + f"amix=inputs={len(mix)}:normalize=0,alimiter=limit=0.89:level=false,atrim=0:{dur}[a]")
+        graph.append("".join(mix) + f"amix=inputs={len(mix)}:normalize=0,volume={plan.get('volumen_sfx', 1.0)}[sfxbus]")
+        voz = plan.get("voz")
+        if voz and not demo:
+            k = _n_entradas(inputs)
+            inputs += ["-i", voz]
+            graph.append(f"[{k}:a]aformat=sample_rates=48000:channel_layouts=stereo,apad,asplit=1[llave]")
+            graph.append(f"[sfxbus][llave]sidechaincompress=threshold={plan.get('sfx_umbral', 0.08)}:ratio={plan.get('sfx_ratio', 2.5)}:attack=5:release=300:makeup=1[sfxd]")
+            salida.append("[sfxd]")
+        else:
+            salida.append("[sfxbus]")
+    if salida:
+        mix = salida
+        graph.append("".join(salida) + f"amix=inputs={len(salida)}:normalize=0,alimiter=limit=0.89:level=false,atrim=0:{dur}[a]")
     # el grafo va en un archivo: con muchos stickers y sonidos el comando supera el límite de Windows
     with open(os.path.join(tmp, "grafo.txt"), "w", encoding="utf-8") as f:
         f.write(";\n".join(graph))

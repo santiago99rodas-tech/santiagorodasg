@@ -156,7 +156,7 @@ def montar(plan, salida):
         graph = (f"{voz},asplit=2[v1][v2];"
                  f"[2:a]atrim=start={ss},asetpts=PTS-STARTPTS,aformat=channel_layouts=stereo,volume={vol},"
                  f"afade=t=out:st={dur-2.5}:d=2.5[m];"
-                 f"[m][v2]sidechaincompress=threshold=0.02:ratio=6:attack=30:release=600:makeup=1[md];"
+                 f"[m][v2]sidechaincompress=threshold=0.03:ratio={plan.get('ducking_ratio', 6)}:attack=30:release=600:makeup=1[md];"
                  f"[v1][md]amix=inputs=2:normalize=0,atrim=0:{dur}[a]")
     else:
         graph = f"{voz},atrim=0:{dur}[a]"
