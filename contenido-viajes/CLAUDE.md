@@ -19,6 +19,7 @@ Santiago **no sale a cámara**. Todo se arma sobre **su voz en off** + material 
 | **Material real** (fotos/videos de Santiago) | **~30 %**. Solo para mostrar cosas puntuales: el lugar exacto, una comida, un momento vivido, la prueba de que estuvo ahí |
 | Coherencia | La animación siempre corresponde al destino y a la frase que se está diciendo. Si habla de Egipto, se ve Egipto (desierto, pirámides, Nilo), nunca escenas genéricas ni de otro país |
 | Herramienta | Remotion (`youtube/`) |
+| **Reglas de diseño aprobadas** | `docs/03-youtube.md` → "Reglas de diseño" (prototipo v3, 22-nov-2026): explicación con ritmo, tomas de 3–4 s, Santi presenta y reacciona, capítulos con nombre, fotos naturales en polaroid, música ~12 dB bajo la voz |
 | Personaje | **Santi** (estilo póster de viaje con expresiones, proporciones adultas): `youtube/personaje/`. No usar el viajero con sombrero ni las propuestas descartadas |
 
 ## Regla 2: Instagram y TikTok = contenido real

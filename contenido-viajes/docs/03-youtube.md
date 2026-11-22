@@ -14,23 +14,33 @@ Canal existente, con seguidores y Shorts. Se suman videos largos de mucho valor 
 
 **Regla de reparto**: material real en los momentos de experiencia ("llegamos de noche", "me pasó esto"); animación en los de información (precios, rutas, pasos, errores).
 
-## Reglas de diseño (borrador v2, pendiente de aprobar con el prototipo)
+## Reglas de diseño (aprobadas el 22-nov-2026 con el prototipo v3)
 
-Salen de analizar 17 videos con muchas vistas (`docs/10-referencias-youtube.md`). La v1 del prototipo se sentía como **un reel en horizontal**; YouTube es **explicación**:
+Salen de analizar 17 videos con muchas vistas (`docs/10-referencias-youtube.md`) y de 3 versiones del prototipo de 1 minuto "Venecia cobra por entrar" (`youtube/src/milan/VeneciaTasaV3.tsx`, guion `guiones/milan-venecia-youtube-1min-v2.md`). **YouTube es explicación, no un reel en horizontal**, pero tampoco puede sentirse lento ni plano:
 
 | Regla | Valor |
 |---|---|
-| Gancho | El tema en los **primeros 5–15 s**: Santi de frente dice una paradoja, un dato que duele al bolsillo o un caso real. **Nada de intro cinematográfica** |
-| Intro explicada | Antes del minuto: **promesa + agenda** ("te explico 3 cosas: …"), en voz y en pantalla, y después una **tarjeta de título sobria de 2–3 s** |
-| Estructura | **Capítulos con nombre** (45–120 s), patrón **problema → truco**, un solo tema por video |
-| Animación | **≥ 80 %**. Santi en dos modos: **plano base** (de frente, fondo liso, presenta y opina; vuelve cada 20–40 s) y **actor** (vive la situación). Imagen nueva cada **4–7 s**; poses y fondos reutilizables |
-| Fotos reales | **10–20 %**, solo de apoyo o prueba: en tarjeta o polaroid, con Santi al lado o recortado encima, capturas de precios, mapas. **Color natural, sin filtros** |
-| Texto | Escaso y funcional: cifra gigante, etiquetas, listas de 2–4 puntos línea por línea, título de capítulo. Letra sólida, Bebas Neue predominante |
-| Mapas | En cada lugar nuevo: zoom, pin, ruta que se dibuja |
-| Música | Suave (ambiental/inspiradora sin percusión fuerte), **~16 dB por debajo de la voz** (rango 14–18), sube un poco en pausas y cambios de capítulo |
-| Efectos | **1–2 por minuto** como máximo, solo al cambiar de capítulo o al aparecer una cifra clave |
-| Voz | 160–175 palabras por minuto, limpia (reducción de ruido obligatoria) |
-| Cierre | Resumen de 1–3 frases → **una sola pregunta para comentar** → **"Nos vemos pues"** |
+| Gancho | El tema en los **primeros 5 s**: Santi de frente (plano base) dice la paradoja o el dato, con una **cifra gigante** y **reacción** de Santi (brazos arriba, sorpresa). Nada de intro cinematográfica |
+| Intro explicada | Antes del minuto: **promesa + agenda** ("te explico 3 cosas: …"), en voz y en lista numerada en pantalla, y después una **tarjeta de título sobria** (fondo oscuro, ~1,5 s, *whoosh* suave) |
+| Estructura | **Capítulos con nombre**, etiqueta fija arriba a la izquierda ("CAPÍTULO 1 · ¿CUÁNDO SE PAGA?") todo el capítulo. Un solo tema por video |
+| Ritmo | **Toma nueva cada 3–4 s** (nunca más de ~5 s igual). Cortes secos, sin fundidos. La cámara siempre empuja un poco (+3,5 % por toma) y hay **acercamientos (punch-in) de 10–30 %** en las frases fuertes del plano base |
+| Santi | Dos modos: **plano base** (de frente, fondo liso con círculo, presenta y opina) y **actor** (vive la situación). **Reacciona en cada palabra clave**: salto, cambio de pose o de cara (sorpresa, risa, ¡ojo!) |
+| Animación | **≥ 80 %**: calendarios, relojes, boletos, mapas con pines, QR, listas. Fondos lisos y piezas reutilizables (`youtube/src/piezas.tsx`) |
+| Fotos reales | **10–20 %**, solo de apoyo o prueba, **en polaroid**, casi quietas, con Santi al lado. **Color natural, sin filtros** |
+| Texto | Escaso y funcional: cifra gigante, etiquetas, listas de 2–4 puntos línea por línea, cajas sólidas para el énfasis (amarilla, verde, roja). Letra sólida, Bebas Neue predominante, Playfair itálica para frases suaves |
+| Stickers | 3–4 por minuto (emoji 3D), solo cuando se nombra la cosa |
+| Música | Inspiradora con su brillo original (sin filtro de graves/agudos), compresión suave, **~12 dB por debajo de la voz** (medido con `medir_audio_local.py`; rango 12–14). A 16 dB se sintió apagada |
+| Efectos | **~8 por minuto, suaves**: *swoosh* en cada cambio de capítulo, *whoosh* en la tarjeta de título, un golpe en la cifra del gancho, *pop*/*ding* en las cifras o confirmaciones clave. Siempre bajo la voz |
+| Voz | Limpia (reducción de ruido obligatoria), **tempo ×1,07** sin cambiar el tono, ~170 palabras por minuto. Respiro de **0,35 s** antes de cada capítulo y **1,1 s** para la tarjeta de título |
+| Cierre | Resumen en lista con ✓ → **una sola pregunta para comentar** → **"Nos vemos pues"** (voz + texto) |
+
+Historial del prototipo:
+
+| Versión | Comentario de Santiago | Qué cambió |
+|---|---|---|
+| v1 | Música muy dura, muchos efectos, fotos cinematográficas, intro sin explicar, más fotos que animación: "parece un reel en horizontal" | Investigación de 17 referencias, guion nuevo |
+| v2 | "Me gusta pero le falta emoción, además se ve lento" | Voz más ágil, tomas de 3–4 s, punch-in, reacciones de Santi, música a 12 dB con brillo, efectos en cambios |
+| v3 | **Aprobada** | — |
 
 ## Personaje: Santi
 
@@ -44,7 +54,7 @@ Estilo **póster de viaje** (propuesta 4) **con expresiones**, basado en la foto
 - Expresiones: neutral, sonrisa, sorpresa, duda, ¡ojo!, risa. La expresión cambia con lo que dice la voz.
 
 Archivos: `../youtube/personaje/santi-hoja.png`, `santi-egipto.png`, fuente `santi.html`.
-**Estado:** aprobado por Santiago. Siguiente paso: animarlo en Remotion.
+**Estado:** aprobado por Santiago y animado en Remotion (poses: bolsillos, señala, camina, explica, brazos arriba).
 
 Descartados: viajero con sombrero (`../youtube/pruebas/prueba-v1-viajero-descartado.mp4`) y las propuestas 1–3 (`../youtube/personaje/descartadas/`).
 
@@ -75,15 +85,15 @@ Agente de producción definido en `../../.claude/agents/editor-youtube.md`.
 
 ## Herramienta: Remotion (`../youtube/`)
 
-Video hecho con código (React → MP4). Prueba actual: `src/PruebaEgipto.tsx` (aún con el personaje descartado; se cambia a Santi cuando se apruebe). Render: `npm run render` dentro de `youtube/`. Un video de 10 min tarda del orden de decenas de minutos en renderizar.
+Video hecho con código (React → MP4). Prototipo aprobado: `src/milan/VeneciaTasaV3.tsx` (composición `VeneciaTasaV3`), con Santi animado (`src/santi/Santi.tsx`) y piezas reutilizables (`src/piezas.tsx`). Render: `npm run render` dentro de `youtube/`. Un video de 10 min tarda del orden de decenas de minutos en renderizar.
 
 ## Lo que graba Santiago
 
 **Firma de cierre obligatoria:** todo video termina con su voz diciendo **"Nos vemos pues"** y el texto en pantalla. Si no lo grabó, se toma de otra grabación suya (limpiada con la misma cadena e igualada en volumen).
 
-**Edición de la voz (`youtube/pulir_voz.py`)**: Santiago manda el audio crudo, con silencios y errores. Claude lo transcribe con tiempos por palabra, marca titubeos y repeticiones, corta las pausas (0,3 s entre frases y 0,4 s entre ideas), aplica **reducción de ruido obligatoria** (red neuronal RNNoise), ecualiza (menos caja, más presencia), comprime y deja el volumen estándar de YouTube (−14 a −16 LUFS, pico bajo 0 dB). Después vuelve a transcribir y compara palabra por palabra para confirmar que no se cortó nada. Por último se mete un **respiro de silencio antes de cada capítulo** (0,7 s, o 1,8 s después de la intro para la tarjeta de título), buscando el punto más silencioso para no cortar ninguna palabra.
+**Edición de la voz (`youtube/pulir_voz.py`)**: Santiago manda el audio crudo, con silencios y errores. Claude lo transcribe con tiempos por palabra, marca titubeos y repeticiones, corta las pausas (0,3 s entre frases y 0,4 s entre ideas), aplica **reducción de ruido obligatoria** (red neuronal RNNoise), ecualiza (menos caja, más presencia), comprime y deja el volumen estándar de YouTube (−14 a −16 LUFS, pico bajo 0 dB). Después vuelve a transcribir y compara palabra por palabra para confirmar que no se cortó nada. Por último se mete un **respiro de silencio antes de cada capítulo** (0,35 s, o 1,1 s después de la intro para la tarjeta de título), buscando el punto más silencioso para no cortar ninguna palabra, y se acelera la voz ×1,07 sin cambiar el tono (ejemplo: `youtube/pruebas/milan-venecia/ritmo_v3.py`).
 
-**Mezcla (`youtube/mezclar_audio.py`)**: la música pasa por un filtro que la suaviza (`filtro_musica`: paso bajo a 5,5 kHz + compresión suave) y se ajusta el volumen hasta medir **~16 dB bajo la voz** con `medir_audio_local.py` (prototipo v2: Taking Flight a 0,7 → 16,1 dB). Efectos: solo 2 en el minuto (*whoosh* suave en la tarjeta de título y *pop* en la cifra clave).
+**Mezcla (`youtube/mezclar_audio.py`)**: la música lleva solo compresión suave (`filtro_musica`) y se ajusta el volumen hasta medir **~12 dB bajo la voz** con `medir_audio_local.py` (prototipo v3 aprobado: Taking Flight a 1,0 → 12,3 dB, `pruebas/milan-venecia/audio-v3.json`). Efectos suaves en cada cambio de capítulo y en las cifras clave (~8 por minuto).
 
 - Audio de 5–10 min por destino, contado como a un amigo: qué hizo, cuánto costó, qué salió mal, qué recomienda. No tiene que ser perfecto.
 - Fotos y videos de ese viaje en `Fotos viajes/<Destino>/` en Drive.

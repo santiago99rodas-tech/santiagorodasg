@@ -36,7 +36,7 @@ Santiago graba su voz y sube su material a Drive; Claude produce todo; Santiago 
 | [`CLAUDE.md`](CLAUDE.md) | Reglas obligatorias para agentes (porcentajes, formatos, prohibiciones, cómo medir) |
 | [`docs/01-flujo-de-trabajo.md`](docs/01-flujo-de-trabajo.md) | Roles, Drive, semana tipo, revisión, programación, skills `ig-*`, `voice.md` |
 | [`docs/02-instagram-tiktok.md`](docs/02-instagram-tiktok.md) | Fórmula, lenguaje de edición, identidad visual, formatos de serie, IG vs TikTok |
-| [`docs/03-youtube.md`](docs/03-youtube.md) | Fórmula, personaje Santi, escenas, equipo de agentes, Remotion |
+| [`docs/03-youtube.md`](docs/03-youtube.md) | Fórmula, **reglas de diseño aprobadas**, personaje Santi, escenas, equipo de agentes, Remotion |
 | [`docs/04-referencias.md`](docs/04-referencias.md) | Análisis de los videos de referencia |
 | [`docs/05-investigacion-y-retencion.md`](docs/05-investigacion-y-retencion.md) | Investigar temas que funcionan y medir retención, gratis |
 | [`docs/05-inventario.md`](docs/05-inventario.md) | Inventario de todos los videos de Instagram, TikTok y YouTube con vistas |
@@ -104,7 +104,7 @@ contenido-viajes/
 | 3 | Música con ducking | Ambas |
 | 4 | Transcripción con tiempo por palabra y corte de silencios (Whisper; corre en el computador de Santiago, bloqueado en la nube) | Ambas |
 | 5 | Medición automática de % material real / % animación | Ambas |
-| 6 | Animar a Santi en Remotion y reemplazar el personaje de la prueba | YouTube |
+| 6 | ~~Animar a Santi en Remotion~~ (hecho; reglas de YouTube aprobadas con el prototipo v3) | YouTube |
 | 7 | Biblioteca de escenas reutilizables (desierto, ciudad, playa, montaña, aeropuerto, mapa, dinero, listas) | YouTube |
 | 8 | Tablero de revisión semanal | Ambas |
 | 9 | Probar `investigacion/tendencias_youtube.py` con la clave y generar el informe del primer destino | Ambas |
