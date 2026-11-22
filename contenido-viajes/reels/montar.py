@@ -8,7 +8,7 @@ Lee la lista de tomas del plan (clave "tomas") y arma un video vertical
   - pantalla dividida (dos fotos, una arriba y otra abajo): "dividida": [arriba, abajo]
   - transiciones entre tomas (xfade): barrido suave, zoom, desenfoque, flash blanco...
   - color cálido de cine, viñeta y grano de película (plan["color"], activado por defecto)
-y debajo la voz (plan["voz"]) y la música con ducking (plan["musica"]): la música
+y debajo la voz (plan["voz"], con reducción de ruido automática) y la música con ducking (plan["musica"]): la música
 baja sola cuando Santiago habla y sube en los silencios.
 
 El resultado es el "source" que luego decora editar.py (textos, sello, mapa...).
@@ -36,8 +36,14 @@ FOTOS = (".jpg", ".jpeg", ".png", ".webp")
 TRANS_ROTACION = ["smoothleft", "zoomin", "smoothup", "hblur", "smoothright", "slideleft"]
 
 
-def run(cmd):
-    subprocess.run(cmd, check=True)
+RUIDO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recursos", "ruido")
+# REGLA: toda voz de Santiago lleva reducción de ruido (red neuronal RNNoise, modelo libre "bd").
+# ffmpeg corre dentro de recursos/ruido para que el filtro encuentre el modelo (en Windows "C:" rompe el filtro).
+LIMPIAR_VOZ = "highpass=f=80,arnndn=m=bd.rnnn:mix=0.85"
+
+
+def run(cmd, cwd=None):
+    subprocess.run(cmd, check=True, cwd=cwd)
 
 
 def foto_derecha(path, tmp, tag):
@@ -149,7 +155,8 @@ def montar(plan, salida):
     # audio: voz + música con ducking
     cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", video, "-i", plan["voz"]]
     vd = plan.get("retraso_voz", 0)
-    voz = f"[1:a]aformat=channel_layouts=stereo,adelay={int(vd*1000)}|{int(vd*1000)},volume={plan.get('volumen_voz', 1.0)},apad"
+    limpiar = LIMPIAR_VOZ + "," if plan.get("limpiar_voz", True) else ""
+    voz = f"[1:a]{limpiar}aformat=channel_layouts=stereo,adelay={int(vd*1000)}|{int(vd*1000)},volume={plan.get('volumen_voz', 1.0)},apad"
     if plan.get("musica"):
         cmd += ["-stream_loop", "-1", "-i", plan["musica"]]
         vol = plan.get("volumen_musica", 0.5)
@@ -162,8 +169,8 @@ def montar(plan, salida):
     else:
         graph = f"{voz},atrim=0:{dur}[a]"
     cmd += ["-filter_complex", graph, "-map", "0:v", "-map", "[a]", "-t", str(dur),
-            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", salida]
-    run(cmd)
+            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", os.path.abspath(salida)]
+    run(cmd, cwd=RUIDO)
     print(f"base lista: {salida}")
 
 

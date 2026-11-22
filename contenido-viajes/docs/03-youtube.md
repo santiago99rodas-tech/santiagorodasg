@@ -61,6 +61,8 @@ Video hecho con código (React → MP4). Prueba actual: `src/PruebaEgipto.tsx` (
 
 ## Lo que graba Santiago
 
+**Edición de la voz (`youtube/pulir_voz.py`)**: Santiago manda el audio crudo, con silencios y errores. Claude lo transcribe con tiempos por palabra, marca titubeos y repeticiones, corta las pausas (0,3 s entre frases y 0,4 s entre ideas), aplica **reducción de ruido obligatoria** (red neuronal RNNoise), ecualiza (menos caja, más presencia), comprime y deja el volumen estándar de YouTube (−14 a −16 LUFS, pico bajo 0 dB). Después vuelve a transcribir y compara palabra por palabra para confirmar que no se cortó nada.
+
 - Audio de 5–10 min por destino, contado como a un amigo: qué hizo, cuánto costó, qué salió mal, qué recomienda. No tiene que ser perfecto.
 - Fotos y videos de ese viaje en `Fotos viajes/<Destino>/` en Drive.
 

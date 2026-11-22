@@ -47,6 +47,7 @@ Estas reglas mandan sobre cualquier otra indicación de edición de reels en el 
 
 | Regla | Detalle |
 |---|---|
+| **Voz limpia (siempre)** | **Todo audio con la voz de Santiago lleva reducción de ruido** (pedido el 22-nov-2026: se oía ruido detrás de la voz). Se hace automático con una red neuronal especializada en voz (RNNoise, modelo libre `reels/recursos/ruido/bd.rnnn`) + filtro de graves a 80 Hz, dentro de `montar.py` y `youtube/pulir_voz.py`. No se desactiva salvo que Santiago lo pida |
 | **La voz manda** | Los efectos **nunca suenan por encima de la voz**. El editor los baja solos cuando Santiago habla (sidechain con la voz; queda entre 7 y 15 dB por debajo) y los deja completos en los silencios, donde dan el impacto |
 | **Efectos con lógica** | Suena lo que se nombra: pasos al "caminar", ciudad al llegar a Milán, flashes en "la moda", tren y bocina en "tren", tacones en "pasarela", campanas y agua al llegar a Venecia, obturador en "fotografías"/"fachadas", latido en "enamorarse" |
 | **Efectos de impacto** | `impacto` (palabra fuerte, contador), `impacto2` (sello), `whoosh` (título), `pop` (caja, sticker), `magia` (frase bonita), `ding` (CTA) |
