@@ -57,13 +57,18 @@ def header(brand):
     texto = brand.get("fuente_texto", "Montserrat")
     styles = [
         # Nombre, fuente, tamano, color, negrita, italica, borde, sombra
+        # REGLA DE DISEÑO: letras sólidas, sin contorno, sin sombra, sin brillo (borde 0, sombra 0).
+        # La lectura sobre fotos claras la da un "velo" oscuro difuso DETRÁS del bloque, no la letra.
         # Bebas Neue (principal) no tiene negrita: Bold=0 para no deformarla
-        ("Sans", sans, 120, white, 0, 0, 4, 0),
+        ("Sans", sans, 120, white, 0, 0, 0, 0),
         ("SansDark", sans, 120, dark, 0, 0, 0, 0),
-        ("Big", sans, 260, acc, 0, 0, 5, 0),
-        ("Serif", serif, 120, white, 0, -1, 4, 0),
-        ("SerifAcc", serif, 130, acc, -1, -1, 4, 0),
-        ("Word", sans, 112, white, 0, 0, 5, 0),
+        ("Big", sans, 260, acc, 0, 0, 0, 0),
+        ("Anton", "Anton", 150, white, 0, 0, 0, 0),
+        ("Marker", "Permanent Marker", 110, acc, 0, 0, 0, 0),
+        ("Texto", "Montserrat ExtraBold", 90, white, 0, 0, 0, 0),
+        ("Serif", serif, 120, white, 0, -1, 0, 0),
+        ("SerifAcc", serif, 130, acc, -1, -1, 0, 0),
+        ("Word", "Montserrat ExtraBold", 84, white, 0, 0, 0, 0),
         ("Tag", texto, 50, dark, -1, 0, 0, 0),
         ("Rec", texto, 40, white, -1, 0, 0, 0),
         ("Shape", texto, 20, white, 0, 0, 0, 0),
@@ -93,7 +98,6 @@ def dia(layer, a, b, style, text):
 
 
 # ---------------------------------------------------------------- eventos
-GOLD = "#F2C46D"  # brillo dorado de las frases emotivas
 ENTRADAS = {
     # rebote (por defecto)
     "pop": r"\fscx40\fscy40\t(0,120,\fscx112\fscy112)\t(120,220,\fscx100\fscy100)",
@@ -114,21 +118,46 @@ def _caja(x, y, w, h, color, layer, a, b, rot=0, anim=""):
 
 
 def _ancho(txt, size, estilo):
-    k = {"sans": 0.42, "big": 0.42, "sansdark": 0.42, "serif": 0.5, "serifacc": 0.5}.get(estilo, 0.45)
+    k = {"sans": 0.42, "big": 0.42, "sansdark": 0.42, "serif": 0.5, "serifacc": 0.5,
+         "anton": 0.5, "marker": 0.6, "texto": 0.66}.get(estilo, 0.45)
     return int(len(txt) * size * k) + 50
+
+
+def _velo(y, h, a, b, alfa="78", layer=2):
+    """Velo oscuro difuso detrás de un bloque de texto (no toca la letra: la letra sigue sólida).
+    y = centro vertical, h = alto. alfa: 00 opaco ... FF invisible."""
+    return dia(layer, a, b, "Shape",
+               f"{{\\an5\\pos({W//2},{int(y)})\\1c&H000000&\\1a&H{alfa}&\\bord0\\shad0\\blur80\\fad(220,180)\\p1}}"
+               f"m 0 0 l {W+240} 0 {W+240} {int(h)} 0 {int(h)}{{\\p0}}")
+
+
+# cajas sólidas: (color de la caja, color del texto)
+CAJAS = {"amarilla": (None, None), "blanca": ("#FFFFFF", "#14110F"), "negra": ("#14110F", "#FFFFFF"),
+         "roja": ("#CE2B37", "#FFFFFF"), "verde": ("#009246", "#FFFFFF")}
+ESTILOS = {"sans": "Sans", "big": "Big", "serif": "Serif", "serifacc": "SerifAcc", "sansdark": "SansDark",
+           "anton": "Anton", "marker": "Marker", "texto": "Texto"}
+# la manuscrita (Permanent Marker) y Montserrat se ven chicas al mismo s: se agrandan al dibujar
+FS_K = {"marker": 1.55, "texto": 1.15}
+TAMANOS = {"sans": 190, "big": 400, "serif": 150, "serifacc": 165, "sansdark": 190, "anton": 170, "marker": 120, "texto": 90}
 
 
 def ev_hook(e, out):
     """Bloque de texto cinético: líneas apiladas que entran una por una.
-    Cada línea puede tener su propio tiempo ("t0", absoluto), entrada ("entrada": pop/golpe/sube/foco),
-    "brillo" (halo dorado), "caja" (caja amarilla con texto oscuro), "color" (#hex) y "x"."""
+    Cada línea: "t" texto, "estilo" (sans/big/anton/marker/texto/serif/serifacc), "tam", "t0" (segundo absoluto),
+    "entrada" (pop/golpe/sube/foco), "caja" (true = amarilla, o "blanca"/"negra"/"roja"/"verde"),
+    "color" (#hex), "x", "giro", "espacio".
+    Texto sólido siempre: sin contorno, sin sombra, sin brillo. Si el bloque no va todo en cajas,
+    se pone un velo oscuro difuso detrás (desactivar con "velo": false)."""
     y = e.get("y", 330)
     gap = e.get("intervalo", 0.18)
-    sizes = {"sans": 190, "big": 400, "serif": 150, "serifacc": 165, "sansdark": 190}
-    styles = {"sans": "Sans", "big": "Big", "serif": "Serif", "serifacc": "SerifAcc", "sansdark": "SansDark"}
+    y_ini = y
+    alto = sum(ln.get("tam", TAMANOS[ln.get("estilo", "sans")]) * 0.88 + ln.get("espacio", 0) for ln in e["lineas"])
+    t_pri = min(ln.get("t0", e["inicio"]) for ln in e["lineas"])
+    if e.get("velo", True) and not all(ln.get("caja") for ln in e["lineas"]):
+        out.append(_velo(y_ini + alto / 2, alto + 160, t_pri, e["fin"]))
     for i, ln in enumerate(e["lineas"]):
         st = ln.get("estilo", "sans")
-        size = ln.get("tam", sizes[st])
+        size = ln.get("tam", TAMANOS[st])
         y += size * 0.5
         t0 = ln.get("t0", e["inicio"] + i * gap)
         x = ln.get("x", W // 2)
@@ -138,15 +167,13 @@ def ev_hook(e, out):
         if ln.get("color"):
             extra += r"\1c" + bgr(ln["color"])
         if ln.get("caja"):
-            out.append(_caja(x, int(y + size * 0.04), _ancho(ln["t"], size, st), int(size * 0.92),
-                             e["_acento"], 4, t0, e["fin"], rot, anim))
-            extra += r"\1c" + bgr(e.get("_oscuro", "#2B1A12")) + r"\bord0"
-        if ln.get("brillo"):
-            out.append(dia(4, t0, e["fin"], styles[st],
-                           # el halo no usa la animación de alfa (la anularía): entra con un fundido propio
-                           f"{{\\pos({x},{int(y)})\\fs{size}{extra}\\1a&HFF&\\3c{bgr(GOLD)}\\3a&H88&\\bord9\\blur14\\fad(350,120)}}{ln['t']}"))
-            extra += r"\1c" + bgr(ln.get("color", "#FFFFFF")) + r"\3c&H000000&\3a&H80&\bord3"
-        out.append(dia(5, t0, e["fin"], styles[st], f"{{\\pos({x},{int(y)})\\fs{size}{extra}{anim}{FADE}}}{ln['t']}"))
+            fondo, letra = CAJAS.get(ln["caja"] if isinstance(ln["caja"], str) else "amarilla", (None, None))
+            fondo = fondo or e["_acento"]
+            letra = letra or e.get("_oscuro", "#2B1A12")
+            out.append(_caja(x, int(y + size * 0.04), _ancho(ln["t"], size, st), int(size * 0.98),
+                             fondo, 4, t0, e["fin"], rot, anim))
+            extra += r"\1c" + bgr(letra)
+        out.append(dia(5, t0, e["fin"], ESTILOS[st], f"{{\\pos({x},{int(y)})\\fs{int(size * FS_K.get(st, 1))}{extra}{anim}{FADE}}}{ln['t']}"))
         y += size * 0.5 - size * 0.12 + ln.get("espacio", 0)
 
 
@@ -159,6 +186,15 @@ def ev_words(e, out):
         words = [{"w": w, "s": e["inicio"] + k * d, "e": e["inicio"] + (k + 1) * d} for k, w in enumerate(toks)]
     resaltar = {w.lower() for w in e.get("resaltar", [])}
     y = e.get("y", 1080)
+    # velo difuso detrás de cada tramo seguido de subtítulos (no parpadea palabra a palabra)
+    tramos = []
+    for w in words:
+        if tramos and w["s"] - tramos[-1][1] < 0.7:
+            tramos[-1][1] = w["e"]
+        else:
+            tramos.append([w["s"], w["e"]])
+    for a, b in tramos:
+        out.append(_velo(y, 260, a, b, alfa="88", layer=1))
     for k, w in enumerate(words):
         clean = w["w"].strip(",.!?¡¿").lower()
         rot = (-3, 2, -1, 3, 0, -2)[k % 6]
@@ -168,10 +204,10 @@ def ev_words(e, out):
                              w["s"], w["e"], rot, r"\fscx60\fscy60\t(0,90,\fscx105\fscy105)\t(90,150,\fscx100\fscy100)"))
             out.append(dia(4, w["s"], w["e"], "Word",
                            f"{{\\pos({W//2},{y})\\frz{rot}\\fs{size}\\bord0\\1c{bgr(e.get('_oscuro', '#2B1A12'))}"
-                           f"\\fscx60\\fscy60\\t(0,90,\\fscx105\\fscy105)\\t(90,150,\\fscx100\\fscy100)}}{w['w']}"))
+                           f"\\fscx60\\fscy60\\t(0,90,\\fscx105\\fscy105)\\t(90,150,\\fscx100\\fscy100)}}{w['w'].rstrip(',.!?')}"))
         else:
             out.append(dia(4, w["s"], w["e"], "Word",
-                           f"{{\\pos({W//2},{y})\\frz{rot}\\fscx70\\fscy70\\t(0,80,\\fscx104\\fscy104)\\t(80,130,\\fscx100\\fscy100)}}{w['w']}"))
+                           f"{{\\pos({W//2},{y})\\frz{rot}\\fscx70\\fscy70\\t(0,80,\\fscx104\\fscy104)\\t(80,130,\\fscx100\\fscy100)}}{w['w'].rstrip(',.!?')}"))
 
 
 def ev_counter(e, out):
@@ -180,6 +216,7 @@ def ev_counter(e, out):
     ini, fin = e.get("desde", 0), e["hasta"]
     x, y, size = e.get("x", W // 2), e.get("y", 600), e.get("tam", 420)
     pasos = 16
+    out.append(_velo(y, size * 1.1, a, b))
     for k in range(pasos):
         t0, t1 = a + d * k / pasos, a + d * (k + 1) / pasos
         v = round(ini + (fin - ini) * ((k + 1) / pasos) ** 0.6)
@@ -220,8 +257,8 @@ def ev_map(e, out):
         out.append(dia(8, t0, b, "Shape", f"{{\\an7\\pos({x},{y})\\1c{bgr(col)}\\bord0\\shad0{POP}\\p1}}{pin}{{\\p0}}"))
         out.append(dia(8, t0, b, "Sans", f"{{\\pos({x},{y + 70})\\fs92{POP}}}{nombre}"))
     if e.get("texto"):
-        out.append(dia(8, a + 0.4 + dur_dibujo, b, "Serif",
-                       f"{{\\pos({W//2},{cy + 200})\\fs78\\1c{bgr(GOLD)}{ENTRADAS['sube']}}}{e['texto']}"))
+        out.append(dia(8, a + 0.4 + dur_dibujo, b, "Marker",
+                       f"{{\\pos({W//2},{cy + 195})\\fs126\\1c{bgr(e['_acento'])}{ENTRADAS['sube']}}}{e['texto']}"))
 
 
 def ev_rec(e, out):
@@ -245,6 +282,7 @@ def ev_rec(e, out):
     # bateria
     out.append(dia(6, a, b, "Shape", f"{{\\an7\\pos({m+40},{m+38})\\p1}}m 0 0 l 60 0 60 30 0 30 0 0 m 4 4 l 4 26 30 26 30 4{{\\p0}}"))
     if e.get("texto"):
+        out.append(_velo(e.get('y', 420) + 70, 380, a, b, layer=5))
         out.append(dia(7, a, b, "SansDark" if e.get("oscuro") else "Sans",
                        f"{{\\pos({W//2},{e.get('y', 420)})\\fs{e.get('tam', 170)}{POP}}}{e['texto']}"))
     if e.get("subtexto"):
@@ -265,8 +303,10 @@ def ev_sticker(e, out):
 
 def ev_cta(e, out):
     a, b = e["inicio"], e["fin"]
-    out.append(dia(5, a, b, "Serif", f"{{\\pos({W//2},{e.get('y', 380)})\\fs120{POP}}}{e['pequeno']}"))
-    out.append(dia(5, a + 0.2, b, "Big", f"{{\\pos({W//2},{e.get('y', 380)+150})\\fs170{POP}}}{e['grande']}"))
+    y = e.get("y", 380)
+    out.append(_velo(y + 90, 420, a, b))
+    out.append(dia(5, a, b, "Marker", f"{{\\pos({W//2},{y})\\fs165\\1c&HFFFFFF&{POP}}}{e['pequeno']}"))
+    out.append(dia(5, a + 0.2, b, "Anton", f"{{\\pos({W//2},{y+175})\\fs210\\1c{bgr(e['_acento'])}{POP}}}{e['grande']}"))
 
 
 def ev_typewriter(e, out):
@@ -274,6 +314,7 @@ def ev_typewriter(e, out):
     txt, a, b = e["texto"], e["inicio"], e["fin"]
     vel = e.get("vel", 0.05)
     st = e.get("estilo", "SerifAcc")
+    out.append(_velo(e.get('y', 400), e.get('tam', 120) * 1.8, a, b))
     for k in range(1, len(txt) + 1):
         t0 = a + (k - 1) * vel
         t1 = a + k * vel if k < len(txt) else b
@@ -317,7 +358,7 @@ def ev_label(e, out):
     box = (f"m {r} 0 l {w-r} 0 b {w} 0 {w} 0 {w} {r} l {w} {h-r} b {w} {h} {w} {h} {w-r} {h} "
            f"l {r} {h} b 0 {h} 0 {h} 0 {h-r} l 0 {r} b 0 0 0 0 {r} 0")
     out.append(dia(8, e["inicio"], e["fin"], "Shape",
-                   f"{{\\an5\\pos({x},{y})\\frz{e.get('giro', -3)}\\1c&H00FFFFFF&\\shad6\\4a&HA0&{POP}\\p1}}{box}{{\\p0}}"))
+                   f"{{\\an5\\pos({x},{y})\\frz{e.get('giro', -3)}\\1c&H00FFFFFF&\\shad0{POP}\\p1}}{box}{{\\p0}}"))
     out.append(dia(9, e["inicio"], e["fin"], "Tag",
                    f"{{\\an5\\pos({x},{y})\\frz{e.get('giro', -3)}\\fs{e.get('tam', 56)}{POP}}}{e['texto']}"))
 
@@ -325,9 +366,41 @@ def ev_label(e, out):
 HANDLERS = {"sello": ev_stamp, "etiqueta": ev_label, "gancho": ev_hook, "palabras": ev_words, "rec": ev_rec, "sticker": ev_sticker,
             "cta": ev_cta, "maquina": ev_typewriter, "contador": ev_counter, "mapa": ev_map}
 
-# efecto de sonido por defecto segun el tipo de evento
-SFX_AUTO = {"contador": "boom", "mapa": "swish", "sello": "golpe", "etiqueta": "pop", "gancho": "whoosh", "rec": "obturador", "sticker": "pop", "cta": "pop",
-            "maquina": "teclado", "zoom": "golpe"}
+# efecto de sonido por defecto segun el tipo de evento (si existe recursos/sfx/<nombre>.mp3 se usa el real)
+SFX_AUTO = {"contador": "impacto", "mapa": "whoosh", "sello": "impacto2", "etiqueta": "pop", "gancho": "whoosh", "rec": "obturador",
+            "sticker": "pop", "cta": "pop", "maquina": "teclado", "zoom": "golpe", "emoji": "pop"}
+
+RECURSOS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "recursos")
+
+
+def _archivo(carpeta, nombre, exts):
+    """Busca un recurso por nombre (ruta directa o recursos/<carpeta>/<nombre>.<ext>)."""
+    if os.path.isfile(nombre):
+        return os.path.abspath(nombre)
+    for ext in exts:
+        p = os.path.join(RECURSOS, carpeta, nombre + ext)
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+def filtro_emoji(e, k, entrada):
+    """Sticker 3D (PNG con transparencia) que entra con rebote, flota suave y sale encogiéndose.
+    e: {"archivo": "tren", "inicio", "fin", "x", "y", "tam": 230, "giro": -8}"""
+    a, b = e["inicio"], e["fin"]
+    d = b - a
+    tam = e.get("tam", 230)
+    rad = e.get("giro", 0) * 3.14159 / 180
+    u = f"(t-{a})"
+    pop = (f"if(lt({u},0.14),0.3+0.95*{u}/0.14,if(lt({u},0.24),1.25-0.25*({u}-0.14)/0.1,1))"
+           f"*if(gt({u},{d-0.14}),max(0.05,({d}-{u})/0.14),1)")
+    x, y = e.get("x", W // 2), e.get("y", 600)
+    cad = (f"[{k}:v]format=rgba,scale={tam}:{tam},"
+           f"rotate=a='{rad}+0.07*sin(2*PI*0.55*t)':c=none:ow='hypot(iw,ih)':oh=ow,"
+           f"setpts=PTS+{a}/TB,"
+           f"scale=w='max(2,trunc(iw*({pop})/2)*2)':h='max(2,trunc(ih*({pop})/2)*2)':eval=frame[e{k}];"
+           f"{entrada}[e{k}]overlay=x='{x}-w/2':y='{y}-h/2+9*sin(2*PI*0.8*t)':eval=frame:eof_action=pass")
+    return cad
 
 
 # ---------------------------------------------------------------- sonido
@@ -365,11 +438,15 @@ def sfx_src(kind, idx):
 
 
 # ---------------------------------------------------------------- render
+def _n_entradas(inputs):
+    return inputs.count("-i")
+
+
 def build(plan, out_path, demo=False):
     brand = plan["marca"]
     dur = plan["duracion"]
     lines = header(brand)
-    zooms, bw, sfx = [], [], list(plan.get("sfx", []))
+    zooms, bw, emojis, sfx = [], [], [], list(plan.get("sfx", []))
     for e in plan["eventos"]:
         e["_acento"] = brand["acento"]
         e["_oscuro"] = brand["oscuro"]
@@ -378,6 +455,8 @@ def build(plan, out_path, demo=False):
                 sfx.append({"t": ln.get("t0", e["inicio"]), "tipo": ln["sfx"]})
         if e["tipo"] == "zoom":
             zooms.append(e)
+        elif e["tipo"] == "emoji":
+            emojis.append(e)
         elif e["tipo"] in HANDLERS:
             HANDLERS[e["tipo"]](e, lines)
         else:
@@ -421,8 +500,19 @@ def build(plan, out_path, demo=False):
           f"scale=w='trunc({W}*({zexpr})/2)*2':h='trunc({H}*({zexpr})/2)*2':eval=frame,"
           f"crop={W}:{H},"
           f"hue=s='if({bwexpr},0,1)',"
-          f"eq=contrast='if({bwexpr},1.15,1.0)':eval=frame,"
-          f"ass=capa.ass:fontsdir=fuentes[v]")
+          f"eq=contrast='if({bwexpr},1.15,1.0)':eval=frame[b0]")
+    # stickers 3D encima de la foto y debajo del texto
+    graph_v = [vf]
+    prev = "[b0]"
+    for j, e in enumerate(emojis):
+        png = _archivo("stickers", e["archivo"], (".png",))
+        if not png:
+            raise FileNotFoundError(f"sticker no encontrado: {e['archivo']}")
+        k = _n_entradas(inputs)
+        inputs += ["-loop", "1", "-framerate", "30", "-t", f"{e['fin'] - e['inicio'] + 0.05:.2f}", "-i", png]
+        graph_v.append(filtro_emoji(e, k, prev) + f"[b{j+1}]")
+        prev = f"[b{j+1}]"
+    graph_v.append(f"{prev}ass=capa.ass:fontsdir=fuentes[v]")
 
     # --- audio: original + efectos con retardo
     af_parts, mix = [], []
@@ -430,13 +520,26 @@ def build(plan, out_path, demo=False):
         mix.append("[0:a]")
     for i, s in enumerate(sorted(sfx, key=lambda x: x["t"])):
         ms = int(s["t"] * 1000)
-        af_parts.append(sfx_src(s["tipo"], i).replace(f"[s{i}]", f",adelay={ms}|{ms}[s{i}]"))
+        real = _archivo("sfx", s["tipo"], (".mp3", ".wav"))
+        if real:  # efecto real (recursos/sfx): "vol" volumen, "dur" segundos (sale con fundido), "desde"
+            k = _n_entradas(inputs)
+            inputs += ["-i", real]
+            d = s.get("dur", 6)
+            af_parts.append(f"[{k}:a]atrim={s.get('desde', 0)}:{s.get('desde', 0) + d},asetpts=PTS-STARTPTS,"
+                            f"aformat=sample_rates=48000:channel_layouts=stereo,"
+                            f"afade=t=in:d={s.get('entra', 0.01)},afade=t=out:st={max(0, d - 0.35)}:d=0.35,"
+                            f"volume={s.get('vol', 0.6)},adelay={ms}|{ms}[s{i}]")
+        else:
+            af_parts.append(sfx_src(s["tipo"], i).replace(f"[s{i}]", f",adelay={ms}|{ms}[s{i}]"))
         mix.append(f"[s{i}]")
-    graph = [vf] + af_parts
+    graph = graph_v + af_parts
     if mix:
-        graph.append("".join(mix) + f"amix=inputs={len(mix)}:normalize=0,atrim=0:{dur}[a]")
+        graph.append("".join(mix) + f"amix=inputs={len(mix)}:normalize=0,alimiter=limit=0.89:level=false,atrim=0:{dur}[a]")
+    # el grafo va en un archivo: con muchos stickers y sonidos el comando supera el límite de Windows
+    with open(os.path.join(tmp, "grafo.txt"), "w", encoding="utf-8") as f:
+        f.write(";\n".join(graph))
     cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", *inputs,
-           "-filter_complex", ";".join(graph), "-map", "[v]"]
+           "-/filter_complex", "grafo.txt", "-map", "[v]"]
     if mix:
         cmd += ["-map", "[a]", "-c:a", "aac", "-b:a", "192k"]
     cmd += ["-t", str(dur), "-c:v", "libx264", "-preset", "medium", "-crf", "20",
