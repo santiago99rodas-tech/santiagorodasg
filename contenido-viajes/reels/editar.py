@@ -20,6 +20,7 @@ Solo necesita ffmpeg (con libass). Sin dependencias de Python.
 """
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -57,12 +58,12 @@ def header(brand):
     styles = [
         # Nombre, fuente, tamano, color, negrita, italica, borde, sombra
         # Bebas Neue (principal) no tiene negrita: Bold=0 para no deformarla
-        ("Sans", sans, 120, white, 0, 0, 0, 3),
+        ("Sans", sans, 120, white, 0, 0, 4, 0),
         ("SansDark", sans, 120, dark, 0, 0, 0, 0),
-        ("Big", sans, 260, acc, 0, 0, 0, 4),
-        ("Serif", serif, 120, white, 0, -1, 0, 3),
-        ("SerifAcc", serif, 130, acc, -1, -1, 0, 3),
-        ("Word", sans, 96, white, 0, 0, 0, 3),
+        ("Big", sans, 260, acc, 0, 0, 5, 0),
+        ("Serif", serif, 120, white, 0, -1, 4, 0),
+        ("SerifAcc", serif, 130, acc, -1, -1, 4, 0),
+        ("Word", sans, 112, white, 0, 0, 5, 0),
         ("Tag", texto, 50, dark, -1, 0, 0, 0),
         ("Rec", texto, 40, white, -1, 0, 0, 0),
         ("Shape", texto, 20, white, 0, 0, 0, 0),
@@ -81,7 +82,7 @@ def header(brand):
     ]
     for n, f, s, c, b, i, o, sh in styles:
         out.append(
-            f"Style: {n},{f},{s},{c},{c},&H00000000,&H80000000,{b},{i},0,0,100,100,-2,0,1,{o},{sh},5,40,40,40,1"
+            f"Style: {n},{f},{s},{c},{c},&H78000000,&H80000000,{b},{i},0,0,100,100,-2,0,1,{o},{sh},5,40,40,40,1"
         )
     out += ["", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"]
     return out
@@ -178,11 +179,51 @@ def ev_typewriter(e, out):
         out.append(dia(5, t0, t1, st, f"{{\\pos({W//2},{e.get('y', 400)})\\fs{e.get('tam', 120)}}}{txt[:k]}|"))
 
 
-HANDLERS = {"gancho": ev_hook, "palabras": ev_words, "rec": ev_rec, "sticker": ev_sticker,
+def ev_stamp(e, out):
+    """Sello de pasaporte del país: rectángulo de doble borde en el color del país, girado,
+    con el nombre del país, la ciudad y la fecha. Entra como si lo estamparan (grande -> golpe)."""
+    x, y = e.get("x", 790), e.get("y", 300)
+    w, h = e.get("ancho", 400), e.get("alto", 250)
+    rot = e.get("giro", 8)
+    col = bgr(e.get("color", "#009246"))
+    a, b = e["inicio"], e["fin"]
+    golpe = r"\fscx180\fscy180\alpha&HFF&\t(0,140,\fscx92\fscy92\alpha&H00&)\t(140,220,\fscx100\fscy100)"
+
+    def marco(m, g):
+        # contorno rectangular de grosor g, a m px del borde exterior
+        x0, y0, x1, y1 = m, m, w - m, h - m
+        return (f"m {x0} {y0} l {x1} {y0} {x1} {y1} {x0} {y1} "
+                f"m {x0+g} {y0+g} l {x0+g} {y1-g} {x1-g} {y1-g} {x1-g} {y0+g}")
+
+    for m, g in ((0, 9), (18, 4)):
+        out.append(dia(8, a, b, "Shape",
+                       f"{{\\an5\\pos({x},{y})\\frz{rot}\\1c{col}\\bord0\\shad0{golpe}{FADE}\\p1}}{marco(m, g)}{{\\p0}}"))
+    pais = e.get("pais", "ITALIA")
+    out.append(dia(9, a, b, "Sans",
+                   f"{{\\an5\\pos({x},{y - 18})\\frz{rot}\\fs{e.get('tam', 118)}\\1c{col}\\shad0{golpe}{FADE}}}{pais}"))
+    sub = " · ".join(s for s in (e.get("ciudad"), e.get("fecha")) if s)
+    if sub:
+        out.append(dia(9, a, b, "Tag",
+                       f"{{\\an5\\pos({x},{y + 72})\\frz{rot}\\fs40\\1c{col}{golpe}{FADE}}}{sub}"))
+
+
+def ev_label(e, out):
+    """Etiqueta de dato (tarjeta blanca con emoji + texto), por ejemplo un precio o una hora."""
+    x, y = e.get("x", W // 2), e.get("y", 1350)
+    w, h, r = e.get("ancho", 560), 120, 30
+    box = (f"m {r} 0 l {w-r} 0 b {w} 0 {w} 0 {w} {r} l {w} {h-r} b {w} {h} {w} {h} {w-r} {h} "
+           f"l {r} {h} b 0 {h} 0 {h} 0 {h-r} l 0 {r} b 0 0 0 0 {r} 0")
+    out.append(dia(8, e["inicio"], e["fin"], "Shape",
+                   f"{{\\an5\\pos({x},{y})\\frz{e.get('giro', -3)}\\1c&H00FFFFFF&\\shad6\\4a&HA0&{POP}\\p1}}{box}{{\\p0}}"))
+    out.append(dia(9, e["inicio"], e["fin"], "Tag",
+                   f"{{\\an5\\pos({x},{y})\\frz{e.get('giro', -3)}\\fs{e.get('tam', 56)}{POP}}}{e['texto']}"))
+
+
+HANDLERS = {"sello": ev_stamp, "etiqueta": ev_label, "gancho": ev_hook, "palabras": ev_words, "rec": ev_rec, "sticker": ev_sticker,
             "cta": ev_cta, "maquina": ev_typewriter}
 
 # efecto de sonido por defecto segun el tipo de evento
-SFX_AUTO = {"gancho": "whoosh", "rec": "obturador", "sticker": "pop", "cta": "pop",
+SFX_AUTO = {"sello": "golpe", "etiqueta": "pop", "gancho": "whoosh", "rec": "obturador", "sticker": "pop", "cta": "pop",
             "maquina": "teclado", "zoom": "golpe"}
 
 
@@ -228,6 +269,14 @@ def build(plan, out_path, demo=False):
     ass = os.path.join(tmp, "capa.ass")
     with open(ass, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
+    # Tipografías del repo (fuentes/) al lado del .ass: libass las usa aunque no estén instaladas.
+    # ffmpeg corre dentro de tmp con rutas relativas (en Windows "C:" rompe el filtro ass).
+    fuentes = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "fuentes")
+    os.makedirs(os.path.join(tmp, "fuentes"), exist_ok=True)
+    for fn in os.listdir(fuentes):
+        if fn.lower().endswith((".ttf", ".otf")):
+            shutil.copy(os.path.join(fuentes, fn), os.path.join(tmp, "fuentes", fn))
+    out_path = os.path.abspath(out_path)
 
     # --- entrada de video
     inputs = []
@@ -251,7 +300,7 @@ def build(plan, out_path, demo=False):
           f"crop={W}:{H},"
           f"hue=s='if({bwexpr},0,1)',"
           f"eq=contrast='if({bwexpr},1.15,1.0)':eval=frame,"
-          f"ass='{ass}'[v]")
+          f"ass=capa.ass:fontsdir=fuentes[v]")
 
     # --- audio: original + efectos con retardo
     af_parts, mix = [], []
@@ -270,7 +319,7 @@ def build(plan, out_path, demo=False):
         cmd += ["-map", "[a]", "-c:a", "aac", "-b:a", "192k"]
     cmd += ["-t", str(dur), "-c:v", "libx264", "-preset", "medium", "-crf", "20",
             "-pix_fmt", "yuv420p", "-r", "30", "-movflags", "+faststart", out_path]
-    subprocess.run(cmd, check=True)
+    subprocess.run(cmd, check=True, cwd=tmp)
     print(f"listo: {out_path}")
 
 
