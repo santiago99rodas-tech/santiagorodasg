@@ -42,6 +42,7 @@ Santiago graba su voz y sube su material a Drive; Claude produce todo; Santiago 
 | [`docs/05-inventario.md`](docs/05-inventario.md) | Inventario de todos los videos de Instagram, TikTok y YouTube con vistas |
 | [`docs/06-rodi.md`](docs/06-rodi.md) | Integración con RODI / RODI CLUB y reglas de marca |
 | [`docs/07-nicho-y-publico.md`](docs/07-nicho-y-publico.md) | Estudio de nicho y público con las estadísticas de las 3 plataformas |
+| [`docs/09-reglas-reels.md`](docs/09-reglas-reels.md) | **Reglas de diseño de reels aprobadas** (texto, stickers, sonido, color) y paso a paso para hacer un reel |
 | [`docs/08-parrilla.md`](docs/08-parrilla.md) | Parrilla de las primeras 4 semanas (tips buscables + lugares con emoción + series con cierre a RODI) |
 | [`voice.md`](voice.md) | Voz de Santiago para las skills `ig-*` (copiar a `~/.claude/instagram/voice.md`) |
 | [`investigacion/outliers/`](investigacion/outliers/) | Videos outlier de YouTube por destino (`tendencias_sin_clave.py`) |
@@ -97,7 +98,7 @@ contenido-viajes/
 ### Pendiente técnico (Claude)
 | # | Qué | Plataforma |
 |---|---|---|
-| 1 | Montaje de muchas tomas sobre la voz (hoy el editor trabaja sobre un solo clip) | Reels |
+| 1 | ~~Montaje de muchas tomas, color, música con ducking, stickers, sonidos reales~~ ✔ hecho y **reglas aprobadas** (`docs/09-reglas-reels.md`). Falta: mapa real y corte automático de silencios | Reels |
 | 2 | Movimiento en fotos, etiquetas de precio con emoji, mapa con ruta animada, transiciones | Reels |
 | 3 | Música con ducking | Ambas |
 | 4 | Transcripción con tiempo por palabra y corte de silencios (Whisper; corre en el computador de Santiago, bloqueado en la nube) | Ambas |

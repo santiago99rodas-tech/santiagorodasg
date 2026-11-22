@@ -78,7 +78,7 @@ Siguiente (original):
 
 ## 8. Pendientes técnicos (después de lo anterior)
 
-1. Editor de reels: montaje de muchas tomas sobre la voz, movimiento en fotos, etiquetas con emoji, mapa con ruta animada, transiciones, sello de pasaporte (basado en `rodi-stamps.css` del tema de RODI), música con ducking, transcripción y corte de silencios.
+1. ✔ (21-nov-2026) Editor de reels completo y reglas de diseño aprobadas en `docs/09-reglas-reels.md`. Antes decía: montaje de muchas tomas sobre la voz, movimiento en fotos, etiquetas con emoji, mapa con ruta animada, transiciones, sello de pasaporte (basado en `rodi-stamps.css` del tema de RODI), música con ducking, transcripción y corte de silencios.
 2. Medición automática de % material real / % animación.
 3. Animar a Santi en Remotion y reemplazar el personaje de la prueba; biblioteca de escenas por destino.
 4. Tablero de revisión semanal.

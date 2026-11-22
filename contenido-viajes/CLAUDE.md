@@ -32,7 +32,8 @@ Santiago **no sale a cámara**. Todo se arma sobre **su voz en off** + material 
 | **Animación** | **≤ 10 % y siempre pequeña**: un contador de dinero, una etiqueta de precio, un pin en el mapa, una flecha, un sticker, un sello. Ocupa una parte de la pantalla, **encima** del material real, nunca lo reemplaza |
 | **Prohibido** | **Muñequitos, el personaje Santi, personajes animados, escenas ilustradas a pantalla completa**. Nada que convierta el video en caricatura. La audiencia de estas redes busca ver lo que Santiago vivió de verdad |
 | Edición | Estilo del referente "Comenta CALENDARIO": gancho de texto grande en 0–2 s, subtítulos de una palabra, mezcla tipográfica (**Bebas Neue** principal + Playfair Display Italic + Montserrat; palabra clave siempre en amarillo `#FFD54A` y el color de cada país solo en detalles pequeños como el sello de pasaporte; fuentes en `fuentes/`), cambio de toma cada 1.5–3 s, zoom/paneo en fotos, toma en blanco y negro con marco REC en las objeciones, efectos de sonido en cada texto |
-| Herramienta | `reels/editar.py` |
+| **Reglas de diseño aprobadas** | **`docs/09-reglas-reels.md`** (obligatorias): letra sólida sin contorno/sombra/brillo, Bebas Neue predominante, énfasis gigante o en caja, stickers con lógica y equilibrio (máx. ~10/min, nunca dos a la vez), efectos reales siempre por debajo de la voz, música inspiradora que se oiga, color cálido y luminoso |
+| Herramienta | `reels/transcribir.py` → `reels/montar.py` → `reels/editar.py` |
 | Referencia de su estilo actual | Video de Georgia (96 s, 32 cortes, todo material real, mapa, subtítulo palabra a palabra) |
 
 ### Las dos referencias de Instagram/TikTok (no confundirlas)

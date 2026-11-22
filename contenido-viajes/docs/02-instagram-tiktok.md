@@ -16,6 +16,8 @@ Instagram **@SantiagoRodas** · TikTok **@SantiagoRodasTravel**. Reglas obligato
 
 ## Lenguaje de edición
 
+> **Las reglas de diseño aprobadas (texto, stickers, sonido, color) están en [`09-reglas-reels.md`](09-reglas-reels.md) y mandan sobre esta sección.**
+
 - **Gancho en 0–2 s**: la toma más fuerte del viaje + texto grande con el dato.
 - **Un cambio de toma por frase** (cada 1.5–3 s). Cada sustantivo importante tiene su imagen.
 - **Fotos siempre con movimiento**: zoom lento o paneo.
@@ -25,7 +27,7 @@ Instagram **@SantiagoRodas** · TikTok **@SantiagoRodasTravel**. Reglas obligato
 - **Mapa** con la ruta que se dibuja.
 - **Cámara 2**: la toma pasa a blanco y negro con marco REC en las objeciones ("pero… ¿es seguro?"), con burbuja de chat de la duda.
 - **Transiciones**: flash blanco o barrido en los cambios de lugar; cortes al golpe de la música.
-- **Sonido**: whoosh en textos grandes, pop en stickers, clic con cursor, tecleo, obturador en la cámara 2, sonido ambiente del lugar.
+- **Sonido**: efectos reales con lógica (lo que se nombra, suena), siempre por debajo de la voz; música inspiradora/épica que se sienta. Detalle en `09-reglas-reels.md`.
 - **Cierre**: "comenta *PALABRA* y te mando mi ruta" (en vez de botones like/follow).
 
 Maquetas de referencia (antes/después sobre cuadros de Georgia): `../reels/maquetas/antes-despues.jpg`. Opciones de color comparadas: `../reels/maquetas/opciones-color.jpg` (elegida la C).
@@ -65,4 +67,4 @@ Del mismo montaje salen las dos versiones; solo cambian el cierre y la zona segu
 
 Lee un plan JSON y renderiza con ffmpeg. Ya hace: gancho tipográfico, cámara 2 (B/N + REC), subtítulos de una palabra, zoom de golpe, stickers, máquina de escribir, CTA y efectos de sonido sincronizados. Demo: `../reels/demo-efectos.mp4`.
 
-Falta (ver hoja de ruta en `../README.md`): montaje de muchas tomas sobre la voz, movimiento en fotos, etiquetas de precio y mapa animado, emojis, música con ducking, transcripción automática y corte de silencios.
+Con `../reels/montar.py` (tomas, transiciones, color cálido, voz + música con ducking) y `../reels/transcribir.py` (Whisper) ya está todo el flujo: ver el paso a paso en `09-reglas-reels.md`. Falta: mapa real de la zona y corte automático de silencios.
