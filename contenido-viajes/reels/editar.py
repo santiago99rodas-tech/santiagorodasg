@@ -93,8 +93,35 @@ def dia(layer, a, b, style, text):
 
 
 # ---------------------------------------------------------------- eventos
+GOLD = "#F2C46D"  # brillo dorado de las frases emotivas
+ENTRADAS = {
+    # rebote (por defecto)
+    "pop": r"\fscx40\fscy40\t(0,120,\fscx112\fscy112)\t(120,220,\fscx100\fscy100)",
+    # golpe: entra gigante y cae en su sitio (para palabras fuertes)
+    "golpe": r"\fscx260\fscy260\alpha&HFF&\t(0,150,\fscx94\fscy94\alpha&H00&)\t(150,240,\fscx100\fscy100)",
+    # sube: aparece desde abajo, suave (frases emotivas)
+    "sube": r"\alpha&HFF&\t(0,350,\alpha&H00&)",
+    # desenfoque: entra borroso y se enfoca
+    "foco": r"\blur18\alpha&HFF&\t(0,300,\blur0\alpha&H00&)",
+}
+
+
+def _caja(x, y, w, h, color, layer, a, b, rot=0, anim=""):
+    r = 14
+    box = (f"m {r} 0 l {w-r} 0 b {w} 0 {w} 0 {w} {r} l {w} {h-r} b {w} {h} {w} {h} {w-r} {h} "
+           f"l {r} {h} b 0 {h} 0 {h} 0 {h-r} l 0 {r} b 0 0 0 0 {r} 0")
+    return dia(layer, a, b, "Shape", f"{{\\an5\\pos({x},{y})\\frz{rot}\\1c{bgr(color)}\\bord0\\shad0{anim}\\p1}}{box}{{\\p0}}")
+
+
+def _ancho(txt, size, estilo):
+    k = {"sans": 0.42, "big": 0.42, "sansdark": 0.42, "serif": 0.5, "serifacc": 0.5}.get(estilo, 0.45)
+    return int(len(txt) * size * k) + 50
+
+
 def ev_hook(e, out):
-    """Titulo de gancho: lineas apiladas que entran una por una con rebote."""
+    """Bloque de texto cinético: líneas apiladas que entran una por una.
+    Cada línea puede tener su propio tiempo ("t0", absoluto), entrada ("entrada": pop/golpe/sube/foco),
+    "brillo" (halo dorado), "caja" (caja amarilla con texto oscuro), "color" (#hex) y "x"."""
     y = e.get("y", 330)
     gap = e.get("intervalo", 0.18)
     sizes = {"sans": 190, "big": 400, "serif": 150, "serifacc": 165, "sansdark": 190}
@@ -103,13 +130,28 @@ def ev_hook(e, out):
         st = ln.get("estilo", "sans")
         size = ln.get("tam", sizes[st])
         y += size * 0.5
-        t0 = e["inicio"] + i * gap
-        out.append(dia(5, t0, e["fin"], styles[st], f"{{\\pos({W//2},{int(y)})\\fs{size}{POP}{FADE}}}{ln['t']}"))
-        y += size * 0.5 - size * 0.12
+        t0 = ln.get("t0", e["inicio"] + i * gap)
+        x = ln.get("x", W // 2)
+        anim = ENTRADAS[ln.get("entrada", e.get("entrada", "pop"))]
+        rot = ln.get("giro", 0)
+        extra = f"\\frz{rot}" if rot else ""
+        if ln.get("color"):
+            extra += r"\1c" + bgr(ln["color"])
+        if ln.get("caja"):
+            out.append(_caja(x, int(y + size * 0.04), _ancho(ln["t"], size, st), int(size * 0.92),
+                             e["_acento"], 4, t0, e["fin"], rot, anim))
+            extra += r"\1c" + bgr(e.get("_oscuro", "#2B1A12")) + r"\bord0"
+        if ln.get("brillo"):
+            out.append(dia(4, t0, e["fin"], styles[st],
+                           # el halo no usa la animación de alfa (la anularía): entra con un fundido propio
+                           f"{{\\pos({x},{int(y)})\\fs{size}{extra}\\1a&HFF&\\3c{bgr(GOLD)}\\3a&H88&\\bord9\\blur14\\fad(350,120)}}{ln['t']}"))
+            extra += r"\1c" + bgr(ln.get("color", "#FFFFFF")) + r"\3c&H000000&\3a&H80&\bord3"
+        out.append(dia(5, t0, e["fin"], styles[st], f"{{\\pos({x},{int(y)})\\fs{size}{extra}{anim}{FADE}}}{ln['t']}"))
+        y += size * 0.5 - size * 0.12 + ln.get("espacio", 0)
 
 
 def ev_words(e, out):
-    """Subtitulos de una palabra (o par corto) al centro, cambian al ritmo del habla."""
+    """Subtitulos de una palabra al centro, al ritmo del habla. Las palabras clave van en caja amarilla."""
     words = e.get("palabras")
     if not words:  # sin marcas de tiempo: reparte las palabras parejo
         toks = e["texto"].split()
@@ -117,10 +159,69 @@ def ev_words(e, out):
         words = [{"w": w, "s": e["inicio"] + k * d, "e": e["inicio"] + (k + 1) * d} for k, w in enumerate(toks)]
     resaltar = {w.lower() for w in e.get("resaltar", [])}
     y = e.get("y", 1080)
-    for w in words:
+    for k, w in enumerate(words):
         clean = w["w"].strip(",.!?¡¿").lower()
-        color = r"\1c" + bgr(e["_acento"]) if clean in resaltar else ""
-        out.append(dia(4, w["s"], w["e"], "Word", f"{{\\pos({W//2},{y}){color}\\fscx85\\fscy85\\t(0,80,\\fscx100\\fscy100)}}{w['w']}"))
+        rot = (-3, 2, -1, 3, 0, -2)[k % 6]
+        if clean in resaltar:
+            size = 150
+            out.append(_caja(W // 2, y + 4, _ancho(w["w"], size, "sans"), int(size * 0.95), e["_acento"], 3,
+                             w["s"], w["e"], rot, r"\fscx60\fscy60\t(0,90,\fscx105\fscy105)\t(90,150,\fscx100\fscy100)"))
+            out.append(dia(4, w["s"], w["e"], "Word",
+                           f"{{\\pos({W//2},{y})\\frz{rot}\\fs{size}\\bord0\\1c{bgr(e.get('_oscuro', '#2B1A12'))}"
+                           f"\\fscx60\\fscy60\\t(0,90,\\fscx105\\fscy105)\\t(90,150,\\fscx100\\fscy100)}}{w['w']}"))
+        else:
+            out.append(dia(4, w["s"], w["e"], "Word",
+                           f"{{\\pos({W//2},{y})\\frz{rot}\\fscx70\\fscy70\\t(0,80,\\fscx104\\fscy104)\\t(80,130,\\fscx100\\fscy100)}}{w['w']}"))
+
+
+def ev_counter(e, out):
+    """Número que cuenta rápido (0 -> 48) y se queda con un golpe."""
+    a, b, d = e["inicio"], e["fin"], e.get("cuenta", 0.8)
+    ini, fin = e.get("desde", 0), e["hasta"]
+    x, y, size = e.get("x", W // 2), e.get("y", 600), e.get("tam", 420)
+    pasos = 16
+    for k in range(pasos):
+        t0, t1 = a + d * k / pasos, a + d * (k + 1) / pasos
+        v = round(ini + (fin - ini) * ((k + 1) / pasos) ** 0.6)
+        out.append(dia(5, t0, t1, "Big", f"{{\\pos({x},{y})\\fs{size}}}{v}"))
+    out.append(dia(5, a + d, b, "Big",
+                   f"{{\\pos({x},{y})\\fs{size}\\fscx125\\fscy125\\t(0,160,\\fscx100\\fscy100){FADE}}}{fin}"))
+
+
+def ev_map(e, out):
+    """Tarjeta de mapa: dos pines y la ruta que se dibuja entre ellos, con un punto que viaja."""
+    a, b = e["inicio"], e["fin"]
+    cy = e.get("y", 900)
+    x1, x2 = 250, 830
+    y1, y2 = cy + 60, cy - 60
+    dark = bgr("#14110F")
+    panel = 880, 520
+    out.append(_caja(W // 2, cy, panel[0], panel[1], "#14110F", 6, a, b, 0, r"\alpha&HFF&\t(0,200,\alpha&H30&)"))
+    out[-1] = out[-1].replace(f"\\1c{bgr('#14110F')}", f"\\1c{dark}\\1a&H30&")
+    # ruta punteada que aparece por tramos
+    seg = 14
+    dur_dibujo = e.get("dibujo", 1.4)
+    for k in range(seg):
+        f0, f1 = k / seg, (k + 0.55) / seg
+        px0, py0 = x1 + (x2 - x1) * f0, y1 + (y2 - y1) * f0 - 90 * (1 - (2 * f0 - 1) ** 2)
+        px1, py1 = x1 + (x2 - x1) * f1, y1 + (y2 - y1) * f1 - 90 * (1 - (2 * f1 - 1) ** 2)
+        t0 = a + 0.4 + dur_dibujo * f0
+        out.append(dia(7, t0, b, "Shape",
+                       f"{{\\an7\\pos(0,0)\\1c{bgr(e['_acento'])}\\bord0\\shad0\\p1}}"
+                       f"m {px0:.0f} {py0-5:.0f} l {px1:.0f} {py1-5:.0f} {px1:.0f} {py1+5:.0f} {px0:.0f} {py0+5:.0f}{{\\p0}}"))
+    # punto que viaja (el tren)
+    out.append(dia(8, a + 0.4, a + 0.4 + dur_dibujo, "Shape",
+                   f"{{\\an5\\move({x1},{y1},{x2},{y2})\\1c&H00FFFFFF&\\bord0\\shad0\\p1}}"
+                   f"m 0 -14 b 8 -14 14 -8 14 0 b 14 8 8 14 0 14 b -8 14 -14 8 -14 0 b -14 -8 -8 -14 0 -14{{\\p0}}"))
+    for (x, y, nombre, col, t0) in ((x1, y1, e.get("desde", "MILÁN"), e.get("color1", "#009246"), a + 0.15),
+                                    (x2, y2, e.get("hasta", "VENECIA"), e.get("color2", "#CE2B37"), a + 0.4 + dur_dibujo)):
+        pin = (f"m 0 0 b -34 -40 -40 -62 -40 -78 b -40 -104 -22 -122 0 -122 b 22 -122 40 -104 40 -78 "
+               f"b 40 -62 34 -40 0 0 m 0 -96 b -10 -96 -17 -88 -17 -78 b -17 -68 -10 -60 0 -60 b 10 -60 17 -68 17 -78 b 17 -88 10 -96 0 -96")
+        out.append(dia(8, t0, b, "Shape", f"{{\\an7\\pos({x},{y})\\1c{bgr(col)}\\bord0\\shad0{POP}\\p1}}{pin}{{\\p0}}"))
+        out.append(dia(8, t0, b, "Sans", f"{{\\pos({x},{y + 70})\\fs92{POP}}}{nombre}"))
+    if e.get("texto"):
+        out.append(dia(8, a + 0.4 + dur_dibujo, b, "Serif",
+                       f"{{\\pos({W//2},{cy + 200})\\fs78\\1c{bgr(GOLD)}{ENTRADAS['sube']}}}{e['texto']}"))
 
 
 def ev_rec(e, out):
@@ -195,6 +296,8 @@ def ev_stamp(e, out):
         return (f"m {x0} {y0} l {x1} {y0} {x1} {y1} {x0} {y1} "
                 f"m {x0+g} {y0+g} l {x0+g} {y1-g} {x1-g} {y1-g} {x1-g} {y0+g}")
 
+    # papel de fondo (marfil) para que el sello se lea sobre cualquier foto
+    out.append(_caja(x, y, w + 30, h + 30, "#F5F1EA", 7, a, b, rot, golpe + r"\1a&H18&"))
     for m, g in ((0, 9), (18, 4)):
         out.append(dia(8, a, b, "Shape",
                        f"{{\\an5\\pos({x},{y})\\frz{rot}\\1c{col}\\bord0\\shad0{golpe}{FADE}\\p1}}{marco(m, g)}{{\\p0}}"))
@@ -220,10 +323,10 @@ def ev_label(e, out):
 
 
 HANDLERS = {"sello": ev_stamp, "etiqueta": ev_label, "gancho": ev_hook, "palabras": ev_words, "rec": ev_rec, "sticker": ev_sticker,
-            "cta": ev_cta, "maquina": ev_typewriter}
+            "cta": ev_cta, "maquina": ev_typewriter, "contador": ev_counter, "mapa": ev_map}
 
 # efecto de sonido por defecto segun el tipo de evento
-SFX_AUTO = {"sello": "golpe", "etiqueta": "pop", "gancho": "whoosh", "rec": "obturador", "sticker": "pop", "cta": "pop",
+SFX_AUTO = {"contador": "boom", "mapa": "swish", "sello": "golpe", "etiqueta": "pop", "gancho": "whoosh", "rec": "obturador", "sticker": "pop", "cta": "pop",
             "maquina": "teclado", "zoom": "golpe"}
 
 
@@ -241,6 +344,21 @@ def sfx_src(kind, idx):
         return f"anoisesrc=d=0.12:c=white:a=0.7,highpass=f=1500,afade=t=out:st=0.02:d=0.1[s{idx}]"
     if kind in ("click", "teclado"):
         return f"anoisesrc=d=0.03:c=white:a=0.6,highpass=f=3000[s{idx}]"
+    if kind == "boom":  # impacto grave de cine
+        return (f"aevalsrc='0.9*sin(2*PI*(55-25*t)*t)*exp(-3.5*t)':d=1.4,"
+                f"aformat=channel_layouts=stereo,volume=1.4[s{idx}]")
+    if kind == "riser":  # subida de tensión antes de una revelación (1.2 s)
+        return (f"aevalsrc='0.25*sin(2*PI*(180+500*t*t)*t)*(t/1.2)':d=1.2,"
+                f"aformat=channel_layouts=stereo,afade=t=out:st=1.1:d=0.1[s{idx}]")
+    if kind == "swish":  # whoosh corto de transición
+        return (f"anoisesrc=d=0.3:c=pink:a=0.5,highpass=f=700,lowpass=f=7000,"
+                f"afade=t=in:d=0.18,afade=t=out:st=0.18:d=0.12[s{idx}]")
+    if kind == "campana":  # campana lejana (Venecia)
+        return (f"aevalsrc='0.22*(sin(2*PI*523*t)+0.6*sin(2*PI*1046*t)+0.35*sin(2*PI*1570*t)+0.25*sin(2*PI*1240*t))*exp(-1.6*t)':d=2.6,"
+                f"aecho=0.8:0.6:180:0.3,aformat=channel_layouts=stereo[s{idx}]")
+    if kind == "agua":  # agua de canal, muy baja (4 s)
+        return (f"anoisesrc=d=4:c=brown:a=0.35,lowpass=f=900,highpass=f=120,"
+                f"afade=t=in:d=0.8,afade=t=out:st=3:d=1,aformat=channel_layouts=stereo[s{idx}]")
     if kind == "ding":
         return f"sine=f=1320:d=0.5,volume=0.5,afade=t=out:st=0.05:d=0.45[s{idx}]"
     raise ValueError(f"efecto de sonido desconocido: {kind}")
@@ -254,6 +372,10 @@ def build(plan, out_path, demo=False):
     zooms, bw, sfx = [], [], list(plan.get("sfx", []))
     for e in plan["eventos"]:
         e["_acento"] = brand["acento"]
+        e["_oscuro"] = brand["oscuro"]
+        for ln in e.get("lineas", []):  # efecto de sonido propio de cada línea de un bloque
+            if ln.get("sfx"):
+                sfx.append({"t": ln.get("t0", e["inicio"]), "tipo": ln["sfx"]})
         if e["tipo"] == "zoom":
             zooms.append(e)
         elif e["tipo"] in HANDLERS:
