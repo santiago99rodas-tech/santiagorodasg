@@ -14,6 +14,24 @@ Canal existente, con seguidores y Shorts. Se suman videos largos de mucho valor 
 
 **Regla de reparto**: material real en los momentos de experiencia ("llegamos de noche", "me pasó esto"); animación en los de información (precios, rutas, pasos, errores).
 
+## Reglas de diseño (borrador v2, pendiente de aprobar con el prototipo)
+
+Salen de analizar 17 videos con muchas vistas (`docs/10-referencias-youtube.md`). La v1 del prototipo se sentía como **un reel en horizontal**; YouTube es **explicación**:
+
+| Regla | Valor |
+|---|---|
+| Gancho | El tema en los **primeros 5–15 s**: Santi de frente dice una paradoja, un dato que duele al bolsillo o un caso real. **Nada de intro cinematográfica** |
+| Intro explicada | Antes del minuto: **promesa + agenda** ("te explico 3 cosas: …"), en voz y en pantalla, y después una **tarjeta de título sobria de 2–3 s** |
+| Estructura | **Capítulos con nombre** (45–120 s), patrón **problema → truco**, un solo tema por video |
+| Animación | **≥ 80 %**. Santi en dos modos: **plano base** (de frente, fondo liso, presenta y opina; vuelve cada 20–40 s) y **actor** (vive la situación). Imagen nueva cada **4–7 s**; poses y fondos reutilizables |
+| Fotos reales | **10–20 %**, solo de apoyo o prueba: en tarjeta o polaroid, con Santi al lado o recortado encima, capturas de precios, mapas. **Color natural, sin filtros** |
+| Texto | Escaso y funcional: cifra gigante, etiquetas, listas de 2–4 puntos línea por línea, título de capítulo. Letra sólida, Bebas Neue predominante |
+| Mapas | En cada lugar nuevo: zoom, pin, ruta que se dibuja |
+| Música | Suave (ambiental/inspiradora sin percusión fuerte), **~16 dB por debajo de la voz** (rango 14–18), sube un poco en pausas y cambios de capítulo |
+| Efectos | **1–2 por minuto** como máximo, solo al cambiar de capítulo o al aparecer una cifra clave |
+| Voz | 160–175 palabras por minuto, limpia (reducción de ruido obligatoria) |
+| Cierre | Resumen de 1–3 frases → **una sola pregunta para comentar** → **"Nos vemos pues"** |
+
 ## Personaje: Santi
 
 Estilo **póster de viaje** (propuesta 4) **con expresiones**, basado en la foto de Santiago.

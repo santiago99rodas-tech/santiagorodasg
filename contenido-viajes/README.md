@@ -42,6 +42,7 @@ Santiago graba su voz y sube su material a Drive; Claude produce todo; Santiago 
 | [`docs/05-inventario.md`](docs/05-inventario.md) | Inventario de todos los videos de Instagram, TikTok y YouTube con vistas |
 | [`docs/06-rodi.md`](docs/06-rodi.md) | Integración con RODI / RODI CLUB y reglas de marca |
 | [`docs/07-nicho-y-publico.md`](docs/07-nicho-y-publico.md) | Estudio de nicho y público con las estadísticas de las 3 plataformas |
+| [`docs/10-referencias-youtube.md`](docs/10-referencias-youtube.md) | **Cómo son los videos de YouTube que funcionan**: 17 referencias analizadas (gancho, intro, capítulos, música, fotos, personaje) |
 | [`docs/09-reglas-reels.md`](docs/09-reglas-reels.md) | **Reglas de diseño de reels aprobadas** (texto, stickers, sonido, color) y paso a paso para hacer un reel |
 | [`docs/08-parrilla.md`](docs/08-parrilla.md) | Parrilla de las primeras 4 semanas (tips buscables + lugares con emoción + series con cierre a RODI) |
 | [`voice.md`](voice.md) | Voz de Santiago para las skills `ig-*` (copiar a `~/.claude/instagram/voice.md`) |
