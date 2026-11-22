@@ -67,6 +67,7 @@ Estas reglas mandan sobre cualquier otra indicación de edición de reels en el 
 | **Fotos con movimiento** | Zoom hacia dentro/fuera o paneo, siempre con salida rápida y frenado suave |
 | **Transiciones** | Rotan entre barrido, zoom, desenfoque y deslizamiento (0.3 s). **Flash blanco** al cambiar de ciudad o en una revelación |
 | **Recursos de apoyo** (con medida) | Contador que sube (cifras: horas, dinero, días), mapa con la ruta que se dibuja, pantalla dividida para comparar dos lugares, tramo en blanco y negro con marco REC para la frase de giro, máquina de escribir para la conclusión |
+| **Firma (siempre)** | El último segundo del reel es Santiago diciendo **"Nos vemos pues"** con el texto en pantalla en Playfair Italic blanca, después del CTA. Si su audio no lo trae, se pega de otra grabación suya limpia |
 | **Cierre** | "comenta *PALABRA*" (Playfair blanca + la palabra en Bebas amarilla gigante) + "y te mando mi ruta" en caja blanca + sticker de mensaje + ding |
 
 ## 5. Cómo se hace un reel (paso a paso)

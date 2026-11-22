@@ -2,7 +2,8 @@
   "name": "youtube-animacion",
   "private": true,
   "scripts": {
-    "render": "remotion render src/index.ts PruebaEgipto pruebas/prueba.mp4 --browser-executable=/opt/pw-browsers/chromium"
+    "render": "remotion render src/index.ts MilanVenecia pruebas/milan-venecia/video-sin-audio.mp4 --muted",
+    "still": "remotion still src/index.ts MilanVenecia"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.242",

@@ -26,6 +26,8 @@ Fuiste en **septiembre de 2023**. Desde **abril de 2024** Venecia cobra una **ta
 >
 > **[38–52 s]** Y la tasa: se cobra **de abril a julio**, **cinco euros** si reservas con cuatro días o más… **diez** si lo dejas para última hora. ¿El truco? **Si duermes en Venecia, no pagas**: solo te registras y te dan un código.
 >
+> *(Firma obligatoria al final: "Nos vemos pues".)*
+>
 > **[52–60 s]** Venecia es de esos lugares que has visto mil veces en fotos… pero en persona parecen imposibles. ¿Te armo la ruta completa? Te leo en los comentarios.
 
 *(≈150 palabras. Puedes decirlo con tus palabras: lo importante son las cifras y el orden.)*
